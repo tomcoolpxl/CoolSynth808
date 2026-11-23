@@ -32,8 +32,9 @@ namespace cs808
         pushKit();
         pushPlay();
         pushBank();
-        for (auto& note : padNotes)
-            note.store(-1, std::memory_order_relaxed);
+        for (auto* table : { &padNotes, &padNotesShifted })
+            for (auto& note : *table)
+                note.store(-1, std::memory_order_relaxed);
         // The computer's controller setup (D211, D268): read once for the program. Tests (no wrapper) set their own.
         if (wrapperType == wrapperType_Standalone)
         {
@@ -290,10 +291,13 @@ namespace cs808
         return ((control.kind == coolsynth::midi::ControlId::Kind::note ? 16 : 0) + control.channel - 1) * 128 + control.number;
     }
 
-    void Processor::setPadNotes(const PadNotes& notes) noexcept
+    void Processor::setPadNotes(const PadNotes& plain, const PadNotes& shifted) noexcept
     {
-        for (std::size_t i = 0; i < notes.size(); ++i)
-            padNotes[i].store(notes[i], std::memory_order_relaxed);
+        for (std::size_t i = 0; i < plain.size(); ++i)
+        {
+            padNotes[i].store(plain[i], std::memory_order_relaxed);
+            padNotesShifted[i].store(shifted[i], std::memory_order_relaxed);
+        }
     }
 
     void Processor::takeControllerEvents(const std::function<void(const coolsynth::midi::ControllerEvent&)>& use)
@@ -397,8 +401,17 @@ namespace cs808
         if (const auto scope = controllerFifo.write(1); scope.blockSize1 > 0)
             controllerEvents[static_cast<std::size_t>(scope.startIndex1)] = *event;
         const int index = padIndex(event->control);
-        const int note = index >= 0 ? padNotes[static_cast<std::size_t>(index)].load(std::memory_order_relaxed) : -1;
-        if (note < 0 || ! (event->note ? event->value > 0 : event->value >= 64))
+        const bool down = event->note ? event->value > 0 : event->value >= 64;
+        const int plain = index >= 0 ? padNotes[static_cast<std::size_t>(index)].load(std::memory_order_relaxed) : -1;
+        if (plain == shiftMark)
+        {
+            shiftDown = down;
+            return false;
+        }
+        const int note = index < 0 ? -1
+                       : shiftDown ? padNotesShifted[static_cast<std::size_t>(index)].load(std::memory_order_relaxed)
+                                   : plain;
+        if (note < 0 || ! down)
             return false;
         // Hit hard, a pad is accented: an 808's drum is accented or not (D268).
         const auto velocity = static_cast<juce::uint8>(! event->note || event->value >= 100 ? 127 : 1);

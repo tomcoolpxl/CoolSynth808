@@ -117,11 +117,14 @@ namespace cs808
         bool applyRecordedHits();
 
         // ---- A MIDI controller (D268), message thread -----------------------------------------------------------
-        /** The note each controller pad strikes, by padIndex (-1 none): the audio thread plays it at once. */
+        /** The note each controller pad strikes, by padIndex (-1 none), with Shift up and held: the audio thread plays
+            it at once. Shift's own controls are marked shiftMark in `plain`; the audio thread follows Shift itself, so a
+            pad struck just after it takes its second drum (the review of D267). */
         static constexpr int padSlots = 2 * 16 * 128;
+        static constexpr std::int8_t shiftMark = -2;
         using PadNotes = std::array<std::int8_t, padSlots>;
         [[nodiscard]] static int padIndex(const coolsynth::midi::ControlId& control) noexcept;
-        void setPadNotes(const PadNotes& notes) noexcept;
+        void setPadNotes(const PadNotes& plain, const PadNotes& shifted) noexcept;
         /** The controller's messages the setup links (or hears while learning), as they came. */
         void takeControllerEvents(const std::function<void(const coolsynth::midi::ControllerEvent&)>& use);
 
@@ -209,7 +212,8 @@ namespace cs808
         std::array<RecordedHit, 256> recordedHits {};
         juce::AbstractFifo controllerFifo { 512 };
         std::array<coolsynth::midi::ControllerEvent, 512> controllerEvents {};
-        std::array<std::atomic<std::int8_t>, padSlots> padNotes;
+        std::array<std::atomic<std::int8_t>, padSlots> padNotes, padNotesShifted;
+        bool shiftDown = false; // audio thread: Shift as the controller's messages last said
         juce::MidiBuffer keptBlock; // the audio thread's, sized in prepareToPlay
         bool startedSetup = false;
         std::unique_ptr<juce::Timer> midiOutKeeper;

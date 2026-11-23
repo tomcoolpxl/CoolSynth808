@@ -126,7 +126,7 @@ namespace cs808
     {
         Processor::PadNotes none;
         none.fill(-1);
-        editor.processor.setPadNotes(none);
+        editor.processor.setPadNotes(none, none);
     }
 
     void Controls::timerCallback()
@@ -164,20 +164,28 @@ namespace cs808
     void Controls::publishPads()
     {
         padsKit = switchesOf(editor.processor.project().kit);
-        Processor::PadNotes notes;
-        notes.fill(-1);
-        if (! stepMode)
+        Processor::PadNotes plain, shifted;
+        plain.fill(-1);
+        shifted.fill(-1);
+        // A place may have more than one control (alsoLink): every one of them. Both drums of each pad, and Shift
+        // marked, so the audio thread follows Shift without waiting for this thread.
+        for (const auto& link : midi::ControllerSetup::instance().map().places)
         {
-            // A place may have more than one control (alsoLink): every one of them.
-            for (const auto& link : midi::ControllerSetup::instance().map().places)
-                if (link.place >= midi::Place::pad1 && link.place <= midi::Place::pad8)
-                {
-                    const int lane = padLanes[shift ? 1u : 0u][static_cast<std::size_t>(midi::padOf(link.place))];
-                    if (const int index = Processor::padIndex(link.control); index >= 0)
-                        notes[static_cast<std::size_t>(index)] = static_cast<std::int8_t>(lane >= 0 ? laneNote(lane, editor.processor.project().kit) : -1);
-                }
+            const int index = Processor::padIndex(link.control);
+            if (index < 0)
+                continue;
+            const auto at = static_cast<std::size_t>(index);
+            if (link.place == midi::Place::shift)
+                plain[at] = Processor::shiftMark;
+            else if (! stepMode && link.place >= midi::Place::pad1 && link.place <= midi::Place::pad8)
+            {
+                const auto pad = static_cast<std::size_t>(midi::padOf(link.place));
+                const auto noteOf = [&](int lane) { return static_cast<std::int8_t>(lane >= 0 ? laneNote(lane, editor.processor.project().kit) : -1); };
+                plain[at] = noteOf(padLanes[0][pad]);
+                shifted[at] = noteOf(padLanes[1][pad]);
+            }
         }
-        editor.processor.setPadNotes(notes);
+        editor.processor.setPadNotes(plain, shifted);
     }
 
     void Controls::handle(const midi::ControllerEvent& event)
@@ -224,11 +232,7 @@ namespace cs808
         {
             if (place == midi::Place::shift)
             {
-                if (shift != down)
-                {
-                    shift = down;
-                    publishPads();
-                }
+                shift = down; // the audio thread follows it on its own
                 return;
             }
             if (! down)

@@ -127,6 +127,27 @@ public:
             send(juce::MidiMessage::controllerEvent(1, 27, 0));
         }
 
+        beginTest("a_pad_struck_in_the_same_block_as_shift_takes_its_second_drum");
+        {
+            // Shift and the pad in one block, before the message thread has seen either (the review of D267).
+            (void) p->takeStruckLanes();
+            juce::MidiBuffer in;
+            in.addEvent(juce::MidiMessage::controllerEvent(1, 27, 127), 5);
+            in.addEvent(juce::MidiMessage::noteOn(10, 36, static_cast<juce::uint8>(120)), 6);
+            p->processBlock(buffer, in);
+            auto bits = p->takeStruckLanes();
+            expect((bits & (1u << 3)) != 0, "the mid tom");
+            expect((bits & (1u << 0)) == 0, "not the bass drum");
+            juce::MidiBuffer up;
+            up.addEvent(juce::MidiMessage::controllerEvent(1, 27, 0), 5);
+            up.addEvent(juce::MidiMessage::noteOn(10, 36, static_cast<juce::uint8>(120)), 6);
+            p->processBlock(buffer, up);
+            bits = p->takeStruckLanes();
+            expect((bits & (1u << 0)) != 0, "Shift let go: the bass drum");
+            p->takeControllerEvents([&](const midi::ControllerEvent& ev) { controls.handle(ev); });
+            expect(! controls.shiftHeld());
+        }
+
         // D271: the standalone sorts its inputs; a pad's note from the controller strikes the pad's drum, the same note
         // from another input (a DAW's General MIDI drums) plays its own.
         beginTest("sorted_inputs_a_pad_from_the_controller_and_the_same_note_from_elsewhere");

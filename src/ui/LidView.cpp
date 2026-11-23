@@ -43,6 +43,10 @@ namespace cs808
             juce::Rectangle<float> box; // a filled box (an oscillator, an IC)
             juce::String name;
             int lane = -1;
+            // Its label on the complete drum, worked out once (Board::prepareLabels), not at every frame.
+            juce::String label;
+            Pt labelAt;
+            bool labelTall = false;
         };
 
         struct Text
@@ -60,6 +64,7 @@ namespace cs808
             Kind kind = Kind::pulse;
             Mode mode = Mode::pulse; // a voltage tint's
             Pts points;
+            juce::Path path; // the points as a line, made once
             float level = 0.4f;
             float idle = 0.0f;
             float frequency = 8.0f;
@@ -487,6 +492,26 @@ namespace cs808
             struct Empty {};
             explicit Board(Empty) {}
 
+            /** Each part's label and where it goes, as the mockup writes them: once, after the drawing is built. */
+            void prepareLabels()
+            {
+                for (auto& part : parts)
+                {
+                    auto label = part.name.upToFirstOccurrenceOf(" ~ ", false, false);
+                    if (label.startsWith("The first op-amp") || label.startsWith("The second op-amp"))
+                        label = "IC";
+                    if (label.startsWith("The step"))
+                        label = {};
+                    part.label = label;
+                    auto bounds = part.stroke.getBounds();
+                    for (const auto& [c, r] : part.circles)
+                        bounds = bounds.getUnion({ c.x - r, c.y - r, 2 * r, 2 * r });
+                    part.labelTall = bounds.getHeight() > bounds.getWidth() + 2.0f;
+                    part.labelAt = part.labelTall ? Pt(bounds.getRight() + 2.0f, bounds.getCentreY() + 2.0f)
+                                                  : Pt(bounds.getCentreX(), bounds.getY() - 1.5f);
+                }
+            }
+
             Board()
             {
                 using Res = Voice::Res;
@@ -688,9 +713,11 @@ namespace cs808
                 for (auto& f : flows)
                 {
                     f.length = polylineLength(f.points);
+                    f.path = polyline(f.points);
                     f.offset = r.nextFloat() * 6.5f;
                     f.phase = r.nextFloat() * 6.5f;
                 }
+                prepareLabels();
             }
         };
 
@@ -941,6 +968,7 @@ namespace cs808
                 a.tx(676, 160, "OUT", Rj);
 
                 buildGraph();
+                drawing.prepareLabels();
             }
 
             void buildGraph()
@@ -1319,20 +1347,12 @@ namespace cs808
                     const auto p = c.transformedBy(t);
                     g.drawEllipse(p.x - r * scale, p.y - r * scale, 2 * r * scale, 2 * r * scale, 1.2f * scale);
                 }
-                if (names && part.name.isNotEmpty())
+                if (names && part.label.isNotEmpty())
                 {
-                    // Each part's name beside it, as the mockup writes them.
-                    auto label = part.name.upToFirstOccurrenceOf(" ~ ", false, false);
-                    if (label.startsWith("The first op-amp") || label.startsWith("The second op-amp"))
-                        label = "IC";
-                    if (label.startsWith("The step"))
-                        continue;
-                    auto bounds = part.stroke.getBounds();
-                    for (const auto& [c, r] : part.circles)
-                        bounds = bounds.getUnion({ c.x - r, c.y - r, 2 * r, 2 * r });
-                    const bool tall = bounds.getHeight() > bounds.getWidth() + 2.0f;
-                    const auto at = tall ? Pt(bounds.getRight() + 2.0f, bounds.getCentreY() + 2.0f) : Pt(bounds.getCentreX(), bounds.getY() - 1.5f);
-                    const auto p = at.transformedBy(t);
+                    // Each part's name beside it, as the mockup writes them (worked out in prepareLabels).
+                    const bool tall = part.labelTall;
+                    const auto& label = part.label;
+                    const auto p = part.labelAt.transformedBy(t);
                     g.setColour(th.dim);
                     g.setFont(uiFont(5.6f * scale));
                     const float w = 60.0f * scale, h = 8.0f * scale;
@@ -1420,7 +1440,6 @@ namespace cs808
             if (gl < 0.04f)
                 continue;
             g.setColour(th.flow.withAlpha(0.45f + 0.55f * gl));
-            const Pts pts { w.a, w.b };
             const float length = w.a.getDistanceFrom(w.b);
             const float r = (0.8f + 2.4f * gl) * 0.5f * scale;
             float s = std::fmod(-w.offset, 6.5f);
@@ -1428,7 +1447,7 @@ namespace cs808
                 s += 6.5f;
             for (; s < length; s += 6.5f)
             {
-                const auto p = pointAlong(pts, s).transformedBy(t);
+                const auto p = (w.a + (w.b - w.a) * (length > 0.0f ? s / length : 0.0f)).transformedBy(t);
                 g.fillEllipse(p.x - r, p.y - r, 2 * r, 2 * r);
             }
         }
@@ -1500,7 +1519,7 @@ namespace cs808
                 if (m < 0.03)
                     continue;
                 g.setColour((v > 0 ? th.vpos : th.vneg).withAlpha(static_cast<float>(std::min(0.9, m))));
-                g.strokePath(polyline(f.points), juce::PathStrokeType(2.8f * scale, juce::PathStrokeType::curved, juce::PathStrokeType::rounded), t);
+                g.strokePath(f.path, juce::PathStrokeType(2.8f * scale, juce::PathStrokeType::curved, juce::PathStrokeType::rounded), t);
                 continue;
             }
             double a = f.idle;
