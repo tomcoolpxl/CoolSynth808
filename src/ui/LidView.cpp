@@ -20,7 +20,7 @@
 
     The current is drawn on the wires as dots, lit by the drums the app strikes: travelling for a pulse or a charge,
     shaking for sound, thicker for more; a wire's tint is its voltage. Each wire a strike lights moves as the node of its
-    drum's circuit it stands for, as ngspice recorded it (D279); each drum is also drawn complete on a sheet of its own
+    drum's circuit it stands for, as ngspice recorded it (D280); each drum is also drawn complete on a sheet of its own
     (D278). The noise, the oscillators and the common trigger line still run as the mockup drew them.
 */
 namespace cs808
@@ -74,7 +74,7 @@ namespace cs808
             double t0 = -1.0, duration = 300.0;
             float offset = 0.0f, phase = 0.0f;
             float length = 0.0f;
-            // Played from a recording (D279): which stage of its drum it is (-1 the drum's own trigger or output), and
+            // Played from a recording (D280): which stage of its drum it is (-1 the drum's own trigger or output), and
             // once bound, how far its node is from rest (0..1, with an afterglow) and which way, at the recording's times.
             int stage = -1;
             std::vector<float> ms, level01, sign;
@@ -337,7 +337,7 @@ namespace cs808
                 std::vector<std::pair<float, float>> cuts;
                 float railTop = -1.0f;
                 float leftEnd = 30.0f;
-                int stage = -1; // each res() and gate() a stage, in the order built (D279)
+                int stage = -1; // each res() and gate() a stage, in the order built (D280)
                 std::size_t firstFlow = 0;
                 void beginStage() { ++stage; firstFlow = s.b.flows.size(); }
                 void endStage()
@@ -873,7 +873,7 @@ namespace cs808
             return r;
         }
 
-        // ---- The whole board, played from the recordings (D279) -------------------------------------------------
+        // ---- The whole board, played from the recordings (D280) -------------------------------------------------
         /*
             Each wire of the whole board that a strike lights takes its life from the node of its drum's circuit that
             it stands for, as ngspice recorded it for the complete sheet: how far that node swings from rest, and which
@@ -2424,7 +2424,7 @@ namespace cs808
     struct LidView::Impl
     {
         Board board;
-        int boardUnbound = 0; // the board's struck flows no recording drives (D279; the tests want none)
+        int boardUnbound = 0; // the board's struck flows no recording drives (D280; the tests want none)
         std::array<std::unique_ptr<FullDrum>, drumsDrawn> drums; // each made the first time it is shown
         FullDrum* full = nullptr;                                // the one shown
         bool showFull = false;
@@ -2815,7 +2815,7 @@ namespace cs808
             g.fillEllipse(p.x - 1.7f * scale, p.y - 1.7f * scale, 3.4f * scale, 3.4f * scale);
         }
 
-        // The voltage tints and the current: from the recordings where a wire stands for a node of its drum (D279),
+        // The voltage tints and the current: from the recordings where a wire stands for a node of its drum (D280),
         // otherwise as the mockup animates them (the noise, the oscillators, the common trigger).
         for (const auto& f : b.flows)
         {

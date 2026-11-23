@@ -29,7 +29,7 @@ juce_add_binary_data(CoolSynth808Library
         resources/lid/board_mt.json # the whole board's: the mid tom,
         resources/lid/board_ht.json # the high tom,
         resources/lid/board_oh.json # the open hat alone
-        resources/lid/board_ch.json) # and the closed hat alone (D279)
+        resources/lid/board_ch.json) # and the closed hat alone (D280)
 
 # A JUCE audio plugin built as a standalone app for now (D267): the plugin formats are one line away.
 juce_add_plugin(CoolSynth808

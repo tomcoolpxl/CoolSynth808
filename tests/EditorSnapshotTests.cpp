@@ -47,7 +47,7 @@ public:
             std::unique_ptr<juce::AudioProcessorEditor> e(p->createEditor());
             const auto problems = dynamic_cast<Editor*>(e.get())->lidForTesting().completeDrumProblems();
             expect(problems.isEmpty(), problems.joinIntoString("; "));
-            // D279: every wire a strike lights on the whole board is driven by its drum's recording.
+            // D280: every wire a strike lights on the whole board is driven by its drum's recording.
             expectEquals(dynamic_cast<Editor*>(e.get())->lidForTesting().boardFlowsUnbound(), 0);
         }
 
@@ -94,7 +94,7 @@ public:
             editor->lanesOpen = true;
             editor->lidView = true;
             shoot("lid");
-            // Every drum struck, 40 ms on: the board lit from the recordings (D279).
+            // Every drum struck, 40 ms on: the board lit from the recordings (D280).
             editor->lidForTesting().tick(1000.0);
             editor->lidForTesting().struck(0x7ffu);
             editor->lidForTesting().tick(1040.0);

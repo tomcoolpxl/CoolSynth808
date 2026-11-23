@@ -22,7 +22,7 @@ namespace cs808
         void showSheet(int sheet);
         /** The complete drum's check against its netlist: empty when it matches. */
         [[nodiscard]] juce::StringArray completeDrumProblems();
-        /** The whole board's struck wires that no recording drives (D279): none, unless a node went missing. */
+        /** The whole board's struck wires that no recording drives (D280): none, unless a node went missing. */
         [[nodiscard]] int boardFlowsUnbound() const;
 
     private:
