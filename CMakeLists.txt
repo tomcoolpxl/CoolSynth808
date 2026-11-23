@@ -17,7 +17,8 @@ juce_add_binary_data(CoolSynth808Library
     NAMESPACE LibraryData
     SOURCES
         resources/library/patterns.json
-        resources/lid/bassdrum_currents.json) # the bass drum's currents, recorded from ngspice by the engine's tools/kick808/mockup_currents.py
+        resources/lid/bassdrum_currents.json # the bass drum's currents, recorded from ngspice by the engine's tools/kick808/mockup_currents.py
+        resources/lid/snare_currents.json) # the snare's, by its tools/tr808/lid_currents.py (D278)
 
 # A JUCE audio plugin built as a standalone app for now (D267): the plugin formats are one line away.
 juce_add_plugin(CoolSynth808

@@ -739,10 +739,15 @@ namespace cs808
             juce::String setting;
         };
 
-        Recording loadRecording()
+        // The drums drawn complete: the bass drum, then the snare (D278).
+        enum DrumDrawn { bassDrum = 0, snareDrum = 1, drumsDrawn = 2 };
+
+        Recording loadRecording(int which)
         {
             Recording r;
-            const auto root = juce::JSON::parse(juce::String::fromUTF8(LibraryData::bassdrum_currents_json, LibraryData::bassdrum_currents_jsonSize));
+            const auto root = which == snareDrum
+                                  ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::snare_currents_json, LibraryData::snare_currents_jsonSize))
+                                  : juce::JSON::parse(juce::String::fromUTF8(LibraryData::bassdrum_currents_json, LibraryData::bassdrum_currents_jsonSize));
             const auto* times = root.getProperty("t", {}).getArray();
             const auto* names = root.getProperty("names", {}).getArray();
             const auto* scales = root.getProperty("scales", {}).getArray();
@@ -780,9 +785,15 @@ namespace cs808
                     r.parts[p.name.toString().toStdString()] = nodes;
                 }
             const auto set = root.getProperty("setting", {});
-            r.setting << static_cast<double>(set.getProperty("accent_volts", 0.0)) << " V on the trigger line, Decay "
-                      << static_cast<double>(set.getProperty("decay", 0.0)) << ", Tone " << static_cast<double>(set.getProperty("tone", 0.0))
-                      << ", Level " << static_cast<double>(set.getProperty("level", 0.0));
+            if (which == snareDrum)
+                r.setting << set.getProperty("amp", "?").toString() << " V on the trigger line, Tone " << set.getProperty("tone", "?").toString()
+                          << ", Snappy " << set.getProperty("snappy", "?").toString() << ", Level " << set.getProperty("lev", "?").toString()
+                          << ", the noise bus at " << juce::String(juce::roundToInt(set.getProperty("wn", "0").toString().getDoubleValue() * 1000.0))
+                          << " mV rms (two sines standing in for it, so the hit is the same every time)";
+            else
+                r.setting << static_cast<double>(set.getProperty("accent_volts", 0.0)) << " V on the trigger line, Decay "
+                          << static_cast<double>(set.getProperty("decay", 0.0)) << ", Tone " << static_cast<double>(set.getProperty("tone", 0.0))
+                          << ", Level " << static_cast<double>(set.getProperty("level", 0.0));
             return r;
         }
 
@@ -796,6 +807,8 @@ namespace cs808
             struct Net { std::vector<int> nodes, edges; std::string name; };
             struct Wire { Pt a, b; std::vector<float> current; float offset = 0.0f; };
 
+            int which = bassDrum;
+            float width = 690.0f, height = 282.0f; // the sheet, in drawing units
             Recording rec;
             Board drawing { Board::Empty {} };
             std::vector<std::vector<Pt>> segs;
@@ -819,7 +832,20 @@ namespace cs808
                 return static_cast<int>(nodes.size()) - 1;
             }
 
-            FullDrum() : rec(loadRecording())
+            /** What the circuit does at this moment of the hit, for the time bar. */
+            [[nodiscard]] juce::String phaseAt(double ms) const
+            {
+                if (pos < 0.3)
+                    return "at rest: only the standing currents flow";
+                if (ms <= 1.05)
+                    return "the trigger: a pulse of 1 ms";
+                if (which == snareDrum)
+                    return ms <= 12.0 ? "the attack: both shells ring and the snappy's envelope opens"
+                                      : "the tail: the shells die away, the noise follows the snappy's envelope";
+                return ms <= 6.0 ? "the attack: Q43 holds the pitch up" : "the ring: the resonator sounds on";
+            }
+
+            explicit FullDrum(int drum) : which(drum), rec(loadRecording(drum))
             {
                 if (rec.samples < 2)
                 {
@@ -892,6 +918,19 @@ namespace cs808
                 const auto L = juce::Justification::centredLeft;
                 const auto Rj = juce::Justification::centredRight;
                 const auto M = juce::Justification::centred;
+                const auto wiperAt = [&](float x, float y)
+                {
+                    auto& w = a.add({});
+                    w.fill.addTriangle({ x + 3.5f, y }, { x + 8.5f, y - 2.5f }, { x + 8.5f, y + 2.5f });
+                };
+
+                if (which == snareDrum)
+                {
+                    buildSnare(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
+                    buildGraph();
+                    drawing.prepareLabels();
+                    return;
+                }
 
                 // The rails
                 pin(40, 12, "vcc", "+15 V", 40, 7, M); W({ { 40, 12 }, { 628, 12 } });
@@ -969,6 +1008,119 @@ namespace cs808
 
                 buildGraph();
                 drawing.prepareLabels();
+            }
+
+            /*
+                The snare (D278): every part of the engine's tools/tr808/snare.cir in its changed version, as the
+                service notes draw it. The trigger and the snare's switch as the bass drum's; the two bridged-T shells
+                (IC14a lower, IC14b upper) and the Tone pot between them along the top; the Snappy's envelope, the
+                noise VCA Q48 and the high-pass Q49 along the bottom; the mixer IC13 with the Level pot on the right.
+                The op-amps' own parts and the noise generator are drawn as symbols and a pin.
+            */
+            void buildSnare(Board::Sheet& a, auto& W, auto& term, auto& R, auto& C, auto& POT, auto& DI, auto& Q, auto& pin,
+                            auto& open, auto& wiper, auto& two)
+            {
+                width = 690.0f;
+                height = 362.0f;
+                const auto L = juce::Justification::centredLeft;
+                const auto Rj = juce::Justification::centredRight;
+                const auto M = juce::Justification::centred;
+
+                // The rails: +15 V along the top and down to the lower half; 0 V along the bottom, and a second
+                // ground line under the shells.
+                pin(40, 12, "vcc", "+15 V", 40, 7, M); W({ { 40, 12 }, { 560, 12 } }); W({ { 560, 12 }, { 560, 208 } }); W({ { 230, 208 }, { 560, 208 } });
+                pin(40, 340, "0", "0 V", 40, 351, M); W({ { 40, 340 }, { 600, 340 } });
+                W({ { 168, 196 }, { 168, 340 } }); W({ { 168, 196 }, { 470, 196 } });
+
+                // The common trigger, as the bass drum's
+                {
+                    auto& p = a.add("The step's pulse ~ 1 ms, from the sequencer");
+                    p.circles.push_back({ Pt(17, 150), 8.5f });
+                }
+                a.glyph({ { 12, 153 }, { 15, 153 }, { 15, 147 }, { 19, 147 }, { 19, 153 }, { 22, 153 } });
+                term(Pt(25.5f, 150), {}, "n6", true); W({ { 25.5f, 150 }, { 28, 150 } });
+                R("r117", 28, 150, 'h', 22, "R117 ~ 47 k"); Q("q31", 66, 150, false, "Q31 ~ turns off for the pulse, letting Q32 rise"); W({ { 66, 162 }, { 66, 340 } });
+                W({ { 66, 138 }, { 66, 106 } }); R("r120", 66, 84, 'v', 22, "R120 ~ 4.7 k"); pin(66, 84, "nx", "ACCENT, 5 TO 15 V", 71, 80, L);
+                W({ { 66, 110 }, { 76, 110 } }); Q("q32", 92, 110, false, "Q32 ~ the follower onto the trigger line"); W({ { 92, 98 }, { 92, 12 } });
+                W({ { 92, 122 }, { 92, 130 } }); R("r113", 92, 130, 'v', 22, "R113 ~ 4.7 k, holds the line down"); W({ { 92, 152 }, { 92, 166 }, { 66, 166 } });
+                W({ { 92, 130 }, { 110, 130 }, { 110, 112 }, { 150, 112 }, { 150, 118 } });
+                // The snare's switch
+                R("r183", 122, 112, 'v', 18, "R183 ~ 4.7 k"); W({ { 122, 130 }, { 134, 130 } });
+                Q("q46", 150, 130, true, "Q46 ~ a PNP switch: it can only push current into the snare");
+                R("r182", 122, 130, 'v', 26, "R182 ~ 10 k"); W({ { 122, 156 }, { 122, 160 } }); Q("q45", 122, 172, false, "Q45 ~ on while the snare's step data stands"); W({ { 122, 184 }, { 122, 340 } });
+                pin(74, 172, "nsd", "SD ON", 72, 182, M); W({ { 74, 172 }, { 76, 172 } }); R("r180", 76, 172, 'h', 22, "R180 ~ 22 k"); W({ { 98, 172 }, { 106, 172 } });
+                R("r181", 102, 172, 'v', 18, "R181 ~ 10 k"); W({ { 102, 190 }, { 102, 340 } });
+                // The switched pulse: up to the shells, down to the Snappy
+                W({ { 150, 142 }, { 150, 220 }, { 196, 220 }, { 196, 226 } }); W({ { 176, 220 }, { 176, 30 }, { 326, 30 }, { 326, 46 } });
+
+                // The lower shell: IC14a and its bridged-T
+                R("r189", 176, 46, 'h', 22, "R189 ~ 100 k"); C("c57", 176, 60, 'h', 14, "C57 ~ 6.8 nF: the click on the front of the pulse");
+                W({ { 190, 60 }, { 204, 60 } }); W({ { 198, 46 }, { 204, 46 }, { 204, 158 }, { 264, 158 } });
+                R("r190", 216, 158, 'v', 18, "R190 ~ 680"); W({ { 216, 176 }, { 216, 196 } });
+                a.OP(264, 140, "IC14a ~ the lower shell: a bridged-T that rings at about 180 Hz"); open(264, 146, "nm1"); open(264, 158, "np1"); term(Pt(290, 152), {}, "no1", true);
+                W({ { 264, 146 }, { 256, 146 }, { 256, 100 }, { 246, 100 } }); C("c58", 232, 100, 'h', 14, "C58 ~ 0.056 uF", true);
+                W({ { 232, 100 }, { 232, 70 } }); C("c59", 232, 70, 'h', 14, "C59 ~ 0.027 uF"); W({ { 246, 70 }, { 304, 70 }, { 304, 152 }, { 290, 152 } });
+                W({ { 256, 100 }, { 256, 86 } }); R("r197", 256, 86, 'h', 22, "R197 ~ 820 k: how long the shell rings"); W({ { 278, 86 }, { 304, 86 } });
+                R("r196", 232, 100, 'v', 16, "R196 ~ 680"); W({ { 232, 116 }, { 232, 196 } });
+
+                // The upper shell: IC14b and its bridged-T
+                R("r191", 326, 46, 'h', 22, "R191 ~ 10 k"); W({ { 348, 46 }, { 354, 46 }, { 354, 158 }, { 414, 158 } });
+                R("r192", 366, 158, 'v', 18, "R192 ~ 220"); W({ { 366, 176 }, { 366, 196 } });
+                a.OP(414, 140, "IC14b ~ the upper shell: a bridged-T that rings at about 330 Hz"); open(414, 146, "nm2"); open(414, 158, "np2"); term(Pt(440, 152), {}, "no2", true);
+                W({ { 414, 146 }, { 406, 146 }, { 406, 100 }, { 396, 100 } }); C("c60", 382, 100, 'h', 14, "C60 ~ 6.8 nF", true);
+                W({ { 382, 100 }, { 382, 70 } }); C("c61", 382, 70, 'h', 14, "C61 ~ 0.015 uF"); W({ { 396, 70 }, { 454, 70 }, { 454, 152 }, { 440, 152 } });
+                W({ { 406, 100 }, { 406, 86 } }); R("r198", 406, 86, 'h', 22, "R198 ~ 1 M"); W({ { 428, 86 }, { 454, 86 } });
+                R("r195", 382, 100, 'v', 16, "R195 ~ 2.2 k"); W({ { 382, 116 }, { 382, 196 } });
+
+                // The Tone pot between the two shells, its wiper into the mixer
+                R("r200", 454, 70, 'h', 18, "R200 ~ a link in the changed version"); C("c65", 472, 70, 'h', 14, "C65 ~ 0.047 uF"); W({ { 486, 70 }, { 490, 70 }, { 490, 104 } });
+                W({ { 304, 152 }, { 304, 190 }, { 462, 190 } }); C("c63", 462, 190, 'h', 14, "C63 ~ 0.047 uF"); W({ { 476, 190 }, { 490, 190 }, { 490, 144 } });
+                a.R(490, 104, false, 40, "VR8 TONE ~ 100 k: the upper shell at the top, the lower at the bottom");
+                two("rv8a", Pt(490, 104), Pt(490, 124)); two("rv8b", Pt(490, 124), Pt(490, 144)); wiper(490, 124);
+                W({ { 490, 124 }, { 500, 124 } }); R("r204", 500, 124, 'h', 22, "R204 ~ 100 k"); W({ { 522, 124 }, { 580, 124 } });
+
+                // The Snappy: its pot, the envelope transistor Q47 and the envelope's filter
+                a.R(196, 226, false, 40, "VR9 SNAPPY ~ 10 k: how much of the pulse charges the envelope");
+                two("rv9a", Pt(196, 226), Pt(196, 246)); two("rv9b", Pt(196, 246), Pt(196, 266)); wiper(196, 246);
+                R("r199", 196, 266, 'v', 18, "R199 ~ 1 k"); W({ { 196, 284 }, { 196, 340 } });
+                W({ { 196, 246 }, { 206, 246 } }); R("r186", 206, 246, 'h', 22, "R186 ~ 33 k"); W({ { 228, 246 }, { 244, 246 } });
+                Q("q47", 260, 246, false, "Q47 ~ charges C51 for the length of the pulse");
+                W({ { 260, 234 }, { 260, 224 }, { 266, 224 } }); R("r187", 266, 224, 'h', 22, "R187 ~ 330", true);
+                R("r193", 300, 208, 'v', 16, "R193 ~ 100"); W({ { 288, 224 }, { 300, 224 } }); C("c55", 300, 224, 'v', 14, "C55 ~ 47 uF: Q47's own supply"); W({ { 300, 238 }, { 300, 340 } });
+                W({ { 260, 258 }, { 260, 270 }, { 272, 270 } }); C("c51", 260, 270, 'v', 14, "C51 ~ 0.47 uF: holds the envelope"); W({ { 260, 284 }, { 260, 340 } });
+                R("r184", 272, 270, 'h', 22, "R184 ~ 15 k"); W({ { 294, 270 }, { 324, 270 } }); C("c52", 316, 270, 'v', 14, "C52 ~ 0.1 uF"); W({ { 316, 284 }, { 316, 340 } });
+                R("r185", 324, 270, 'h', 22, "R185 ~ 15 k"); W({ { 346, 270 }, { 430, 270 } }); C("c53", 360, 270, 'v', 14, "C53 ~ 1 nF"); W({ { 360, 284 }, { 360, 340 } });
+
+                // The noise VCA: the white noise into Q48's base, its collector fed from the envelope through D54
+                pin(338, 250, "nwn", "WHITE NOISE, 130 mV", 338, 241, M); W({ { 338, 250 }, { 350, 250 } });
+                C("c56", 350, 250, 'h', 14, "C56 ~ 0.022 uF"); W({ { 364, 250 }, { 376, 250 } });
+                W({ { 376, 208 }, { 376, 214 } }); R("r194", 376, 214, 'v', 22, "R194 ~ 2.2 M"); W({ { 376, 236 }, { 376, 302 } });
+                DI("d54", 392, 270, 20, "D54 ~ lets the envelope feed Q48");
+                Q("q48", 392, 302, false, "Q48 ~ the swing VCA: the noise, shaped by the envelope");
+                R("r188", 392, 314, 'v', 16, "R188 ~ 100"); W({ { 392, 330 }, { 392, 340 } });
+                W({ { 392, 290 }, { 408, 290 } }); C("c54", 408, 290, 'v', 14, "C54 ~ 2.7 nF"); W({ { 408, 304 }, { 408, 340 } });
+
+                // The high-pass after the VCA: Q49, a follower in a two-pole filter
+                C("c66", 430, 270, 'h', 14, "C66 ~ 1.8 nF"); W({ { 444, 270 }, { 450, 270 } }); C("c67", 450, 270, 'h', 14, "C67 ~ 1.8 nF");
+                W({ { 464, 270 }, { 476, 270 } }); R("r202", 470, 270, 'v', 20, "R202 ~ 47 k"); W({ { 470, 290 }, { 470, 340 } });
+                Q("q49", 492, 270, false, "Q49 ~ the follower of the high-pass: only the hiss is left"); W({ { 492, 258 }, { 492, 208 } });
+                R("r201", 444, 270, 'v', 20, "R201 ~ 22 k"); W({ { 444, 290 }, { 444, 300 }, { 492, 300 }, { 492, 282 } });
+                R("r203", 492, 300, 'v', 20, "R203 ~ 22 k"); pin(492, 320, "vee", "-15 V", 498, 324, L);
+                W({ { 492, 290 }, { 506, 290 } }); C("c69", 506, 290, 'h', 14, "C69 ~ 0.01 uF"); R("r205", 520, 290, 'h', 22, "R205 ~ 27 k"); W({ { 542, 290 }, { 580, 290 } });
+
+                // The mixer, IC13, and the Level
+                W({ { 580, 72 }, { 580, 290 } });
+                a.OP(600, 130, "IC13 ~ the mixer: the shells and the snappy summed"); open(600, 136, "nsum"); open(600, 148, "0"); term(Pt(626, 142), {}, "vout", true);
+                W({ { 580, 136 }, { 600, 136 } }); W({ { 600, 148 }, { 592, 148 }, { 592, 340 } });
+                C("c70", 580, 72, 'h', 14, "C70 ~ 220 pF"); W({ { 594, 72 }, { 640, 72 } });
+                R("r210", 580, 90, 'h', 22, "R210 ~ 470 k"); W({ { 602, 90 }, { 640, 90 } });
+                POT("rvr7", 580, 110, 'h', 22, "VR7 LEVEL ~ 100 k"); C("c68", 602, 110, 'h', 14, "C68 ~ 33 uF"); W({ { 616, 110 }, { 640, 110 } });
+                W({ { 626, 142 }, { 640, 142 }, { 640, 72 } }); W({ { 640, 142 }, { 660, 142 } });
+                {
+                    auto& out = a.add({});
+                    out.fill.addTriangle({ 668, 142 }, { 660, 138.5f }, { 660, 145.5f });
+                }
+                a.tx(660, 136, "OUT", Rj);
             }
 
             void buildGraph()
@@ -1146,8 +1298,17 @@ namespace cs808
     struct LidView::Impl
     {
         Board board;
-        std::unique_ptr<FullDrum> full; // made the first time it is shown
+        std::array<std::unique_ptr<FullDrum>, drumsDrawn> drums; // each made the first time it is shown
+        FullDrum* full = nullptr;                                // the one shown
         bool showFull = false;
+
+        FullDrum& drum(int which)
+        {
+            auto& d = drums[static_cast<std::size_t>(which)];
+            if (! d)
+                d = std::make_unique<FullDrum>(which);
+            return *d;
+        }
         double now = 0.0, last = 0.0;
         int selected = -1;
         juce::Random random { 1980 };
@@ -1159,15 +1320,14 @@ namespace cs808
     LidView::LidView(Processor& p) : impl(std::make_unique<Impl>()), processor(p)
     {
         auto& i = *impl;
-        i.sheet.options = { "Whole board", "Bass drum, complete" };
+        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete" };
         i.sheet.fontHeight = 10.0f;
-        i.sheet.get = [this] { return impl->showFull ? 1 : 0; };
+        i.sheet.get = [this] { return impl->showFull && impl->full ? 1 + impl->full->which : 0; };
         i.sheet.set = [this](int v)
         {
-            impl->showFull = v == 1;
+            impl->showFull = v >= 1 && v <= drumsDrawn;
             impl->selected = -1;
-            if (impl->showFull && ! impl->full)
-                impl->full = std::make_unique<FullDrum>();
+            impl->full = impl->showFull ? &impl->drum(v - 1) : nullptr;
             resized();
             repaint();
         };
@@ -1198,9 +1358,11 @@ namespace cs808
 
     juce::StringArray LidView::completeDrumProblems()
     {
-        if (! impl->full)
-            impl->full = std::make_unique<FullDrum>();
-        return impl->full->errors;
+        juce::StringArray all;
+        for (int d = 0; d < drumsDrawn; ++d)
+            for (const auto& e : impl->drum(d).errors)
+                all.add(juce::String(d == snareDrum ? "the snare: " : "the bass drum: ") + e);
+        return all;
     }
 
     void LidView::resized()
@@ -1255,9 +1417,9 @@ namespace cs808
 
     void LidView::struck(std::uint32_t lanes)
     {
-        if (impl->showFull && impl->full && (lanes & 1u) != 0)
+        if (impl->showFull && impl->full && (lanes & (1u << (impl->full->which == snareDrum ? 1 : 0))) != 0)
         {
-            impl->full->pos = 0.0; // the bass drum struck: its hit plays from the start
+            impl->full->pos = 0.0; // its drum struck: the hit plays from the start
             impl->full->playing = true;
         }
         const auto& kit = processor.project().kit;
@@ -1386,7 +1548,7 @@ namespace cs808
     juce::AffineTransform LidView::sheetTransform() const
     {
         const bool full = impl->showFull && impl->full && impl->full->rec.samples > 1;
-        const float w = full ? 690.0f : boardW, h = full ? 282.0f : boardH;
+        const float w = full ? impl->full->width : boardW, h = full ? impl->full->height : boardH;
         const float room = static_cast<float>(getHeight()) - (full ? 54.0f : 26.0f);
         const float scale = std::min(getWidth() / w, room / h);
         return juce::AffineTransform::scale(scale).translated((getWidth() - w * scale) / 2.0f, 0.0f);
@@ -1454,8 +1616,7 @@ namespace cs808
 
         // The time and what the circuit does then, and where the numbers come from.
         const double ms = f.msAt(f.pos);
-        const juce::String phase = f.pos < 0.3 ? "at rest: only the standing currents flow" : ms <= 1.05 ? "the trigger: a pulse of 1 ms"
-                                   : ms <= 6.0 ? "the attack: Q43 holds the pitch up" : "the ring: the resonator sounds on";
+        const juce::String phase = f.phaseAt(ms);
         auto bar = getLocalBounds().withTrimmedBottom(26).removeFromBottom(26).toFloat();
         g.setColour(th.ink);
         g.setFont(uiFont(11.5f));

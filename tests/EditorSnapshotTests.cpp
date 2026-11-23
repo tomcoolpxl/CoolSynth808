@@ -41,7 +41,7 @@ public:
             }
         }
 
-        beginTest("the_complete_bass_drum_matches_its_netlist");
+        beginTest("each_complete_drum_matches_its_netlist");
         {
             auto p = std::make_unique<Processor>();
             std::unique_ptr<juce::AudioProcessorEditor> e(p->createEditor());
@@ -94,6 +94,8 @@ public:
             shoot("lid");
             editor->lidForTesting().showSheet(1);
             shoot("lid-bass-drum");
+            editor->lidForTesting().showSheet(2);
+            shoot("lid-snare");
             editor->lidForTesting().showSheet(0);
             editor->lidView = false;
             editor->patternMode = true;
