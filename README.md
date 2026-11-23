@@ -9,7 +9,7 @@ on the published service notes of the machine and checked against recordings of 
 ## Playing it
 
 The panel has a column of knobs per drum, as on the machine: the bass drum's Level, Tone and Decay, the snare's
-Snappy, the toms' Tuning and so on, and the Accent on the left. Click a drum's name to hear it.
+Snappy, the toms' Tuning and so on, and the Accent and Volume on the left. Click a drum's name to hear it.
 
 - The row of sixteen keys shows the steps of the drum you selected: click a step to switch it on or off.
 - Drag a step down to make it play less often; its height shows the chance.
