@@ -66,6 +66,7 @@ if(BUILD_TESTING)
             tests/ProjectTests.cpp
             tests/ProcessorTests.cpp
             tests/LibraryTests.cpp
+            tests/EditorSnapshotTests.cpp
             ${COOLSYNTH808_SOURCES})
     target_include_directories(CoolSynth808Tests PRIVATE src tests)
     target_compile_features(CoolSynth808Tests PUBLIC cxx_std_20)

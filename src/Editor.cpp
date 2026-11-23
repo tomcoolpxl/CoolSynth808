@@ -112,8 +112,9 @@ namespace cs808
             g.setColour(th.ink);
             g.setFont(uiFont(27.0f));
             g.drawText("CoolSynth", 24, 14, 140, 32, juce::Justification::centredLeft);
+            const int nameWidth = juce::GlyphArrangement::getStringWidthInt(uiFont(27.0f), "CoolSynth ");
             g.setFont(uiFont(27.0f, true));
-            g.drawText("808", 146, 14, 80, 32, juce::Justification::centredLeft);
+            g.drawText("808", 24 + nameWidth, 14, 80, 32, juce::Justification::centredLeft);
             g.setColour(th.dim);
             g.setFont(uiFont(10.0f));
             g.drawText("BEAT COMPOSER", 25, 44, 200, 14, juce::Justification::centredLeft);
