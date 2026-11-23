@@ -740,9 +740,9 @@ namespace cs808
         };
 
         // The drums drawn complete: the bass drum, then the snare (D278).
-        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, rimShot = 3, handClap = 4, cowbell = 5, drumsDrawn = 6 };
+        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, rimShot = 3, handClap = 4, cowbell = 5, metalShared = 6, drumsDrawn = 7 };
         /** The lane each drum drawn complete plays in. */
-        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5, 6, 7 };
+        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5, 6, 7, 8 };
 
         Recording loadRecording(int which)
         {
@@ -752,6 +752,7 @@ namespace cs808
                               : which == rimShot ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::rimshot_currents_json, LibraryData::rimshot_currents_jsonSize))
                               : which == handClap ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::clap_currents_json, LibraryData::clap_currents_jsonSize))
                               : which == cowbell ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::cowbell_currents_json, LibraryData::cowbell_currents_jsonSize))
+                              : which == metalShared ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::metal_currents_json, LibraryData::metal_currents_jsonSize))
                                                  : juce::JSON::parse(juce::String::fromUTF8(LibraryData::bassdrum_currents_json, LibraryData::bassdrum_currents_jsonSize));
             const auto* times = root.getProperty("t", {}).getArray();
             const auto* names = root.getProperty("names", {}).getArray();
@@ -790,7 +791,9 @@ namespace cs808
                     r.parts[p.name.toString().toStdString()] = nodes;
                 }
             const auto set = root.getProperty("setting", {});
-            if (which == cowbell)
+            if (which == metalShared)
+                r.setting << "the six oscillators running free, at 554, 825, 523, 304, 370 and 205 Hz, through the two band-passes";
+            else if (which == cowbell)
                 r.setting << "the cowbell, " << set.getProperty("amp", "?").toString() << " V on the trigger line, Level "
                           << set.getProperty("cbl", "?").toString() << ", its two oscillators at 554 and 825 Hz as both measured units have them";
             else if (which == handClap)
@@ -859,6 +862,8 @@ namespace cs808
                     return "at rest: only the standing currents flow";
                 if (ms <= 1.05)
                     return "the trigger: a pulse of 1 ms";
+                if (which == metalShared)
+                    return "always running: six squares summed, a high band for the cymbal and the hats, a low one for the cymbal";
                 if (which == cowbell)
                     return ms <= 8.0 ? "the attack: C9 charged, then R82 and C34 pull it down fast"
                                      : "the ring: the two oscillators through their VCAs, fading with C9";
@@ -947,6 +952,25 @@ namespace cs808
                     a.tx(lx, ly, label, j);
                 };
                 const auto open = [&](float x, float y, const std::string& node) { term(Pt(x, y), {}, node); };
+                // A ground symbol under (x, y), and a supply's: +15 V above (x, y), -15 V below it (D278).
+                const auto gnd = [&](float x, float y)
+                {
+                    auto& g = a.add({});
+                    g.stroke.addLineSegment({ Pt(x, y), Pt(x, y + 4) }, 0);
+                    g.stroke.addLineSegment({ Pt(x - 5, y + 4), Pt(x + 5, y + 4) }, 0);
+                    g.stroke.addLineSegment({ Pt(x - 3, y + 6.5f), Pt(x + 3, y + 6.5f) }, 0);
+                    g.stroke.addLineSegment({ Pt(x - 1.2f, y + 9), Pt(x + 1.2f, y + 9) }, 0);
+                    term(Pt(x, y), {}, "0", true);
+                };
+                const auto supply = [&](float x, float y, bool positive)
+                {
+                    auto& s = a.add({});
+                    const float d = positive ? -5.0f : 5.0f;
+                    s.stroke.addLineSegment({ Pt(x, y), Pt(x, y + d) }, 0);
+                    s.stroke.addLineSegment({ Pt(x - 4, y + d), Pt(x + 4, y + d) }, 0);
+                    a.tx(x, y + d * 1.9f, positive ? "+15" : "-15", juce::Justification::centred);
+                    term(Pt(x, y), {}, positive ? "vcc" : "vee", true);
+                };
                 const auto L = juce::Justification::centredLeft;
                 const auto Rj = juce::Justification::centredRight;
                 const auto M = juce::Justification::centred;
@@ -956,7 +980,7 @@ namespace cs808
                     w.fill.addTriangle({ x + 3.5f, y }, { x + 8.5f, y - 2.5f }, { x + 8.5f, y + 2.5f });
                 };
 
-                if (which == snareDrum || which == lowTom || which == rimShot || which == handClap || which == cowbell)
+                if (which == snareDrum || which == lowTom || which == rimShot || which == handClap || which == cowbell || which == metalShared)
                 {
                     if (which == snareDrum)
                         buildSnare(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
@@ -966,6 +990,8 @@ namespace cs808
                         buildClap(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
                     else if (which == cowbell)
                         buildCowbell(a, W, term, R, C, DI, Q, pin, open, wiperAt, two);
+                    else if (which == metalShared)
+                        buildMetalShared(a, W, R, C, pin, open, gnd, term);
                     else
                         buildTom(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
                     buildGraph();
@@ -1702,6 +1728,66 @@ namespace cs808
                 a.tx(840, 158, "OUT", Rj);
             }
 
+            /*
+                The metal board's six oscillators and the two band-passes that the cymbal and the hi-hats share (D278):
+                IC1's six squares, each through 120 k into R53, then IC3b's high band and IC3a's low band, each a
+                bridged-T in an op-amp's feedback.
+            */
+            void buildMetalShared(Board::Sheet& a, auto& W, auto& R, auto& C, auto& pin, auto& open, auto& gnd, auto& term)
+            {
+                width = 600.0f;
+                height = 280.0f;
+                const auto L = juce::Justification::centredLeft;
+                struct Osc { const char* node; const char* part; const char* label; };
+                const Osc osc[] { { "no1", "r50", "OSC 1 ~ 554 Hz, TM1: the cowbell's low" },
+                                  { "no2", "r48", "OSC 2 ~ 825 Hz, TM2: the cowbell's high" },
+                                  { "no3", "r46", "OSC 3 ~ 523 Hz, R43 and C4" },
+                                  { "no4", "r39", "OSC 4 ~ 304 Hz, R42 and C3" },
+                                  { "no5", "r37", "OSC 5 ~ 370 Hz, R41 and C2" },
+                                  { "no6", "r35", "OSC 6 ~ 205 Hz, R40 and C1" } };
+                for (int k = 0; k < 6; ++k)
+                {
+                    const float y = 40.0f + 36.0f * static_cast<float>(k);
+                    pin(190, y, osc[k].node, osc[k].label, 184, y, juce::Justification::centredRight);
+                    W({ { 190, y }, { 196, y } });
+                    R(osc[k].part, 196, y, 'h', 22, juce::String(osc[k].part).toUpperCase() + " ~ 120 k");
+                    W({ { 218, y }, { 270, y } });
+                }
+                W({ { 270, 40 }, { 270, 240 } }); R("r53", 270, 240, 'v', 18, "R53 ~ 1 k"); gnd(270, 258);
+
+                // IC3b: the high band
+                W({ { 270, 100 }, { 280, 100 } }); C("c11", 280, 100, 'h', 14, "C11 ~ 1 nF"); W({ { 294, 100 }, { 300, 100 } });
+                R("r55", 300, 100, 'h', 22, "R55 ~ 22 k"); W({ { 322, 100 }, { 370, 100 } });
+                a.OP(370, 94, "IC3b ~ the high band: a bridged-T in its feedback"); open(370, 100, "n3bm"); open(370, 112, "0"); term(Pt(396, 106), {}, "nhb", true);
+                W({ { 370, 112 }, { 362, 112 }, { 362, 118 } }); gnd(362, 118);
+                W({ { 334, 100 }, { 334, 60 } }); C("c15", 334, 60, 'h', 14, "C15 ~ 3.3 nF"); C("c16", 348, 60, 'h', 14, "C16 ~ 3.3 nF");
+                W({ { 362, 60 }, { 410, 60 }, { 410, 106 }, { 396, 106 } });
+                R("r58", 348, 60, 'v', 14, "R58 ~ 560"); gnd(348, 74);
+                W({ { 334, 90 }, { 360, 90 } }); R("r59", 360, 90, 'h', 22, "R59 ~ 82 k"); W({ { 382, 90 }, { 410, 90 } });
+                W({ { 410, 106 }, { 440, 106 } });
+                {
+                    auto& out = a.add({});
+                    out.fill.addTriangle({ 448, 106 }, { 440, 102.5f }, { 440, 109.5f });
+                }
+                a.tx(452, 106, "HIGH BAND, TO THE CYMBAL AND THE HATS", L);
+
+                // IC3a: the low band
+                W({ { 270, 220 }, { 280, 220 } }); C("c10", 280, 220, 'h', 14, "C10 ~ 3.3 nF"); W({ { 294, 220 }, { 300, 220 } });
+                R("r52", 300, 220, 'h', 22, "R52 ~ 33 k"); W({ { 322, 220 }, { 370, 220 } });
+                a.OP(370, 214, "IC3a ~ the low band: a bridged-T in its feedback"); open(370, 220, "n3am"); open(370, 232, "0"); term(Pt(396, 226), {}, "nlb", true);
+                W({ { 370, 232 }, { 362, 232 }, { 362, 238 } }); gnd(362, 238);
+                W({ { 334, 220 }, { 334, 180 } }); C("c13", 334, 180, 'h', 14, "C13 ~ 6.8 nF"); C("c14", 348, 180, 'h', 14, "C14 ~ 6.8 nF");
+                W({ { 362, 180 }, { 410, 180 }, { 410, 226 }, { 396, 226 } });
+                R("r56", 348, 180, 'v', 14, "R56 ~ 560"); gnd(348, 194);
+                W({ { 334, 210 }, { 360, 210 } }); R("r57", 360, 210, 'h', 22, "R57 ~ 82 k"); W({ { 382, 210 }, { 410, 210 } });
+                W({ { 410, 226 }, { 440, 226 } });
+                {
+                    auto& out = a.add({});
+                    out.fill.addTriangle({ 448, 226 }, { 440, 222.5f }, { 440, 229.5f });
+                }
+                a.tx(452, 226, "LOW BAND, TO THE CYMBAL", L);
+            }
+
             void buildGraph()
             {
                 // Every wire corner, junction and part lead is a point; a wire is split where a point lies on it.
@@ -1782,9 +1868,20 @@ namespace cs808
                 std::map<std::string, int> count;
                 for (const auto& net : nets)
                     ++count[net.name];
+                // Ground and the supplies may be drawn as symbols in many places, each piece with its own (D278).
                 for (const auto& [name, c] : count)
-                    if (c > 1)
+                    if (c > 1 && name != "0" && name != "vcc" && name != "vee")
                         errors.add(juce::String(name) + " is drawn in " + juce::String(c) + " pieces");
+                for (const auto& net : nets)
+                    if ((net.name == "0" || net.name == "vcc" || net.name == "vee") && count[net.name] > 1)
+                    {
+                        bool rooted = false;
+                        for (const int n : net.nodes)
+                            for (const int t : nodes[static_cast<std::size_t>(n)].terms)
+                                rooted = rooted || terms[static_cast<std::size_t>(t)].root;
+                        if (! rooted)
+                            errors.add(juce::String(net.name) + " has a piece with no symbol or rail");
+                    }
                 std::set<std::string> drawn;
                 for (const auto& t : terms)
                     if (! t.coef.empty())
@@ -1899,7 +1996,7 @@ namespace cs808
     LidView::LidView(Processor& p) : impl(std::make_unique<Impl>()), processor(p)
     {
         auto& i = *impl;
-        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete", "Hand clap, complete", "Cowbell, complete" };
+        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete", "Hand clap, complete", "Cowbell, complete", "Metal oscillators" };
         i.sheet.fontHeight = 10.0f;
         i.sheet.get = [this] { return impl->showFull && impl->full ? 1 + impl->full->which : 0; };
         i.sheet.set = [this](int v)
@@ -1940,7 +2037,7 @@ namespace cs808
         juce::StringArray all;
         for (int d = 0; d < drumsDrawn; ++d)
             for (const auto& e : impl->drum(d).errors)
-                all.add(juce::String(d == cowbell ? "the cowbell: " : d == handClap ? "the hand clap: " : d == rimShot ? "the rim shot: " : d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
+                all.add(juce::String(d == metalShared ? "the metal oscillators: " : d == cowbell ? "the cowbell: " : d == handClap ? "the hand clap: " : d == rimShot ? "the rim shot: " : d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
         return all;
     }
 

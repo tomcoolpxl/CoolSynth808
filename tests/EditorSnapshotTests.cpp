@@ -104,6 +104,8 @@ public:
             shoot("lid-hand-clap");
             editor->lidForTesting().showSheet(6);
             shoot("lid-cowbell");
+            editor->lidForTesting().showSheet(7);
+            shoot("lid-metal-oscillators");
             editor->lidForTesting().showSheet(0);
             editor->lidView = false;
             editor->patternMode = true;
