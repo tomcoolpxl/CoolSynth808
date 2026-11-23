@@ -93,7 +93,7 @@ namespace cs808
 
     const juce::StringArray& libraryFamilies()
     {
-        // The starter beats first (D276): each genre's common groove, for a beginner to begin from.
+        // The starter beats first (D277): each genre's common groove, for a beginner to begin from.
         static const juce::StringArray families { "Starter beats", "Electro and hip hop", "R&B and pop", "Bass and the South",
                                                   "Trap and drill", "House and acid", "Techno", "Breaks and big beat",
                                                   "Jungle and IDM" };
