@@ -172,7 +172,8 @@ namespace cs808
         std::array<Strike, 128> strikes {};
 
         // audio thread
-        coolsynth::synth::v3::EngineV3 engine;
+        // One layer, no effects, one sound (CoolSynth's D270): about 60 MB instead of 640, the same samples.
+        coolsynth::synth::v3::EngineV3 engine { coolsynth::synth::v3::EngineShape::singleLayer() };
         coolsynth::synth::StepSequencer sequencer;
         coolsynth::synth::v3::EngineSettings engineSettings {};
         KitValues kitOnAudio {};
