@@ -100,6 +100,9 @@ public:
             editor->patternMode = false;
             editor->setSize(620, 300);
             shoot("panel-narrow");
+            editor->setSize(1240, 600);
+            editor->openControllerSetup();
+            shoot("controller");
             expect(folder.getChildFile("lid.png").existsAsFile());
         }
     }

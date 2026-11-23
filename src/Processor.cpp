@@ -10,6 +10,7 @@ namespace cs808
         constexpr int maxEvents = 1024;
         constexpr int midiChannel = 10;
         constexpr std::uint32_t accentBit = 1u << laneCount;
+        std::atomic<int> liveProcessors { 0 }; // the controller setup runs while one plays (D268)
     }
 
     Processor::Processor()
@@ -29,9 +30,23 @@ namespace cs808
         pushKit();
         pushPlay();
         pushBank();
+        for (auto& note : padNotes)
+            note.store(-1, std::memory_order_relaxed);
+        // The computer's controller setup (D211, D268): read once for the program. Tests (no wrapper) set their own.
+        if (wrapperType != wrapperType_Undefined)
+        {
+            startedSetup = true;
+            if (liveProcessors.fetch_add(1, std::memory_order_relaxed) == 0)
+                coolsynth::midi::ControllerSetup::instance().start();
+        }
     }
 
-    Processor::~Processor() = default;
+    Processor::~Processor()
+    {
+        // The last one: the setup's timers go while JUCE still runs (the review of D211).
+        if (startedSetup && liveProcessors.fetch_sub(1, std::memory_order_relaxed) == 1)
+            coolsynth::midi::ControllerSetup::instance().shutDown();
+    }
 
     bool Processor::isBusesLayoutSupported(const BusesLayout& layouts) const
     {
@@ -45,6 +60,8 @@ namespace cs808
         engine.prepare(rate, std::max(1, samplesPerBlock), std::max(1, getTotalNumOutputChannels()));
         clock.prepare(rate);
         panelNotes.reset(rate);
+        panelBlock.ensureSize(4096);
+        keptBlock.ensureSize(8192);
         sequencer.reset();
         playing = false;
         beat = 0.0;
@@ -131,6 +148,7 @@ namespace cs808
 
     bool Processor::undo()
     {
+        inGesture = false; // a step undone ends any turn still going on
         if (undoStack.empty())
             return false;
         redoStack.push_back(std::make_unique<Project>(model));
@@ -234,6 +252,31 @@ namespace cs808
         panelNotes.addMessageToQueue(juce::MidiMessage::noteOff(midiChannel, note).withTimeStamp(now + 0.05));
     }
 
+    int Processor::padIndex(const coolsynth::midi::ControlId& control) noexcept
+    {
+        if (! control.isValid())
+            return -1;
+        return ((control.kind == coolsynth::midi::ControlId::Kind::note ? 16 : 0) + control.channel - 1) * 128 + control.number;
+    }
+
+    void Processor::setPadNotes(const PadNotes& notes) noexcept
+    {
+        for (std::size_t i = 0; i < notes.size(); ++i)
+            padNotes[i].store(notes[i], std::memory_order_relaxed);
+    }
+
+    void Processor::takeControllerEvents(const std::function<void(const coolsynth::midi::ControllerEvent&)>& use)
+    {
+        // In turns, so a controller sending on and on never holds the message thread for long.
+        for (int round = 0; round < 8; ++round)
+        {
+            const auto scope = controllerFifo.read(controllerFifo.getNumReady());
+            if (scope.blockSize1 + scope.blockSize2 == 0)
+                return;
+            scope.forEach([&](int index) { use(controllerEvents[static_cast<std::size_t>(index)]); });
+        }
+    }
+
     bool Processor::applyRecordedHits()
     {
         const int ready = recordedFifo.getNumReady();
@@ -321,9 +364,42 @@ namespace cs808
 
         pullFromUi();
 
-        juce::MidiBuffer panel;
-        panelNotes.removeNextBlockOfMessages(panel, n);
-        midi.addEvents(panel, 0, n, 0);
+        // A controller's linked controls go to the panel, not the sound (D211, D268); its pads strike their drums here,
+        // without waiting for the message thread.
+        keptBlock.clear();
+        bool changed = false;
+        for (const auto metadata : midi)
+        {
+            const auto& m = metadata.getMessage();
+            if (coolsynth::midi::ControllerSetup::wanted(m))
+                if (const auto event = coolsynth::midi::toControllerEvent(m))
+                {
+                    if (const auto scope = controllerFifo.write(1); scope.blockSize1 > 0)
+                        controllerEvents[static_cast<std::size_t>(scope.startIndex1)] = *event;
+                    const int index = padIndex(event->control);
+                    const int note = index >= 0 ? padNotes[static_cast<std::size_t>(index)].load(std::memory_order_relaxed) : -1;
+                    if (note >= 0 && (event->note ? event->value > 0 : event->value >= 64))
+                    {
+                        // Hit hard, a pad is accented: an 808's drum is accented or not (D268).
+                        const auto velocity = static_cast<juce::uint8>(! event->note || event->value >= 100 ? 127 : 1);
+                        keptBlock.addEvent(juce::MidiMessage::noteOn(midiChannel, note, velocity), metadata.samplePosition);
+                        keptBlock.addEvent(juce::MidiMessage::noteOff(midiChannel, note), std::min(n - 1, metadata.samplePosition + 1));
+                        changed = true;
+                    }
+                }
+            if (coolsynth::midi::ControllerSetup::takesFromSound(m))
+            {
+                changed = true;
+                continue;
+            }
+            keptBlock.addEvent(m, metadata.samplePosition);
+        }
+        if (changed)
+            midi.swapWith(keptBlock);
+
+        panelBlock.clear();
+        panelNotes.removeNextBlockOfMessages(panelBlock, n);
+        midi.addEvents(panelBlock, 0, n, 0);
 
         // The clock's messages first: they say whether the transport is ours or the clock's.
         for (const auto metadata : midi)

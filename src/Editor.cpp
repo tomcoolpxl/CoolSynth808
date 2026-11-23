@@ -1,5 +1,8 @@
 #include "Editor.h"
 
+#include "Controls.h"
+#include "ui/ControllerPanel.h"
+
 #include "MidiExport.h"
 #include "ui/LidView.h"
 
@@ -748,11 +751,13 @@ namespace cs808
         setResizable(true, true);
         setResizeLimits(620, 280, 2480, 2200);
         layoutForLanes();
+        controls = std::make_unique<Controls>(*this);
         startTimerHz(30);
     }
 
     Editor::~Editor()
     {
+        controls.reset(); // its gesture closes while the panel is whole
         settings->setValue("theme", themeIndex);
         settings->setValue("lanesOpen", lanesOpen);
         settings->saveIfNeeded();
@@ -830,6 +835,11 @@ namespace cs808
     {
         const float scale = getWidth() / static_cast<float>(baseWidth);
         content->setTransform(juce::AffineTransform::scale(scale));
+        // The overlays cover the window, whatever its size.
+        if (library)
+            library->setBounds(getLocalBounds());
+        if (controllerPanel)
+            controllerPanel->setBounds(getLocalBounds());
     }
 
     // ---- Building the panel -----------------------------------------------------------------------------------
@@ -859,6 +869,8 @@ namespace cs808
         chip("Theme", 60, [this](const juce::MouseEvent&) { showThemeMenu(); });
         chip("Undo", 52, [this](const juce::MouseEvent&) { processor.undo(); refresh(); });
         chip("Redo", 52, [this](const juce::MouseEvent&) { processor.redo(); refresh(); });
+        chip("Controller", 84, [this](const juce::MouseEvent&) { openControllerSetup(); },
+             [] { return ! coolsynth::midi::ControllerSetup::instance().map().empty(); });
 
         auto& views = add<Choices>(*content);
         views.options = { "Panel", "Under the Lid" };
@@ -1267,6 +1279,15 @@ namespace cs808
         addAndMakeVisible(*library);
         library->setBounds(getLocalBounds());
         library->grabKeyboardFocus();
+    }
+
+    void Editor::openControllerSetup()
+    {
+        controllerPanel = std::make_unique<ControllerPanel>(controls.get());
+        controllerPanel->onClose = [this] { controllerPanel.reset(); grabKeyboardFocus(); };
+        addAndMakeVisible(*controllerPanel);
+        controllerPanel->setBounds(getLocalBounds());
+        controllerPanel->grabKeyboardFocus();
     }
 
     void Editor::loadLibraryEntry(const LibraryEntry& e)

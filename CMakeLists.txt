@@ -39,6 +39,10 @@ set(COOLSYNTH808_SOURCES
     src/MidiExport.cpp
     src/Processor.cpp
     src/Editor.cpp
+    src/Controls.cpp
+    src/midi/ControllerMap.cpp
+    src/midi/ControllerSetup.cpp
+    src/ui/ControllerPanel.cpp
     src/ui/Widgets.cpp
     src/ui/LidView.cpp)
 
@@ -69,6 +73,7 @@ if(BUILD_TESTING)
             tests/ProcessorTests.cpp
             tests/LibraryTests.cpp
             tests/EditorSnapshotTests.cpp
+            tests/ControllerTests.cpp
             ${COOLSYNTH808_SOURCES})
     target_include_directories(CoolSynth808Tests PRIVATE src tests)
     target_compile_features(CoolSynth808Tests PUBLIC cxx_std_20)

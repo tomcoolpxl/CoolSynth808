@@ -10,6 +10,7 @@
 
 #include "ClockFollower.h"
 #include "Kit.h"
+#include "midi/ControllerSetup.h"
 #include "Project.h"
 #include "synth/StepSequencer.h"
 #include "synth/v3/EngineV3.h"
@@ -106,6 +107,15 @@ namespace cs808
         /** Writes the hits recorded while playing into the project; returns whether any came. */
         bool applyRecordedHits();
 
+        // ---- A MIDI controller (D268), message thread -----------------------------------------------------------
+        /** The note each controller pad strikes, by padIndex (-1 none): the audio thread plays it at once. */
+        static constexpr int padSlots = 2 * 16 * 128;
+        using PadNotes = std::array<std::int8_t, padSlots>;
+        [[nodiscard]] static int padIndex(const coolsynth::midi::ControlId& control) noexcept;
+        void setPadNotes(const PadNotes& notes) noexcept;
+        /** The controller's messages the setup links (or hears while learning), as they came. */
+        void takeControllerEvents(const std::function<void(const coolsynth::midi::ControllerEvent&)>& use);
+
         // ---- Rendering without a device (tests, the MIDI file) -----------------------------------------------
         [[nodiscard]] coolsynth::synth::v3::EngineV3& engineForTesting() noexcept { return engine; }
 
@@ -166,6 +176,11 @@ namespace cs808
         std::atomic<std::uint32_t> struck { 0 };
         juce::AbstractFifo recordedFifo { 256 };
         std::array<RecordedHit, 256> recordedHits {};
+        juce::AbstractFifo controllerFifo { 512 };
+        std::array<coolsynth::midi::ControllerEvent, 512> controllerEvents {};
+        std::array<std::atomic<std::int8_t>, padSlots> padNotes;
+        juce::MidiBuffer panelBlock, keptBlock; // the audio thread's, sized in prepareToPlay
+        bool startedSetup = false;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Processor)
     };

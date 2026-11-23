@@ -23,6 +23,8 @@ namespace cs808
 {
     class LidView;
     class LibraryPanel;
+    class Controls;
+    class ControllerPanel;
 
     class Editor final : public juce::AudioProcessorEditor,
                          public juce::DragAndDropContainer,
@@ -58,6 +60,11 @@ namespace cs808
         void refresh();
         void layoutForLanes();
         [[nodiscard]] LidView& lidForTesting() noexcept { return *lid; }
+        /** A pattern key pressed: that pattern plays next and is edited; `extend` makes a chain from the key held. */
+        void selectPatternKey(int index, bool extend);
+        [[nodiscard]] Controls& controlsForTesting() noexcept { return *controls; }
+        /** The controller setup over the panel (the header's Controller). */
+        void openControllerSetup();
 
     private:
         void timerCallback() override;
@@ -69,13 +76,13 @@ namespace cs808
         void showThemeMenu();
         void showBankMenu();
         void openLibrary();
+
         void newProject();
         void openProject();
         void saveProject(bool askName);
         void savePatternToLibrary();
         void loadLibraryEntry(const LibraryEntry& e);
         void startMidiDrag();
-        void selectPatternKey(int index, bool extend);
 
         class Content;
         class StepKeys;
@@ -85,6 +92,8 @@ namespace cs808
         std::unique_ptr<LaneRows> laneRows;
         std::unique_ptr<LidView> lid;
         std::unique_ptr<LibraryPanel> library;
+        std::unique_ptr<Controls> controls; // a MIDI controller's knobs, faders and pads (D268)
+        std::unique_ptr<ControllerPanel> controllerPanel;
 
         juce::OwnedArray<juce::Component> parts; // every widget, owned here
         std::optional<SequencerPattern> clipboard;

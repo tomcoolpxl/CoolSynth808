@@ -23,6 +23,8 @@ Snappy, the toms' Tuning and so on, and the Accent on the left. Click a drum's n
 - Rec writes the drums you play (on MIDI, or by clicking their names) on the nearest step while it runs.
 - Drag MIDI drags the pattern into your music software as a MIDI file.
 - Under the Lid shows the circuits as they are struck.
+- Controller sets up a MIDI controller: the main knob chooses the drum, knobs follow it, pads play the drums or, after
+  a press of the main knob, enter its steps. Click a place and move the control to link it.
 
 It follows a MIDI clock when one comes in (its start, stop and tempo), and sends its own when none does. The audio
 and MIDI settings are in the Options menu of the window.
