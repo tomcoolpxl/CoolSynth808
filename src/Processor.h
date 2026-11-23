@@ -75,6 +75,13 @@ namespace cs808
         void endGesture();
         /** No undo or redo from here: a project opened or begun anew. */
         void forgetHistory();
+        /** The edits `make` makes reach the audio thread together on the next bar line while it plays, the
+            chain beginning there from its start; stopped, at once (CoolSynth's D274: a beat auditioned in time). Edits
+            made while they wait go with them. */
+        void atNextBar(const std::function<void()>& make);
+        [[nodiscard]] bool waitingForBar() const noexcept { return cueWaiting.load(std::memory_order_acquire); }
+        /** The project as it is becomes one undo step back to `before` (an auditioned beat loaded as it plays). */
+        void keepAsOneStep(const Project& before);
         /** Grows with every change of the project, the panel's sign to draw again. */
         [[nodiscard]] std::uint64_t editCount() const noexcept { return edits; }
         bool undo();
@@ -153,11 +160,15 @@ namespace cs808
         void pushPlay();
         void pushBank();
         void pushUndo();
-        void pullFromUi() noexcept;
+        void markCue() noexcept; // under the handover's lock: an edit inside atNextBar waits for the bar line
+        /** What the message thread handed over. Edits waiting for a bar line are taken only when `barDue`; their chain
+            then begins at `bar`. */
+        void pullFromUi(bool barDue = false, std::int64_t bar = 0) noexcept;
         void playEvents(juce::MidiBuffer& midi, int numSamples, std::int64_t blockStart);
         /** A controller's message: to the panel's queue, and a pad's drum struck into keptBlock. True if struck. */
         bool takeControl(const juce::MidiMessage& m, int samplePosition, int numSamples) noexcept;
-        void sendClock(juce::MidiBuffer& out, double beat0, double beat1, int numSamples, bool started, bool stopped);
+        void sendClock(juce::MidiBuffer& out, double beat0, double beat1, int numSamples, bool started, bool stopped,
+                       int offsetInBlock = 0);
 
         // message thread
         Project model;
@@ -175,6 +186,9 @@ namespace cs808
         std::array<int, coolsynth::synth::StepSequencer::maxChain> pendingChain {};
         int pendingChainLength = 0;
         std::atomic<bool> kitDirty { true }, playDirty { true }, bankDirty { true }, chainDirty { false };
+        bool cueing = false;              // message thread: inside atNextBar
+        bool pendingChainFromBar = false; // under the handover's lock
+        std::atomic<bool> cueWaiting { false }, cueOpen { false };
         std::atomic<int> playRequest { -1 };
         std::atomic<bool> fillRequest { false };
         std::atomic<bool> recording { false };
@@ -191,6 +205,7 @@ namespace cs808
         coolsynth::synth::v3::EngineV3 engine { coolsynth::synth::v3::EngineShape::singleLayer() };
         coolsynth::synth::StepSequencer sequencer;
         coolsynth::synth::v3::EngineSettings engineSettings {};
+        coolsynth::synth::v3::EngineSettings settingsBeforeSplit {}; // a block split on a bar line: its first part's
         KitValues kitOnAudio {};
         PlaySettings playOnAudio {};
         ClockFollower clock;

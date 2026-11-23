@@ -1206,8 +1206,7 @@ namespace cs808
         library->onClose = [this] { closeOverlaysLater(); };
         library->onLoad = [this](const LibraryEntry& e)
         {
-            stopAudition();
-            loadLibraryEntry(e);
+            loadFromShelf(e);
             closeOverlaysLater();
         };
         library->onAudition = [this](const LibraryEntry* e)
@@ -1231,7 +1230,31 @@ namespace cs808
         controllerPanel->grabKeyboardFocus();
     }
 
-    void Editor::loadLibraryEntry(const LibraryEntry& e, bool undoable)
+    void Editor::loadLibraryEntry(const LibraryEntry& e, bool undoable) { writeLibraryEntry(e, undoable, editPattern); }
+
+    void Editor::loadFromShelf(const LibraryEntry& e)
+    {
+        // The beat that plays in an audition is kept as it plays, without a stop or a jump: what it replaced is the
+        // undo step (D274). Another beat, or the fill, is loaded as ever, after the audition has given yours back.
+        if (auditionSaved != nullptr && auditionKey == libraryKey(e) && editPattern >= 0)
+        {
+            processor.keepAsOneStep(*auditionSaved);
+            if (auditionStartedPlaying)
+                processor.setPlaying(false);
+            auditionSaved.reset();
+            auditionChain.clear();
+            auditionStartedPlaying = false;
+            auditionKey.clear();
+            if (library)
+                library->auditionEnded();
+            refresh();
+            return;
+        }
+        stopAudition();
+        loadLibraryEntry(e);
+    }
+
+    void Editor::writeLibraryEntry(const LibraryEntry& e, bool undoable, int into)
     {
         // The beat goes into the pattern being edited; a beat of several parts into the patterns after it too, and
         // they become the chain. Edited, the fill takes the beat's first part and the chain stays. Its tempo, swing,
@@ -1241,11 +1264,11 @@ namespace cs808
             processor.beginGesture();
         processor.editPlay([&](PlaySettings& p) { p = e.pattern.play; }, undoable);
         processor.editKit([&](KitValues& kit) { kit.alt = e.pattern.alt; }, undoable);
-        if (editPattern < 0)
+        if (into < 0)
             processor.editBank([&](SequencerBank& bank) { bank.fill = e.pattern.pattern; }, undoable);
         else
         {
-            const int first = editPattern;
+            const int first = into;
             const int partCount = std::min(1 + static_cast<int>(e.pattern.moreParts.size()), SequencerBank::patterns - first);
             processor.editBank([&](SequencerBank& bank)
             {
@@ -1266,19 +1289,25 @@ namespace cs808
 
     void Editor::startAudition(const LibraryEntry& e)
     {
-        // The first beat heard keeps the project as it was; another beat after it starts again from that.
-        if (auditionSaved == nullptr)
+        // The first beat heard keeps the project as it was; another beat after it starts again from that. While
+        // playing, it comes in on the next bar line, from its start, as an MPC's browser auditions in sync (D274).
+        // Heard while the fill is edited, it plays from the first pattern of the chain: the fill alone is never heard.
+        processor.atNextBar([&]
         {
-            auditionSaved = std::make_unique<Project>(processor.project());
-            auditionChain = processor.chain();
-            auditionStartedPlaying = ! processor.isPlaying();
-        }
-        else
-        {
-            processor.replaceProject(*auditionSaved, false);
-            processor.setChain(auditionChain);
-        }
-        loadLibraryEntry(e, false);
+            if (auditionSaved == nullptr)
+            {
+                auditionSaved = std::make_unique<Project>(processor.project());
+                auditionChain = processor.chain();
+                auditionStartedPlaying = ! processor.isPlaying();
+            }
+            else
+            {
+                processor.replaceProject(*auditionSaved, false);
+                processor.setChain(auditionChain);
+            }
+            writeLibraryEntry(e, false, editPattern >= 0 ? editPattern : (auditionChain.empty() ? 0 : auditionChain.front()));
+        });
+        auditionKey = libraryKey(e);
         if (auditionStartedPlaying)
             processor.setPlaying(true);
     }
@@ -1287,13 +1316,18 @@ namespace cs808
     {
         if (auditionSaved == nullptr)
             return;
-        processor.replaceProject(*auditionSaved, false);
-        processor.setChain(auditionChain);
+        // Yours comes back on the next bar line too, its chain from the start; at once when the audition stops playing.
+        processor.atNextBar([&]
+        {
+            processor.replaceProject(*auditionSaved, false);
+            processor.setChain(auditionChain);
+        });
         if (auditionStartedPlaying)
             processor.setPlaying(false);
         auditionSaved.reset();
         auditionChain.clear();
         auditionStartedPlaying = false;
+        auditionKey.clear();
         if (library)
             library->auditionEnded();
         refresh();

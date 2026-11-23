@@ -159,6 +159,75 @@ public:
             ed.reset();
         }
 
+        // D274: in time.
+        beginTest("an_audition_while_playing_comes_in_on_the_next_bar_line_to_the_sample");
+        {
+            constexpr int block = 448; // the bar line falls inside a block, which is split there
+            auto p = std::make_unique<Processor>();
+            p->setPlayConfigDetails(0, 2, 48000.0, block);
+            p->prepareToPlay(48000.0, block);
+            std::unique_ptr<juce::AudioProcessorEditor> ed(p->createEditor());
+            auto& editor = *dynamic_cast<Editor*>(ed.get());
+            Project silent; // nothing on any step: the first sound is the beat's
+            silent.play.tempo = 120.0;
+            p->replaceProject(silent, false);
+
+            // A beat in A with a hit on its first step and a tempo of its own.
+            const auto beats = builtInLibrary();
+            const LibraryEntry* chosen = nullptr;
+            for (const auto& e : beats)
+            {
+                bool first = false;
+                for (const auto& lane : e.pattern.pattern.lanes)
+                    first = first || lane.a[0].on;
+                if (first && e.pattern.play.variation == SequencerVariation::a && std::abs(e.pattern.play.tempo - 120.0) > 5.0)
+                {
+                    chosen = &e;
+                    break;
+                }
+            }
+            expect(chosen != nullptr);
+            if (chosen != nullptr)
+            {
+                juce::AudioBuffer<float> buffer(2, block);
+                std::int64_t at = 0, firstSound = -1;
+                const auto run = [&](std::int64_t until)
+                {
+                    while (at < until)
+                    {
+                        juce::MidiBuffer midi;
+                        p->processBlock(buffer, midi);
+                        for (int i = 0; i < block && firstSound < 0; ++i)
+                            if (std::abs(buffer.getSample(0, i)) > 1.0e-4f)
+                                firstSound = at + i;
+                        at += block;
+                    }
+                };
+                p->setPlaying(true);
+                run(36000); // a beat and a half in
+                editor.startAudition(*chosen);
+                expect(p->waitingForBar(), "waits for the bar line");
+                run(90000);
+                expect(p->waitingForBar() && firstSound < 0, "the bar plays on as it was");
+                expectWithinAbsoluteError(p->tempoNow(), 120.0, 1.0e-9);
+                run(100000);
+                expect(! p->waitingForBar(), "in on the bar line");
+                expect(firstSound >= 96000 && firstSound < 96000 + 48, "its first hit on the bar line, to the sample: "
+                       + juce::String(firstSound));
+                expectWithinAbsoluteError(p->tempoNow(), chosen->pattern.play.tempo, 1.0e-9);
+
+                // Loaded as it plays: no wait, no jump, and one undo step back to the silent pattern.
+                editor.openLibrary();
+                if (auto* shelf = editor.libraryForTesting(); shelf != nullptr && shelf->onLoad)
+                    shelf->onLoad(*chosen);
+                expect(! editor.isAuditioning() && ! p->waitingForBar());
+                expect(p->isPlaying(), "it plays on");
+                expect(p->undo());
+                expect(patternsEqual(p->project().currentBank().pattern[0], silent.currentBank().pattern[0]));
+            }
+            ed.reset();
+        }
+
         beginTest("a_pattern_of_yours_renamed_keeps_its_beat");
         {
             const auto folder = juce::File::createTempFile("cs808-shelf");

@@ -73,7 +73,9 @@ namespace cs808
         void openLibrary();
         [[nodiscard]] LibraryShelf* libraryForTesting() noexcept { return library.get(); }
         /** A library beat played in place of the pattern being edited, nothing written to undo (D273); stopAudition
-            gives the project back as it was. Playing starts if it was stopped, and stops again with the audition. */
+            gives the project back as it was. Playing starts if it was stopped, and stops again with the audition. While
+            it plays, a beat comes in and goes on the next bar line, from its start (D274).
+            Load of the beat that plays keeps it as it plays, one undo step. */
         void startAudition(const LibraryEntry& e);
         void stopAudition();
         [[nodiscard]] bool isAuditioning() const noexcept { return auditionSaved != nullptr; }
@@ -93,6 +95,9 @@ namespace cs808
         void saveProject(bool askName);
         void savePatternToLibrary();
         void loadLibraryEntry(const LibraryEntry& e, bool undoable = true);
+        /** Writes the beat from the pattern `into` on (the fill when below 0), its chain with it. */
+        void writeLibraryEntry(const LibraryEntry& e, bool undoable, int into);
+        void loadFromShelf(const LibraryEntry& e);
         void startMidiDrag();
         void resetSelection();
 
@@ -108,6 +113,7 @@ namespace cs808
         std::unique_ptr<Project> auditionSaved;
         std::vector<int> auditionChain;
         bool auditionStartedPlaying = false;
+        juce::String auditionKey;
         std::unique_ptr<Controls> controls; // a MIDI controller's knobs, faders and pads (D268)
         std::unique_ptr<ControllerPanel> controllerPanel;
 

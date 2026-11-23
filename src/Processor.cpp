@@ -83,6 +83,7 @@ namespace cs808
         const juce::SpinLock::ScopedLockType lock(handover);
         pending.kit = model.kit;
         kitDirty.store(true, std::memory_order_release);
+        markCue();
     }
 
     void Processor::pushPlay()
@@ -90,6 +91,7 @@ namespace cs808
         const juce::SpinLock::ScopedLockType lock(handover);
         pending.play = model.play;
         playDirty.store(true, std::memory_order_release);
+        markCue();
     }
 
     void Processor::pushBank()
@@ -99,6 +101,32 @@ namespace cs808
         const juce::SpinLock::ScopedLockType lock(handover);
         std::swap(pending.bank, copy);
         bankDirty.store(true, std::memory_order_release);
+        markCue();
+    }
+
+    void Processor::markCue() noexcept
+    {
+        if (cueing)
+            cueWaiting.store(true, std::memory_order_release);
+    }
+
+    void Processor::atNextBar(const std::function<void()>& make)
+    {
+        // Open while the edits are made, so the audio thread never takes half of them on a bar line.
+        cueOpen.store(true, std::memory_order_release);
+        cueing = true;
+        make();
+        cueing = false;
+        cueOpen.store(false, std::memory_order_release);
+    }
+
+    void Processor::keepAsOneStep(const Project& before)
+    {
+        ++edits;
+        undoStack.push_back(std::make_unique<Project>(before));
+        if (undoStack.size() > maxUndo)
+            undoStack.erase(undoStack.begin());
+        redoStack.clear();
     }
 
     void Processor::pushUndo()
@@ -272,6 +300,9 @@ namespace cs808
         for (int i = 0; i < pendingChainLength; ++i)
             pendingChain[static_cast<std::size_t>(i)] = patterns[static_cast<std::size_t>(i)];
         chainDirty.store(true, std::memory_order_release);
+        if (cueing)
+            pendingChainFromBar = true; // stays so while the edits wait, whatever chain joins them
+        markCue();
     }
 
     void Processor::strike(int lane, bool accent)
@@ -345,14 +376,22 @@ namespace cs808
 
     // ---- Audio thread -----------------------------------------------------------------------------------------
 
-    void Processor::pullFromUi() noexcept
+    void Processor::pullFromUi(bool barDue, std::int64_t bar) noexcept
     {
+        const auto held = [&]
+        {
+            return cueWaiting.load(std::memory_order_acquire) && (! barDue || cueOpen.load(std::memory_order_acquire));
+        };
+        if (held())
+            return; // waiting for its bar line
         if (! (kitDirty.load(std::memory_order_acquire) || playDirty.load(std::memory_order_acquire)
                || bankDirty.load(std::memory_order_acquire) || chainDirty.load(std::memory_order_acquire)))
             return;
         const juce::SpinLock::ScopedTryLockType lock(handover);
         if (! lock.isLocked())
             return; // the message thread is handing something over: next block
+        if (held())
+            return; // ...and what it handed over waits for a bar line
         if (kitDirty.exchange(false))
         {
             kitOnAudio = pending.kit;
@@ -369,10 +408,18 @@ namespace cs808
         if (bankDirty.exchange(false))
             sequencer.setBank(*pending.bank);
         if (chainDirty.exchange(false) && pendingChainLength > 0)
-            sequencer.setChain(pendingChain.data(), pendingChainLength);
+        {
+            if (pendingChainFromBar && barDue)
+                sequencer.setChainFrom(pendingChain.data(), pendingChainLength, bar);
+            else
+                sequencer.setChain(pendingChain.data(), pendingChainLength);
+        }
+        pendingChainFromBar = false;
+        cueWaiting.store(false, std::memory_order_release);
     }
 
-    void Processor::sendClock(juce::MidiBuffer& out, double beat0, double beat1, int numSamples, bool started, bool stopped)
+    void Processor::sendClock(juce::MidiBuffer& out, double beat0, double beat1, int numSamples, bool started, bool stopped,
+                              int offsetInBlock)
     {
         if (stopped)
             out.addEvent(juce::MidiMessage::midiStop(), 0);
@@ -389,7 +436,7 @@ namespace cs808
         {
             const auto offset = static_cast<std::int64_t>(std::ceil((static_cast<double>(m) / 24.0 - beat0) / beatsPerSample - 1.0e-4));
             if (offset >= 0 && offset < numSamples)
-                out.addEvent(juce::MidiMessage::midiClock(), static_cast<int>(offset));
+                out.addEvent(juce::MidiMessage::midiClock(), offsetInBlock + static_cast<int>(offset));
         }
     }
 
@@ -547,13 +594,56 @@ namespace cs808
         double beat0 = beat, bpm = playOnAudio.tempo;
         if (byClock)
             clock.block(samplesSoFar, n, beat0, bpm);
+
+        // Edits waiting for a bar line (an audition in time, D274): stopped or just started, they come in at once;
+        // playing, on the first bar line at or after this block's start. In the block, it is split there: the part
+        // before plays what was, the part after what came, its tempo and kit too.
+        int split = n;
+        std::int64_t cueBar = 0;
+        if (cueWaiting.load(std::memory_order_acquire))
+        {
+            if (! playing || started)
+                pullFromUi(true, 0);
+            else
+            {
+                cueBar = static_cast<std::int64_t>(std::ceil((beat0 - 1.0e-6) / 4.0));
+                const double at = std::ceil((static_cast<double>(cueBar) * 4.0 - beat0) / (bpm / 60.0 / rate) - 1.0e-4);
+                if (at <= 0.0)
+                    pullFromUi(true, cueBar);
+                else if (at < static_cast<double>(n))
+                    split = static_cast<int>(at);
+            }
+            if (! byClock)
+                bpm = playOnAudio.tempo;
+        }
         const double beatsPerSample = bpm / 60.0 / rate;
 
         if (fillRequest.exchange(false, std::memory_order_acq_rel))
             sequencer.requestFill();
 
         events.clear();
-        const int count = sequencer.process(beat0, bpm, playing, n, rate, sequencerEvents.data(), static_cast<int>(sequencerEvents.size()));
+        const int room = static_cast<int>(sequencerEvents.size());
+        int count = sequencer.process(beat0, bpm, playing, split, rate, sequencerEvents.data(), room);
+        double bpmAfter = bpm, beatsPerSampleAfter = beatsPerSample;
+        const double beatAtSplit = beat0 + split * beatsPerSample;
+        if (split < n)
+        {
+            settingsBeforeSplit = engineSettings;
+            pullFromUi(true, cueBar);
+            if (! byClock)
+            {
+                bpmAfter = playOnAudio.tempo;
+                beatsPerSampleAfter = bpmAfter / 60.0 / rate;
+            }
+            const int more = sequencer.process(beatAtSplit, bpmAfter, playing, n - split, rate, sequencerEvents.data() + count, room - count);
+            for (int i = count; i < count + more; ++i)
+                sequencerEvents[static_cast<std::size_t>(i)].sampleOffset += split;
+            count += more;
+        }
+        const auto beatAt = [&](int sample)
+        {
+            return sample < split ? beat0 + sample * beatsPerSample : beatAtSplit + (sample - split) * beatsPerSampleAfter;
+        };
         std::uint32_t hitLanes = 0;
         for (int i = 0; i < count; ++i)
         {
@@ -591,7 +681,7 @@ namespace cs808
             hitLanes |= 1u << lane;
             if (rec)
             {
-                const auto place = sequencer.placeAt(beat0 + metadata.samplePosition * beatsPerSample);
+                const auto place = sequencer.placeAt(beatAt(metadata.samplePosition));
                 const auto& bank = sequencer.bank();
                 const auto& pattern = place.pattern < 0 ? bank.fill : bank.pattern[static_cast<std::size_t>(place.pattern)];
                 const int length = juce::jlimit(1, SequencerLane::steps, pattern.lanes[static_cast<std::size_t>(lane)].length);
@@ -620,16 +710,38 @@ namespace cs808
         transport.hostHasPpq = true;
         transport.hostPpqAtBlockStart = beat0;
         transport.hostIsPlaying = playing;
-        engine.render(buffer, std::span<const coolsynth::synth::EngineMidiEvent>(events.data(), events.size()), engineSettings, transport);
+        if (split == n)
+            engine.render(buffer, std::span<const coolsynth::synth::EngineMidiEvent>(events.data(), events.size()), engineSettings, transport);
+        else
+        {
+            // The two parts of a split block, each with its own events, kit and tempo.
+            std::size_t before = 0;
+            while (before < events.size() && events[before].sampleOffset < split)
+                ++before;
+            juce::AudioBuffer<float> first(buffer.getArrayOfWritePointers(), buffer.getNumChannels(), 0, split);
+            engine.render(first, std::span<const coolsynth::synth::EngineMidiEvent>(events.data(), before), settingsBeforeSplit, transport);
+            for (std::size_t i = before; i < events.size(); ++i)
+                events[i].sampleOffset -= split;
+            transport.hostBpm = bpmAfter;
+            transport.hostPpqAtBlockStart = beatAtSplit;
+            juce::AudioBuffer<float> second(buffer.getArrayOfWritePointers(), buffer.getNumChannels(), split, n - split);
+            engine.render(second, std::span<const coolsynth::synth::EngineMidiEvent>(events.data() + before, events.size() - before),
+                          engineSettings, transport);
+        }
+        const double beatEnd = beatAt(n);
 
         midi.clear();
         if (! byClock)
-            sendClock(midi, beat0, beat0 + n * beatsPerSample, n, started, stopped);
+        {
+            sendClock(midi, beat0, beatAtSplit, split, started, stopped);
+            if (split < n)
+                sendClock(midi, beatAtSplit, beatEnd, n - split, false, false, split);
+        }
         else if (stopped && wasOwnClock)
             midi.addEvent(juce::MidiMessage::midiStop(), 0); // a clock came in while it led: what it led stops too
 
         if (playing && ! byClock)
-            beat = beat0 + n * beatsPerSample;
+            beat = beatEnd;
         samplesSoFar += n;
 
         if (playing)
