@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "Editor.h"
+#include "ui/LibraryShelf.h"
 #include "ui/LidView.h"
 #include "Library.h"
 #include "Processor.h"
@@ -103,6 +104,17 @@ public:
             editor->setSize(1240, 600);
             editor->openControllerSetup();
             shoot("controller");
+            // The library's shelf (D272), a beat of two halves chosen, and drawn smaller in a narrow window.
+            editor->openLibrary();
+            if (auto* shelf = editor->libraryForTesting())
+            {
+                shelf->showForTesting("House and acid");
+                shelf->selectForTesting(1);
+                shoot("library");
+                editor->setSize(620, 300);
+                shoot("library-narrow");
+                editor->setSize(1240, 600);
+            }
             expect(folder.getChildFile("lid.png").existsAsFile());
         }
     }

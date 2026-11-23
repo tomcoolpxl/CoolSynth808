@@ -45,6 +45,7 @@ set(COOLSYNTH808_SOURCES
     src/midi/ControllerMap.cpp
     src/midi/ControllerSetup.cpp
     src/ui/ControllerPanel.cpp
+    src/ui/LibraryShelf.cpp
     src/ui/Widgets.cpp
     src/ui/LidView.cpp)
 

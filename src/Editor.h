@@ -22,7 +22,7 @@
 namespace cs808
 {
     class LidView;
-    class LibraryPanel;
+    class LibraryShelf;
     class Controls;
     class ControllerPanel;
 
@@ -69,6 +69,14 @@ namespace cs808
         void openControllerSetup();
         /** The library or controller overlay closes after the callback that asked has returned. */
         void closeOverlaysLater();
+        /** The library's shelf over the panel (the header's Library), and while it is open, the shelf. */
+        void openLibrary();
+        [[nodiscard]] LibraryShelf* libraryForTesting() noexcept { return library.get(); }
+        /** A library beat played in place of the pattern being edited, nothing written to undo (D272); stopAudition
+            gives the project back as it was. Playing starts if it was stopped, and stops again with the audition. */
+        void startAudition(const LibraryEntry& e);
+        void stopAudition();
+        [[nodiscard]] bool isAuditioning() const noexcept { return auditionSaved != nullptr; }
 
     private:
         void timerCallback() override;
@@ -79,13 +87,12 @@ namespace cs808
         void showFileMenu();
         void showThemeMenu();
         void showBankMenu();
-        void openLibrary();
 
         void newProject();
         void openProject();
         void saveProject(bool askName);
         void savePatternToLibrary();
-        void loadLibraryEntry(const LibraryEntry& e);
+        void loadLibraryEntry(const LibraryEntry& e, bool undoable = true);
         void startMidiDrag();
         void resetSelection();
 
@@ -96,7 +103,11 @@ namespace cs808
         std::unique_ptr<StepKeys> stepKeys;
         std::unique_ptr<LaneRows> laneRows;
         std::unique_ptr<LidView> lid;
-        std::unique_ptr<LibraryPanel> library;
+        std::unique_ptr<LibraryShelf> library;
+        // An audition (D272): the project and the chain as they were, and whether the audition started playing.
+        std::unique_ptr<Project> auditionSaved;
+        std::vector<int> auditionChain;
+        bool auditionStartedPlaying = false;
         std::unique_ptr<Controls> controls; // a MIDI controller's knobs, faders and pads (D268)
         std::unique_ptr<ControllerPanel> controllerPanel;
 

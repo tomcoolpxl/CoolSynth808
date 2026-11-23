@@ -3,7 +3,9 @@
 #include <memory>
 
 #include "Library.h"
+#include "Editor.h"
 #include "Processor.h"
+#include "ui/LibraryShelf.h"
 
 /*
     The built-in library: every beat reads without a problem, has a name, a style and its sources' verdict, and plays
@@ -89,6 +91,102 @@ public:
             expectEquals(styleHeading("idm"), juce::String("IDM"));
             expectEquals(styleHeading(""), juce::String("Other"));
         }
+
+        // D272: the shelf.
+        beginTest("every_built_in_beat_sits_in_one_family_and_the_shelves_filter");
+        {
+            const auto beats = builtInLibrary();
+            int inFamilies = 0;
+            for (const auto& family : libraryFamilies())
+                for (const auto& e : beats)
+                    inFamilies += familyOf(e.pattern.style) == family ? 1 : 0;
+            expectEquals(inFamilies, static_cast<int>(beats.size()), "each beat in exactly one family");
+            expectEquals(familyOf("acid-house"), juce::String("House and acid"));
+
+            LibraryShelf shelf;
+            shelf.setSize(1240, 600);
+            shelf.showForTesting("all");
+            expectEquals(shelf.shownCount(), static_cast<int>(beats.size()), "every classic");
+            shelf.showForTesting("House and acid");
+            const int house = shelf.shownCount();
+            expect(house > 0 && house < static_cast<int>(beats.size()));
+            shelf.showForTesting("all", {}, 1980);
+            for (int r = 0; r < shelf.shownCount(); ++r)
+            {
+                shelf.selectForTesting(r);
+                expect(shelf.selectedEntry() != nullptr && shelf.selectedEntry()->year / 10 == 198, "the eighties only");
+            }
+            shelf.showForTesting("all", "planet rock");
+            expect(shelf.shownCount() >= 1, "the search finds a name or a record");
+            shelf.showForTesting("all", "no such beat anywhere");
+            expectEquals(shelf.shownCount(), 0);
+        }
+
+        beginTest("an_audition_plays_in_place_and_takes_nothing_back_and_load_is_one_step");
+        {
+            auto p = std::make_unique<Processor>();
+            p->setPlayConfigDetails(0, 2, 48000.0, 480);
+            p->prepareToPlay(48000.0, 480);
+            std::unique_ptr<juce::AudioProcessorEditor> ed(p->createEditor());
+            auto& editor = *dynamic_cast<Editor*>(ed.get());
+            const auto before = p->project().currentBank().pattern[0];
+            const bool couldUndo = p->canUndo();
+
+            editor.openLibrary();
+            auto* shelf = editor.libraryForTesting();
+            expect(shelf != nullptr);
+            shelf->showForTesting("all");
+            shelf->selectForTesting(3);
+            const auto beat = *shelf->selectedEntry();
+            shelf->toggleAudition();
+            expect(editor.isAuditioning());
+            expect(patternsEqual(p->project().currentBank().pattern[0], beat.pattern.pattern), "the beat in pattern 1");
+            expect(p->canUndo() == couldUndo, "nothing for undo");
+            shelf->selectForTesting(4); // listening follows the choice
+            expect(patternsEqual(p->project().currentBank().pattern[0], shelf->selectedEntry()->pattern.pattern));
+            shelf->toggleAudition();
+            expect(! editor.isAuditioning());
+            expect(patternsEqual(p->project().currentBank().pattern[0], before), "your pattern back");
+
+            shelf->selectForTesting(3);
+            shelf->toggleAudition();
+            if (shelf->onLoad)
+                shelf->onLoad(*shelf->selectedEntry());
+            expect(! editor.isAuditioning());
+            expect(patternsEqual(p->project().currentBank().pattern[0], beat.pattern.pattern), "loaded");
+            expect(p->undo(), "one step");
+            expect(patternsEqual(p->project().currentBank().pattern[0], before), "and undo takes it back");
+            ed.reset();
+        }
+
+        beginTest("a_pattern_of_yours_renamed_keeps_its_beat");
+        {
+            const auto folder = juce::File::createTempFile("cs808-shelf");
+            folder.createDirectory();
+            PatternFile f;
+            f.name = "Old name";
+            f.pattern.lanes[0].a[0].on = true;
+            const auto file = folder.getChildFile("Old name.cs808pattern");
+            file.replaceWithText(juce::JSON::toString(patternFileToVar(f), false));
+            const auto renamed = renameUserPattern(file, "New name");
+            expect(renamed.existsAsFile() && ! file.existsAsFile());
+            expectEquals(renamed.getFileNameWithoutExtension(), juce::String("New name"));
+            PatternFile back;
+            expect(patternFileFromVar(juce::JSON::parse(renamed.loadFileAsString()), back));
+            expectEquals(back.name, juce::String("New name"));
+            expect(back.pattern.lanes[0].a[0].on);
+            expect(renameUserPattern(renamed, "  ") == juce::File(), "an empty name is refused");
+            folder.deleteRecursively();
+        }
+    }
+
+    static bool patternsEqual(const SequencerPattern& a, const SequencerPattern& b)
+    {
+        for (std::size_t lane = 0; lane < a.lanes.size(); ++lane)
+            for (std::size_t s = 0; s < 16; ++s)
+                if (a.lanes[lane].a[s].on != b.lanes[lane].a[s].on || a.lanes[lane].b[s].on != b.lanes[lane].b[s].on)
+                    return false;
+        return true;
     }
 };
 

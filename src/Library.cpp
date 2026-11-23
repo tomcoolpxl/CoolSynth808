@@ -70,6 +70,48 @@ namespace cs808
         return file.replaceWithText(juce::JSON::toString(patternFileToVar(pattern), false)) ? file : juce::File();
     }
 
+    juce::File renameUserPattern(const juce::File& file, const juce::String& newName)
+    {
+        PatternFile pattern;
+        const auto name = newName.trim();
+        if (name.isEmpty() || ! patternFileFromVar(juce::JSON::parse(file.loadFileAsString()), pattern))
+            return {};
+        pattern.name = name;
+        const auto text = juce::JSON::toString(patternFileToVar(pattern), false);
+        auto legal = juce::File::createLegalFileName(name);
+        if (legal.isEmpty())
+            legal = "Pattern";
+        // The same file name (or only its case changed, which Windows sees as the same file): the file keeps its place.
+        if (legal.equalsIgnoreCase(file.getFileNameWithoutExtension()))
+            return file.replaceWithText(text) ? file : juce::File();
+        const auto target = file.getParentDirectory().getNonexistentChildFile(legal, ".cs808pattern", false);
+        if (! target.replaceWithText(text))
+            return {};
+        file.deleteFile();
+        return target;
+    }
+
+    const juce::StringArray& libraryFamilies()
+    {
+        static const juce::StringArray families { "Electro and hip hop", "R&B and pop", "Bass and the South", "Trap and drill",
+                                                  "House and acid", "Techno", "Breaks and big beat", "Jungle and IDM" };
+        return families;
+    }
+
+    juce::String familyOf(const juce::String& style)
+    {
+        static const std::vector<std::pair<juce::String, int>> table {
+            { "electro", 0 }, { "hip-hop", 0 }, { "rnb", 1 }, { "pop", 1 }, { "miami-bass", 2 }, { "trap", 3 },
+            { "chicago-house", 4 }, { "acid-house", 4 }, { "detroit-techno", 5 }, { "breakbeat", 6 }, { "big-beat", 6 },
+            { "other", 6 }, { "jungle", 7 }, { "idm", 7 } };
+        for (const auto& [tag, family] : table)
+            if (tag == style)
+                return libraryFamilies()[family];
+        return libraryFamilies()[6]; // anything else sits with the breaks
+    }
+
+    juce::String libraryKey(const LibraryEntry& e) { return (e.builtIn ? juce::String() : juce::String("mine:")) + e.id; }
+
     juce::String styleHeading(const juce::String& style)
     {
         if (style.isEmpty())

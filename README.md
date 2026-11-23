@@ -34,7 +34,9 @@ and MIDI settings are in the Options menu of the window.
 
 - File saves and opens projects (`.cs808`): the kit, every bank of patterns and the tempo. The app opens the last
   state again by itself.
-- Library holds classic beats the 808 made famous, and the patterns you keep with Keep.
+- Library holds classic beats the 808 made famous, by family and decade, and the patterns you keep with Keep.
+  Audition plays a beat in place of your pattern until you load it or stop; your own patterns can be renamed or sent
+  to the Recycle Bin, and Keep a copy puts a classic among them.
 - Undo and Redo (Ctrl+Z, Ctrl+Y) take back any edit.
 
 ## Building from source

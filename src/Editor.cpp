@@ -2,6 +2,7 @@
 
 #include "Controls.h"
 #include "ui/ControllerPanel.h"
+#include "ui/LibraryShelf.h"
 
 #include "MidiExport.h"
 #include "ui/LidView.h"
@@ -581,153 +582,6 @@ namespace cs808
     };
 
     // =============================================================================================================
-    // The library: the built-in beats and your own (quick for now: to be designed with the user)
-
-    class LibraryPanel final : public juce::Component, private juce::ListBoxModel
-    {
-    public:
-        std::function<void(const LibraryEntry&)> onLoad;
-        std::function<void()> onClose;
-
-        LibraryPanel()
-        {
-            addAndMakeVisible(list);
-            list.setModel(this);
-            list.setRowHeight(24);
-            list.setColour(juce::ListBox::backgroundColourId, juce::Colours::transparentBlack);
-            reload();
-        }
-
-        void reload()
-        {
-            entries = builtInLibrary();
-            std::stable_sort(entries.begin(), entries.end(), [](const LibraryEntry& a, const LibraryEntry& b)
-            {
-                if (a.group != b.group)
-                    return a.group.compareNatural(b.group) < 0;
-                return a.year < b.year;
-            });
-            for (auto& e : userLibrary())
-                entries.push_back(std::move(e));
-            list.updateContent();
-            list.repaint();
-        }
-
-        void paint(juce::Graphics& g) override
-        {
-            const auto& th = theme();
-            g.setColour(th.desk.withAlpha(0.6f));
-            g.fillAll();
-            const auto box = card();
-            g.setColour(th.panel);
-            g.fillRoundedRectangle(box, 10.0f);
-            g.setColour(th.ink);
-            g.drawRoundedRectangle(box, 10.0f, 1.0f);
-            g.setFont(uiFont(18.0f, true));
-            g.drawText("Pattern library", box.reduced(20.0f, 14.0f).removeFromTop(24.0f), juce::Justification::centredLeft);
-            g.setColour(th.dim);
-            g.setFont(uiFont(11.0f));
-            g.drawText("Double-click a beat to load it into the pattern you are editing (undo takes it back). Esc closes.",
-                       box.reduced(20.0f, 14.0f).withTrimmedTop(26.0f).removeFromTop(16.0f), juce::Justification::centredLeft);
-            if (const int row = list.getSelectedRow(); row >= 0 && row < static_cast<int>(entries.size()))
-            {
-                const auto& e = entries[static_cast<std::size_t>(row)];
-                auto detail = box.reduced(20.0f).withTrimmedTop(56.0f).withTrimmedLeft(box.getWidth() * 0.5f);
-                g.setColour(th.ink);
-                g.setFont(uiFont(15.0f, true));
-                g.drawFittedText(e.pattern.name, detail.removeFromTop(22.0f).toNearestInt(), juce::Justification::topLeft, 1);
-                g.setColour(th.dim);
-                g.setFont(uiFont(11.5f));
-                juce::String text;
-                if (e.pattern.after.isNotEmpty())
-                    text << "After: " << e.pattern.after << "\n";
-                text << juce::String(e.pattern.play.tempo, 0) << " BPM, swing " << juce::roundToInt(e.pattern.play.swing * 100.0f) << " %";
-                if (e.pattern.usesB || ! e.pattern.moreParts.empty())
-                    text << ", " << (1 + static_cast<int>(e.pattern.moreParts.size())) * (e.pattern.usesB ? 2 : 1) << " bars";
-                text << "\n";
-                if (e.confidence.isNotEmpty())
-                    text << "Transcription: " << e.confidence << " confidence\n";
-                if (e.pattern.notes.isNotEmpty())
-                    text << "\n" << e.pattern.notes;
-                g.drawFittedText(text, detail.toNearestInt(), juce::Justification::topLeft, 14);
-            }
-        }
-
-        void resized() override
-        {
-            const auto box = card().reduced(20.0f).withTrimmedTop(56.0f);
-            list.setBounds(box.withWidth(box.getWidth() * 0.5f - 12.0f).toNearestInt());
-        }
-
-        void mouseUp(const juce::MouseEvent& e) override
-        {
-            if (! card().contains(e.position) && onClose)
-                onClose();
-        }
-
-        bool keyPressed(const juce::KeyPress& k) override
-        {
-            if (k == juce::KeyPress::escapeKey && onClose)
-            {
-                onClose();
-                return true;
-            }
-            return false;
-        }
-
-    private:
-        [[nodiscard]] juce::Rectangle<float> card() const { return getLocalBounds().toFloat().reduced(60.0f, 40.0f); }
-
-        int getNumRows() override { return static_cast<int>(entries.size()); }
-
-        void paintListBoxItem(int row, juce::Graphics& g, int width, int height, bool selected) override
-        {
-            if (row < 0 || row >= static_cast<int>(entries.size()))
-                return;
-            const auto& th = theme();
-            const auto& e = entries[static_cast<std::size_t>(row)];
-            if (selected)
-            {
-                g.setColour(th.ink.withAlpha(0.12f));
-                g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 4.0f);
-            }
-            const bool first = row == 0 || entries[static_cast<std::size_t>(row - 1)].group != e.group;
-            g.setColour(th.dim);
-            g.setFont(uiFont(10.0f));
-            if (first)
-                g.drawText(e.group.toUpperCase(), 6, 0, 130, height, juce::Justification::centredLeft);
-            g.setColour(th.ink);
-            g.setFont(uiFont(12.5f));
-            g.drawText(e.pattern.name, 140, 0, width - 146, height, juce::Justification::centredLeft);
-        }
-
-        void selectedRowsChanged(int) override { repaint(); }
-
-        void listBoxItemClicked(int row, const juce::MouseEvent& e) override
-        {
-            if (! e.mods.isPopupMenu() || row < 0 || row >= static_cast<int>(entries.size()) || entries[static_cast<std::size_t>(row)].builtIn)
-                return;
-            juce::PopupMenu m;
-            m.addItem(1, "Move to the Recycle Bin");
-            const auto file = entries[static_cast<std::size_t>(row)].file;
-            m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withMousePosition(), [this, file](int r)
-            {
-                if (r == 1 && file.moveToTrash())
-                    reload();
-            });
-        }
-
-        void listBoxItemDoubleClicked(int row, const juce::MouseEvent&) override
-        {
-            if (row >= 0 && row < static_cast<int>(entries.size()) && onLoad)
-                onLoad(entries[static_cast<std::size_t>(row)]);
-        }
-
-        juce::ListBox list;
-        std::vector<LibraryEntry> entries;
-    };
-
-    // =============================================================================================================
     // The editor
 
     Editor::Editor(Processor& p) : juce::AudioProcessorEditor(p), processor(p)
@@ -768,6 +622,7 @@ namespace cs808
 
     Editor::~Editor()
     {
+        stopAudition(); // the project as it was, before the state is kept
         controls.reset(); // its gesture closes while the panel is whole
         settings->setValue("theme", themeIndex);
         settings->setValue("lanesOpen", lanesOpen);
@@ -844,11 +699,23 @@ namespace cs808
     {
         const float scale = getWidth() / static_cast<float>(baseWidth);
         content->setTransform(juce::AffineTransform::scale(scale));
-        // The overlays cover the window, whatever its size.
-        if (library)
-            library->setBounds(getLocalBounds());
-        if (controllerPanel)
-            controllerPanel->setBounds(getLocalBounds());
+        // The overlays cover the window, whatever its size; in a window narrower than the panel they are laid out at
+        // the panel's width and drawn smaller with it, so their columns keep their room (D272).
+        for (juce::Component* overlay : { static_cast<juce::Component*>(library.get()), static_cast<juce::Component*>(controllerPanel.get()) })
+        {
+            if (overlay == nullptr)
+                continue;
+            if (scale < 1.0f)
+            {
+                overlay->setTransform(juce::AffineTransform::scale(scale));
+                overlay->setBounds(0, 0, baseWidth, juce::roundToInt(static_cast<float>(getHeight()) / scale));
+            }
+            else
+            {
+                overlay->setTransform({});
+                overlay->setBounds(getLocalBounds());
+            }
+        }
     }
 
     // ---- Building the panel -----------------------------------------------------------------------------------
@@ -1333,12 +1200,25 @@ namespace cs808
 
     void Editor::openLibrary()
     {
-        library = std::make_unique<LibraryPanel>();
+        library = std::make_unique<LibraryShelf>();
+        library->loadTarget = editPattern < 0 ? juce::String("the fill") : "pattern " + juce::String(editPattern + 1);
         // An overlay is let go after its own callback has returned, never inside it (the review of D267).
         library->onClose = [this] { closeOverlaysLater(); };
-        library->onLoad = [this](const LibraryEntry& e) { loadLibraryEntry(e); closeOverlaysLater(); };
+        library->onLoad = [this](const LibraryEntry& e)
+        {
+            stopAudition();
+            loadLibraryEntry(e);
+            closeOverlaysLater();
+        };
+        library->onAudition = [this](const LibraryEntry* e)
+        {
+            if (e != nullptr)
+                startAudition(*e);
+            else
+                stopAudition();
+        };
         addAndMakeVisible(*library);
-        library->setBounds(getLocalBounds());
+        resized();
         library->grabKeyboardFocus();
     }
 
@@ -1347,20 +1227,22 @@ namespace cs808
         controllerPanel = std::make_unique<ControllerPanel>(controls.get());
         controllerPanel->onClose = [this] { closeOverlaysLater(); };
         addAndMakeVisible(*controllerPanel);
-        controllerPanel->setBounds(getLocalBounds());
+        resized();
         controllerPanel->grabKeyboardFocus();
     }
 
-    void Editor::loadLibraryEntry(const LibraryEntry& e)
+    void Editor::loadLibraryEntry(const LibraryEntry& e, bool undoable)
     {
         // The beat goes into the pattern being edited; a beat of several parts into the patterns after it too, and
         // they become the chain. Edited, the fill takes the beat's first part and the chain stays. Its tempo, swing,
-        // variation and switches come with it. One undo step takes it all back (the review of D267).
-        processor.beginGesture();
-        processor.editPlay([&](PlaySettings& p) { p = e.pattern.play; });
-        processor.editKit([&](KitValues& kit) { kit.alt = e.pattern.alt; });
+        // variation and switches come with it. One undo step takes it all back (the review of D267); an audition
+        // takes none (D272).
+        if (undoable)
+            processor.beginGesture();
+        processor.editPlay([&](PlaySettings& p) { p = e.pattern.play; }, undoable);
+        processor.editKit([&](KitValues& kit) { kit.alt = e.pattern.alt; }, undoable);
         if (editPattern < 0)
-            processor.editBank([&](SequencerBank& bank) { bank.fill = e.pattern.pattern; });
+            processor.editBank([&](SequencerBank& bank) { bank.fill = e.pattern.pattern; }, undoable);
         else
         {
             const int first = editPattern;
@@ -1370,14 +1252,50 @@ namespace cs808
                 bank.pattern[static_cast<std::size_t>(first)] = e.pattern.pattern;
                 for (int i = 1; i < partCount; ++i)
                     bank.pattern[static_cast<std::size_t>(first + i)] = e.pattern.moreParts[static_cast<std::size_t>(i - 1)].pattern;
-            });
+            }, undoable);
             std::vector<int> chain;
             for (int i = 0; i < partCount; ++i)
                 chain.push_back(first + i);
             processor.setChain(chain);
         }
-        processor.endGesture();
+        if (undoable)
+            processor.endGesture();
         editB = false;
+        refresh();
+    }
+
+    void Editor::startAudition(const LibraryEntry& e)
+    {
+        // The first beat heard keeps the project as it was; another beat after it starts again from that.
+        if (auditionSaved == nullptr)
+        {
+            auditionSaved = std::make_unique<Project>(processor.project());
+            auditionChain = processor.chain();
+            auditionStartedPlaying = ! processor.isPlaying();
+        }
+        else
+        {
+            processor.replaceProject(*auditionSaved, false);
+            processor.setChain(auditionChain);
+        }
+        loadLibraryEntry(e, false);
+        if (auditionStartedPlaying)
+            processor.setPlaying(true);
+    }
+
+    void Editor::stopAudition()
+    {
+        if (auditionSaved == nullptr)
+            return;
+        processor.replaceProject(*auditionSaved, false);
+        processor.setChain(auditionChain);
+        if (auditionStartedPlaying)
+            processor.setPlaying(false);
+        auditionSaved.reset();
+        auditionChain.clear();
+        auditionStartedPlaying = false;
+        if (library)
+            library->auditionEnded();
         refresh();
     }
 
@@ -1387,6 +1305,7 @@ namespace cs808
         {
             if (safe == nullptr)
                 return;
+            safe->stopAudition();
             safe->library.reset();
             safe->controllerPanel.reset();
             safe->grabKeyboardFocus();

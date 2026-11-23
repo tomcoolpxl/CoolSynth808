@@ -6,8 +6,8 @@
 
 /*
     The pattern library: the classic beats built into the app (resources/library/patterns.json, compiled in) and
-    the patterns you keep yourself (%APPDATA%\CoolSynth808\Patterns, one .cs808pattern file each). Quick for now:
-    the way it is shown and managed is to be designed with the user (D266).
+    the patterns you keep yourself (%APPDATA%\CoolSynth808\Patterns, one .cs808pattern file each). Shown on a shelf
+    (ui/LibraryShelf, CoolSynth's D272); the built-in beats are read-only, yours can be renamed or recycled.
 */
 namespace cs808
 {
@@ -31,6 +31,15 @@ namespace cs808
     /** Saves a pattern of yours under its name; returns the file, or an invalid one. */
     juce::File saveUserPattern(const PatternFile& pattern);
 
+    /** Gives a pattern of yours a new name, in the file and as its file's name; returns the file, or an invalid one. */
+    juce::File renameUserPattern(const juce::File& file, const juce::String& newName);
+
     /** A style tag as a heading: "acid-house" becomes "Acid house". */
     [[nodiscard]] juce::String styleHeading(const juce::String& style);
+
+    /** The shelf's families of styles, in their order (CoolSynth's D272), and the family a style belongs to. */
+    [[nodiscard]] const juce::StringArray& libraryFamilies();
+    [[nodiscard]] juce::String familyOf(const juce::String& style);
+    /** An entry's key, unique across the built-in beats and yours. */
+    [[nodiscard]] juce::String libraryKey(const LibraryEntry& e);
 }
