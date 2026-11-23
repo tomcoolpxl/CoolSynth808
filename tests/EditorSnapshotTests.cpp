@@ -96,6 +96,8 @@ public:
             shoot("lid-bass-drum");
             editor->lidForTesting().showSheet(2);
             shoot("lid-snare");
+            editor->lidForTesting().showSheet(3);
+            shoot("lid-low-tom");
             editor->lidForTesting().showSheet(0);
             editor->lidView = false;
             editor->patternMode = true;

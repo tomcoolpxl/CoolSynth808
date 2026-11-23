@@ -740,14 +740,16 @@ namespace cs808
         };
 
         // The drums drawn complete: the bass drum, then the snare (D278).
-        enum DrumDrawn { bassDrum = 0, snareDrum = 1, drumsDrawn = 2 };
+        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, drumsDrawn = 3 };
+        /** The lane each drum drawn complete plays in. */
+        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2 };
 
         Recording loadRecording(int which)
         {
             Recording r;
-            const auto root = which == snareDrum
-                                  ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::snare_currents_json, LibraryData::snare_currents_jsonSize))
-                                  : juce::JSON::parse(juce::String::fromUTF8(LibraryData::bassdrum_currents_json, LibraryData::bassdrum_currents_jsonSize));
+            const auto root = which == snareDrum ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::snare_currents_json, LibraryData::snare_currents_jsonSize))
+                              : which == lowTom  ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::tom_currents_json, LibraryData::tom_currents_jsonSize))
+                                                 : juce::JSON::parse(juce::String::fromUTF8(LibraryData::bassdrum_currents_json, LibraryData::bassdrum_currents_jsonSize));
             const auto* times = root.getProperty("t", {}).getArray();
             const auto* names = root.getProperty("names", {}).getArray();
             const auto* scales = root.getProperty("scales", {}).getArray();
@@ -785,7 +787,12 @@ namespace cs808
                     r.parts[p.name.toString().toStdString()] = nodes;
                 }
             const auto set = root.getProperty("setting", {});
-            if (which == snareDrum)
+            if (which == lowTom)
+                r.setting << "the low tom, " << set.getProperty("amp", "?").toString() << " V on the trigger line, Tuning "
+                          << set.getProperty("tune", "?").toString() << ", Level " << set.getProperty("lev", "?").toString()
+                          << ", the pink noise as a " << juce::String(juce::roundToInt(set.getProperty("pn", "0").toString().getDoubleValue() * 1000.0))
+                          << " mV sine at 150 Hz (so the hit is the same every time)";
+            else if (which == snareDrum)
                 r.setting << set.getProperty("amp", "?").toString() << " V on the trigger line, Tone " << set.getProperty("tone", "?").toString()
                           << ", Snappy " << set.getProperty("snappy", "?").toString() << ", Level " << set.getProperty("lev", "?").toString()
                           << ", the noise bus at " << juce::String(juce::roundToInt(set.getProperty("wn", "0").toString().getDoubleValue() * 1000.0))
@@ -839,6 +846,9 @@ namespace cs808
                     return "at rest: only the standing currents flow";
                 if (ms <= 1.05)
                     return "the trigger: a pulse of 1 ms";
+                if (which == lowTom)
+                    return ms <= 15.0 ? "the attack: the resonator rings, the diodes bend its pitch down, the noise gate opens"
+                                      : "the ring: the tone dies away, the gate lets less and less noise through";
                 if (which == snareDrum)
                     return ms <= 12.0 ? "the attack: both shells ring and the snappy's envelope opens"
                                       : "the tail: the shells die away, the noise follows the snappy's envelope";
@@ -924,9 +934,12 @@ namespace cs808
                     w.fill.addTriangle({ x + 3.5f, y }, { x + 8.5f, y - 2.5f }, { x + 8.5f, y + 2.5f });
                 };
 
-                if (which == snareDrum)
+                if (which == snareDrum || which == lowTom)
                 {
-                    buildSnare(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
+                    if (which == snareDrum)
+                        buildSnare(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
+                    else
+                        buildTom(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
                     buildGraph();
                     drawing.prepareLabels();
                     return;
@@ -1121,6 +1134,124 @@ namespace cs808
                     out.fill.addTriangle({ 668, 142 }, { 660, 138.5f }, { 660, 145.5f });
                 }
                 a.tx(660, 136, "OUT", Rj);
+            }
+
+            /*
+                The low tom (D278): every part of the engine's tools/tr808/tom.cir with the low pair's values, as a
+                tom (the conga's parts drawn, switched out). The mid and high toms are the same circuit with other
+                values. The trigger and the tom's switch as the bass drum's; the pulse into the resonator, a bridged-T
+                around IC15a with the Tuning pot and the germanium pair that bends the pitch, IC15b inverting it back;
+                the pink noise gate along the bottom; the mixer IC13 with the Level pot.
+            */
+            void buildTom(Board::Sheet& a, auto& W, auto& term, auto& R, auto& C, auto& POT, auto& DI, auto& Q, auto& pin,
+                          auto& open, auto& wiper, auto& two)
+            {
+                width = 640.0f;
+                height = 362.0f;
+                const auto L = juce::Justification::centredLeft;
+                const auto Rj = juce::Justification::centredRight;
+                const auto M = juce::Justification::centred;
+                // A diode with its anode at the bottom: the cathode at (x, y).
+                const auto DU = [&](const std::string& el, float x, float y, float Lh, const juce::String& label)
+                {
+                    auto& part = a.add(label);
+                    const float h = (Lh - 6.0f) / 2.0f;
+                    const Pt o(x, y);
+                    part.stroke.addLineSegment({ o, o + Pt(0, h) }, 0);
+                    part.stroke.addLineSegment({ o + Pt(-3.5f, h), o + Pt(3.5f, h) }, 0);
+                    part.stroke.addTriangle(o + Pt(0, h), o + Pt(-3.5f, h + 6), o + Pt(3.5f, h + 6));
+                    part.stroke.addLineSegment({ o + Pt(0, h + 6), o + Pt(0, Lh) }, 0);
+                    two(el, Pt(x, y + Lh), Pt(x, y), el + ".id");
+                };
+
+                // The rails: +15 V along the top and down to the lower half; 0 V along the bottom, and a second
+                // ground line under the resonator.
+                pin(40, 12, "vcc", "+15 V", 40, 7, M); W({ { 40, 12 }, { 600, 12 } }); W({ { 600, 12 }, { 600, 208 } }); W({ { 230, 208 }, { 600, 208 } });
+                pin(40, 340, "0", "0 V", 40, 351, M); W({ { 40, 340 }, { 520, 340 } });
+                W({ { 168, 148 }, { 168, 196 }, { 168, 340 } }); W({ { 160, 196 }, { 520, 196 } });
+
+                // The common trigger, as the bass drum's
+                {
+                    auto& p = a.add("The step's pulse ~ 1 ms, from the sequencer");
+                    p.circles.push_back({ Pt(17, 150), 8.5f });
+                }
+                a.glyph({ { 12, 153 }, { 15, 153 }, { 15, 147 }, { 19, 147 }, { 19, 153 }, { 22, 153 } });
+                term(Pt(25.5f, 150), {}, "n6", true); W({ { 25.5f, 150 }, { 28, 150 } });
+                R("r117", 28, 150, 'h', 22, "R117 ~ 47 k"); Q("q31", 66, 150, false, "Q31 ~ turns off for the pulse, letting Q32 rise"); W({ { 66, 162 }, { 66, 340 } });
+                W({ { 66, 138 }, { 66, 106 } }); R("r120", 66, 84, 'v', 22, "R120 ~ 4.7 k"); pin(66, 84, "nx", "ACCENT, 5 TO 15 V", 71, 80, L);
+                W({ { 66, 110 }, { 76, 110 } }); Q("q32", 92, 110, false, "Q32 ~ the follower onto the trigger line"); W({ { 92, 98 }, { 92, 12 } });
+                W({ { 92, 122 }, { 92, 130 } }); R("r113", 92, 130, 'v', 22, "R113 ~ 4.7 k, holds the line down"); W({ { 92, 152 }, { 92, 166 }, { 66, 166 } });
+                W({ { 92, 130 }, { 110, 130 }, { 110, 112 }, { 150, 112 }, { 150, 118 } });
+                // The tom's switch
+                R("r214", 122, 112, 'v', 18, "R214 ~ 4.7 k"); W({ { 122, 130 }, { 134, 130 } });
+                Q("q51", 150, 130, true, "Q51 ~ a PNP switch: it can only push current into the tom");
+                R("r213", 122, 130, 'v', 26, "R213 ~ 10 k"); W({ { 122, 156 }, { 122, 160 } }); Q("q50", 122, 172, false, "Q50 ~ on while the tom's step data stands"); W({ { 122, 184 }, { 122, 340 } });
+                pin(74, 172, "nlt", "LT ON", 72, 182, M); W({ { 74, 172 }, { 76, 172 } }); R("r211", 76, 172, 'h', 22, "R211 ~ 22 k"); W({ { 98, 172 }, { 106, 172 } });
+                R("r212", 102, 172, 'v', 18, "R212 ~ 10 k"); W({ { 102, 190 }, { 102, 340 } });
+                W({ { 150, 142 }, { 150, 220 }, { 196, 220 } }); W({ { 150, 150 }, { 160, 150 } }); R("r215", 160, 150, 'v', 18, "R215 ~ 4.7 k"); W({ { 160, 168 }, { 160, 196 } });
+
+                // The pulse into the resonator's + input
+                W({ { 176, 220 }, { 176, 170 } }); C("c73", 176, 170, 'h', 14, "C73 ~ 6.8 nF: the pulse's front edge"); W({ { 190, 170 }, { 208, 170 } });
+                DU("d56", 208, 170, 20, "D56 ~ clamps the falling edge"); W({ { 208, 190 }, { 208, 196 } });
+                R("r226", 208, 170, 'h', 22, "R226 ~ 22 k"); W({ { 230, 170 }, { 276, 170 }, { 276, 158 }, { 290, 158 } });
+                R("r225", 238, 170, 'v', 18, "R225 ~ 4.7 k"); W({ { 238, 188 }, { 238, 196 } });
+                R("r224", 262, 170, 'v', 18, "R224 ~ 1.5 k, switched in for the conga"); W({ { 262, 188 }, { 262, 196 } });
+
+                // The resonator: IC15a and its bridged-T, the Tuning pot and the germanium pair on the middle node
+                a.OP(290, 140, "IC15a ~ the resonator: a bridged-T that rings at the tom's pitch"); open(290, 146, "ninv"); open(290, 158, "np"); term(Pt(316, 152), {}, "no1", true);
+                W({ { 290, 146 }, { 282, 146 }, { 282, 88 }, { 272, 88 } }); W({ { 272, 104 }, { 282, 104 } });
+                C("c76", 258, 104, 'h', 14, "C76 ~ 0.056 uF", true); C("cint", 258, 88, 'h', 14, "C89 ~ on the mid tom only: 1 pF here, as if absent", true);
+                W({ { 258, 40 }, { 258, 104 } }); C("c78", 258, 56, 'h', 14, "C78 ~ 0.012 uF"); C("c77", 258, 72, 'h', 14, "C77 ~ 0.047 uF, for the tom only");
+                W({ { 272, 56 }, { 330, 56 } }); W({ { 272, 72 }, { 330, 72 } }); W({ { 330, 56 }, { 330, 152 }, { 316, 152 } });
+                W({ { 282, 124 }, { 296, 124 } }); R("r228", 296, 124, 'h', 22, "R228 ~ 820 k"); W({ { 318, 124 }, { 330, 124 } });
+                W({ { 236, 70 }, { 214, 70 }, { 214, 104 }, { 258, 104 } });
+                R("r231", 214, 104, 'v', 18, "R231 ~ 1 k"); W({ { 214, 122 }, { 214, 128 }, { 200, 128 } });
+                a.R(200, 108, false, 40, "VR TUNING ~ 500 ohm: the pitch");
+                two("rva", Pt(200, 108), Pt(200, 128)); two("rvb", Pt(200, 128), Pt(200, 148)); wiper(200, 128);
+                W({ { 200, 148 }, { 168, 148 } });
+                W({ { 200, 108 }, { 200, 50 }, { 236, 50 } });
+                DU("d80", 222, 50, 20, "D80 ~ germanium: bends the pitch down as the tom rings out");
+                DI("d81", 236, 50, 20, "D81 ~ germanium, the other way");
+
+                // IC15b inverts the resonator's output and R230 feeds it back to the middle node
+                W({ { 330, 146 }, { 340, 146 } }); R("r229", 340, 146, 'h', 22, "R229 ~ 33 k"); W({ { 362, 146 }, { 380, 146 } });
+                a.OP(380, 140, "IC15b ~ turns the resonator's output over"); open(380, 146, "nin2"); open(380, 158, "0"); term(Pt(406, 152), {}, "no2", true);
+                W({ { 380, 158 }, { 372, 158 }, { 372, 196 } });
+                W({ { 370, 146 }, { 370, 120 } }); R("r227", 370, 120, 'h', 22, "R227 ~ 33 k"); W({ { 392, 120 }, { 416, 120 }, { 416, 152 }, { 406, 152 } });
+                W({ { 416, 120 }, { 416, 40 }, { 292, 40 } }); R("r230", 270, 40, 'h', 22, "R230 ~ 865 k: how long the tom rings", true); W({ { 258, 40 }, { 270, 40 } });
+
+                // The noise: the envelope (R219, D55, C72), the pink noise through R216 and C71, Q52 the gate, its filter
+                R("r219", 196, 220, 'h', 22, "R219 ~ 4.7 k"); W({ { 218, 220 }, { 226, 220 } });
+                DI("d55", 226, 220, 20, "D55"); W({ { 226, 240 }, { 226, 250 } });
+                C("c72", 226, 250, 'v', 14, "C72 ~ 0.039 uF: the noise's envelope"); W({ { 226, 264 }, { 226, 340 } });
+                W({ { 226, 246 }, { 236, 246 } }); R("r218", 236, 246, 'h', 22, "R218 ~ 2.2 M"); W({ { 258, 246 }, { 300, 246 } });
+                pin(318, 262, "npn", "PINK NOISE", 318, 274, M); W({ { 312, 262 }, { 318, 262 } });
+                R("r216", 290, 262, 'h', 22, "R216 ~ 15 k", true); W({ { 266, 262 }, { 290, 262 } });
+                C("c71", 266, 248, 'v', 14, "C71 ~ 0.047 uF", true); W({ { 266, 246 }, { 266, 248 } });
+                R("r217", 280, 262, 'v', 18, "R217 ~ 3.3 k"); W({ { 280, 280 }, { 280, 340 } });
+                R("r220", 300, 246, 'h', 22, "R220 ~ 33 k");
+                Q("q52", 338, 246, false, "Q52 ~ the gate: lets the noise through while the envelope lasts"); W({ { 338, 258 }, { 338, 340 } });
+                R("r221", 338, 208, 'v', 18, "R221 ~ 4.7 k"); W({ { 338, 226 }, { 338, 234 } });
+                W({ { 338, 230 }, { 350, 230 } }); C("c74", 350, 230, 'h', 14, "C74 ~ 0.047 uF"); W({ { 364, 230 }, { 380, 230 } });
+                R("r223", 372, 230, 'v', 18, "R223 ~ 22 k"); W({ { 372, 248 }, { 372, 340 } });
+                R("r222", 380, 230, 'h', 22, "R222 ~ 22 k"); W({ { 402, 230 }, { 430, 230 } });
+                C("c75", 414, 230, 'v', 14, "C75 ~ 0.018 uF"); W({ { 414, 244 }, { 414, 340 } });
+                R("r232", 430, 230, 'h', 22, "R232 ~ 100 k, open for the conga"); W({ { 452, 230 }, { 500, 230 } });
+
+                // The mixer, IC13, and the Level
+                W({ { 416, 152 }, { 430, 152 } }); R("r233", 430, 152, 'h', 22, "R233 ~ 100 k"); C("c81", 452, 152, 'h', 14, "C81 ~ 0.047 uF"); W({ { 466, 152 }, { 500, 152 } });
+                W({ { 500, 84 }, { 500, 230 } });
+                a.OP(520, 140, "IC13 ~ the mixer: the tone and the noise summed"); open(520, 146, "nsum"); open(520, 158, "0"); term(Pt(546, 152), {}, "vout", true);
+                W({ { 500, 146 }, { 520, 146 } }); W({ { 520, 158 }, { 512, 158 }, { 512, 196 } });
+                C("c83", 500, 84, 'h', 14, "C83 ~ 1 nF"); W({ { 514, 84 }, { 560, 84 } });
+                R("r235", 500, 100, 'h', 22, "R235 ~ 470 k"); W({ { 522, 100 }, { 560, 100 } });
+                POT("rvr10", 500, 116, 'h', 22, "VR10 LEVEL ~ 100 k"); C("c82", 522, 116, 'h', 14, "C82 ~ 33 uF"); W({ { 536, 116 }, { 560, 116 } });
+                W({ { 546, 152 }, { 560, 152 }, { 560, 84 } }); W({ { 560, 152 }, { 580, 152 } });
+                {
+                    auto& out = a.add({});
+                    out.fill.addTriangle({ 588, 152 }, { 580, 148.5f }, { 580, 155.5f });
+                }
+                a.tx(580, 146, "OUT", Rj);
             }
 
             void buildGraph()
@@ -1320,7 +1451,7 @@ namespace cs808
     LidView::LidView(Processor& p) : impl(std::make_unique<Impl>()), processor(p)
     {
         auto& i = *impl;
-        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete" };
+        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete" };
         i.sheet.fontHeight = 10.0f;
         i.sheet.get = [this] { return impl->showFull && impl->full ? 1 + impl->full->which : 0; };
         i.sheet.set = [this](int v)
@@ -1361,7 +1492,7 @@ namespace cs808
         juce::StringArray all;
         for (int d = 0; d < drumsDrawn; ++d)
             for (const auto& e : impl->drum(d).errors)
-                all.add(juce::String(d == snareDrum ? "the snare: " : "the bass drum: ") + e);
+                all.add(juce::String(d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
         return all;
     }
 
@@ -1417,7 +1548,7 @@ namespace cs808
 
     void LidView::struck(std::uint32_t lanes)
     {
-        if (impl->showFull && impl->full && (lanes & (1u << (impl->full->which == snareDrum ? 1 : 0))) != 0)
+        if (impl->showFull && impl->full && (lanes & (1u << laneOfDrum[impl->full->which])) != 0)
         {
             impl->full->pos = 0.0; // its drum struck: the hit plays from the start
             impl->full->playing = true;
