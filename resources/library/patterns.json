@@ -2274,5 +2274,975 @@
       "https://abasschronicle.co.uk/history-sessions-atmospheric-dnb/"
     ],
     "notes": "A rolling two-step: the second kick an eighth before the second snare, as MusicRadar describes, with ghost snares and busy hats played soft."
+  },
+  {
+    "id": "starter-house",
+    "name": "House",
+    "after": "Starter beat: House, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 124,
+    "swing": 54,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x...x...x...x...",
+        "B": "x...x...x...x..."
+      },
+      "CP": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "OH": {
+        "A": "..x...x...x...x.",
+        "B": "..x...x...x...x."
+      },
+      "CH": {
+        "A": "x.x.x.x.x.x.x.x.",
+        "B": "x.x.x.x.x.x.x.xx"
+      },
+      "RS": {
+        "A": "................",
+        "B": "...x.......x..x."
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "Four on the floor, clap on 2 and 4, the open hat on every offbeat with the closed hat cutting it short, a rim figure in bar two."
+  },
+  {
+    "id": "starter-deep-house",
+    "name": "Deep house",
+    "after": "Starter beat: Deep house, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 120,
+    "swing": 57,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x...x...x...x...",
+        "B": "x...x...x...x.x."
+      },
+      "CP": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "OH": {
+        "A": "..x...x...x...x.",
+        "B": "..x...x...x...x."
+      },
+      "CH": {
+        "A": "x.xxx.xxx.xxx.xx",
+        "B": "x.xxx.xxx.xxx.x."
+      },
+      "RS": {
+        "A": "......x.....x...",
+        "B": "......x.x.....x."
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "Swung sixteenth hats around the offbeat open hat, soft rim shots between the claps, a kick pickup into the next bar."
+  },
+  {
+    "id": "starter-tech-house",
+    "name": "Tech house",
+    "after": "Starter beat: Tech house, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 126,
+    "swing": 55,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x...x...x...x...",
+        "B": "x...x...x...x..."
+      },
+      "CP": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "OH": {
+        "A": "..x...x...x...x.",
+        "B": "..x...x...x...x."
+      },
+      "CH": {
+        "A": "xxx.xxx.xxx.xxx.",
+        "B": "xxx.xxx.xxx.xx.x"
+      },
+      "RS": {
+        "A": "..x..x.....x..x.",
+        "B": "..x..x....x..x.."
+      },
+      "CB": {
+        "A": "................",
+        "B": ".......x........"
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..x"
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "A driving kick and offbeat open hat with a syncopated rim figure that rolls across the bar, one cowbell hit for colour."
+  },
+  {
+    "id": "starter-techno",
+    "name": "Techno",
+    "after": "Starter beat: Techno, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 132,
+    "swing": 50,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x...x...x...x...",
+        "B": "x...x...x...x..."
+      },
+      "OH": {
+        "A": "..x...x...x...x.",
+        "B": "..x...x...x...x."
+      },
+      "CH": {
+        "A": "xx.xxx.xxx.xxx.x",
+        "B": "xx.xxx.xxx.xxx.x"
+      },
+      "CP": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "RS": {
+        "A": "...x....x.....x.",
+        "B": "...x..x.......x."
+      },
+      "LT": {
+        "A": "......x.......x.",
+        "B": ".......x......x."
+      }
+    },
+    "accent": {
+      "A": "x...x...x...x...",
+      "B": "x...x...x...x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "A pounding straight kick, offbeat hats, a rim and low tom groove that turns the bar around, the clap kept low."
+  },
+  {
+    "id": "starter-uk-garage",
+    "name": "UK garage (2-step)",
+    "after": "Starter beat: UK garage (2-step), the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 132,
+    "swing": 62,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x.........x.....",
+        "B": "x......x..x....."
+      },
+      "SD": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "CP": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "CH": {
+        "A": "x.xx.xx.x.xx.xx.",
+        "B": "x.xx.xx.x.xx.x.x"
+      },
+      "OH": {
+        "A": "..x.......x.....",
+        "B": "..x.......x...x."
+      },
+      "RS": {
+        "A": "...x.....x..x...",
+        "B": "...x.......x..x."
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "The 2-step kick that skips beat 3, heavy swing on the hats, snare and clap together on 2 and 4, rim shots shuffling between."
+  },
+  {
+    "id": "starter-boom-bap",
+    "name": "Boom bap",
+    "after": "Starter beat: Boom bap, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 90,
+    "swing": 58,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x.....x...x.....",
+        "B": "x.x...x...x..x.."
+      },
+      "SD": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "CH": {
+        "A": "x.x.x.x.x.x.x.x.",
+        "B": "x.x.x.x.x.x.x..."
+      },
+      "OH": {
+        "A": "................",
+        "B": "..............x."
+      },
+      "RS": {
+        "A": ".......x........",
+        "B": ".......x.....x.."
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "A swung kick that answers itself, a hard snare on 2 and 4, eighth hats with an open hat at the end of bar two."
+  },
+  {
+    "id": "starter-lofi",
+    "name": "Lo-fi hip hop",
+    "after": "Starter beat: Lo-fi hip hop, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 80,
+    "swing": 62,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x......x..x.....",
+        "B": "x.....x...x..x.."
+      },
+      "SD": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "RS": {
+        "A": "..........x.....",
+        "B": ".......x........"
+      },
+      "CH": {
+        "A": "x.x.x.x.x.xxx.x.",
+        "B": "x.x.x.x.x.x.x.xx"
+      },
+      "OH": {
+        "A": "................",
+        "B": "..............x."
+      }
+    },
+    "accent": {
+      "A": "................",
+      "B": "................"
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "Lazy and late: a heavy swing, a loose kick, soft unaccented hats with a little skip, rim ghosts for the dusty feel."
+  },
+  {
+    "id": "starter-trap",
+    "name": "Trap",
+    "after": "Starter beat: Trap, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 140,
+    "swing": 50,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x......x..x.....",
+        "B": "x.....x.x......x"
+      },
+      "CP": {
+        "A": "........x.......",
+        "B": "........x......."
+      },
+      "SD": {
+        "A": "........x.......",
+        "B": "........x......."
+      },
+      "CH": {
+        "A": "x.x.x.x.x.x.x.3.",
+        "B": "x.x.x.x.2.x.x3x3"
+      },
+      "OH": {
+        "A": "................",
+        "B": "......x........."
+      }
+    },
+    "accent": {
+      "A": "........x.......",
+      "B": "........x......."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "Half time: snare and clap on beat 3, a sliding long kick (turn its decay up), eighth hats breaking into rolls of two and three."
+  },
+  {
+    "id": "starter-uk-drill",
+    "name": "UK drill",
+    "after": "Starter beat: UK drill, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 142,
+    "swing": 50,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x.........x.....",
+        "B": "x......x...x...."
+      },
+      "SD": {
+        "A": "........x.......",
+        "B": "...x....x......."
+      },
+      "CP": {
+        "A": "........x.......",
+        "B": "........x......."
+      },
+      "CH": {
+        "A": "x..x..x.x..x..x.",
+        "B": "x..x..x.x..x.3.."
+      },
+      "RS": {
+        "A": "......x.......x.",
+        "B": "..............x."
+      }
+    },
+    "accent": {
+      "A": "........x.......",
+      "B": "........x......."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "Snare on beat 3 with an early snare in bar two, hats in the skipping three-against-four drill figure, a sparse sliding kick."
+  },
+  {
+    "id": "starter-reggaeton",
+    "name": "Reggaeton (dembow)",
+    "after": "Starter beat: Reggaeton (dembow), the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 95,
+    "swing": 50,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x...x...x...x...",
+        "B": "x...x...x...x..."
+      },
+      "SD": {
+        "A": "...x..x....x..x.",
+        "B": "...x..x....x..x."
+      },
+      "CH": {
+        "A": "x.x.x.x.x.x.x.x.",
+        "B": "x.x.x.x.x.x.x.x."
+      },
+      "RS": {
+        "A": "................",
+        "B": "..........x.x..."
+      },
+      "OH": {
+        "A": "................",
+        "B": "..............x."
+      }
+    },
+    "accent": {
+      "A": "...x..x....x..x.",
+      "B": "...x..x....x..x."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "The dembow: kick on every beat, the snare on the a of 1 and the and of 2 in each half bar, straight eighth hats."
+  },
+  {
+    "id": "starter-afrobeats",
+    "name": "Afrobeats",
+    "after": "Starter beat: Afrobeats, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 104,
+    "swing": 54,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x.....x...x.....",
+        "B": "x.....x.x......."
+      },
+      "CP": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "RS": {
+        "A": "..x..x...x..x...",
+        "B": "..x..x...x..x..x"
+      },
+      "CH": {
+        "A": "x.xxx.xxx.xxx.xx",
+        "B": "x.xxx.xxx.xxx.xx"
+      },
+      "MT": {
+        "A": "................",
+        "B": "..........x...x."
+      },
+      "HT": {
+        "A": "................",
+        "B": "...........x...."
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "A bouncing kick, claps on 2 and 4, the rim playing the off-beat percussion figure, shaker-like sixteenth hats, toms answering in bar two."
+  },
+  {
+    "id": "starter-amapiano",
+    "name": "Amapiano",
+    "after": "Starter beat: Amapiano, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 113,
+    "swing": 56,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x...x...x...x...",
+        "B": "x...x...x...x..."
+      },
+      "CP": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "RS": {
+        "A": "..x..x..x..x..x.",
+        "B": "..x..x..x..x.x.x"
+      },
+      "CH": {
+        "A": "xxxxxxxxxxxxxxxx",
+        "B": "xxxxxxxxxxxxxxxx"
+      },
+      "LT": {
+        "A": "x..x..x.....x...",
+        "B": "x..x..x...x.x..."
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "A steady kick, shaker sixteenths, the rim in threes across the bar, and the low tom standing in for the log drum: tune it low with a long decay."
+  },
+  {
+    "id": "starter-dnb",
+    "name": "Drum and bass",
+    "after": "Starter beat: Drum and bass, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 174,
+    "swing": 50,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x.........x.....",
+        "B": "x.........xx...."
+      },
+      "SD": {
+        "A": "....x.......x...",
+        "B": "....x..x....x..."
+      },
+      "CH": {
+        "A": "x.x.x.x.x.x.x.x.",
+        "B": "x.x.x.x.x.x.x.x."
+      },
+      "OH": {
+        "A": "................",
+        "B": "..............x."
+      },
+      "RS": {
+        "A": ".......x........",
+        "B": ".........x....x."
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "The two-step backbone: kick on 1 and the and of 3, snare on 2 and 4, a ghost snare and a double kick in bar two."
+  },
+  {
+    "id": "starter-dubstep",
+    "name": "Dubstep",
+    "after": "Starter beat: Dubstep, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 140,
+    "swing": 50,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x.........x.....",
+        "B": "x.....x....x...."
+      },
+      "SD": {
+        "A": "........x.......",
+        "B": "........x......."
+      },
+      "CP": {
+        "A": "........x.......",
+        "B": "........x......."
+      },
+      "CH": {
+        "A": "x...x...x...x...",
+        "B": "x.x.x.x.x.x.x.xx"
+      },
+      "OH": {
+        "A": "......x.........",
+        "B": "......x.......x."
+      }
+    },
+    "accent": {
+      "A": "........x.......",
+      "B": "........x......."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "Half time with the snare on beat 3 and a lot of space, quarter hats doubling in bar two."
+  },
+  {
+    "id": "starter-pop",
+    "name": "Pop",
+    "after": "Starter beat: Pop, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 118,
+    "swing": 50,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x.....x...x.....",
+        "B": "x.....x...x...x."
+      },
+      "CP": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "SD": {
+        "A": "....x.......x...",
+        "B": "....x.......x.33"
+      },
+      "CH": {
+        "A": "x.x.x.x.x.x.x.x.",
+        "B": "x.x.x.x.x.x.x..."
+      },
+      "OH": {
+        "A": "................",
+        "B": "..............x."
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "A modern pop groove: a syncopated kick, snare and clap on 2 and 4, eighth hats, a snare roll into the next section."
+  },
+  {
+    "id": "starter-rnb",
+    "name": "R&B",
+    "after": "Starter beat: R&B, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 72,
+    "swing": 58,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x......x.x......",
+        "B": "x.....x....x..x."
+      },
+      "SD": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "RS": {
+        "A": "..........x.....",
+        "B": "......x........."
+      },
+      "CH": {
+        "A": "x.xxx.xxx.x3x.xx",
+        "B": "x.xxx.xx2.xxx.x."
+      },
+      "OH": {
+        "A": "................",
+        "B": "..............x."
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "Slow and swung: a late kick, snare on 2 and 4, busy sixteenth hats with quick rolls, the way modern R&B uses its hats."
+  },
+  {
+    "id": "starter-disco",
+    "name": "Disco and nu-disco",
+    "after": "Starter beat: Disco and nu-disco, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 118,
+    "swing": 50,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x...x...x...x...",
+        "B": "x...x...x...x..."
+      },
+      "SD": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "CP": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "OH": {
+        "A": "..x...x...x...x.",
+        "B": "..x...x...x...x."
+      },
+      "CH": {
+        "A": "xx.xxx.xxx.xxx.x",
+        "B": "xx.xxx.xxx.xxx.x"
+      },
+      "HT": {
+        "A": "................",
+        "B": "............x..."
+      },
+      "MT": {
+        "A": "................",
+        "B": ".............x.."
+      },
+      "LT": {
+        "A": "................",
+        "B": "..............xx"
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "Four on the floor with the open hat on the offbeat, snare and clap together, a tom fill closing bar two."
+  },
+  {
+    "id": "starter-synthwave",
+    "name": "Synthwave",
+    "after": "Starter beat: Synthwave, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 100,
+    "swing": 50,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x.......x.x.....",
+        "B": "x.......x.x....."
+      },
+      "SD": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "CP": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "CH": {
+        "A": "x.x.x.x.x.x.x.x.",
+        "B": "x.x.x.x.x.x....."
+      },
+      "HT": {
+        "A": "................",
+        "B": "............x..."
+      },
+      "MT": {
+        "A": "................",
+        "B": ".............x.."
+      },
+      "LT": {
+        "A": "................",
+        "B": "..............xx"
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "The eighties revival: a big backbeat (give the snare a long tail), straight eighth hats, a tom run at the end of bar two."
+  },
+  {
+    "id": "starter-funk",
+    "name": "Funk",
+    "after": "Starter beat: Funk, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 100,
+    "swing": 56,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x.........x..x..",
+        "B": "x.x.......x....."
+      },
+      "SD": {
+        "A": "....x..x.x..x...",
+        "B": "....x..x.x..x..x"
+      },
+      "CH": {
+        "A": "xxxxxxxxxxxxxxxx",
+        "B": "xxxxxxx.xxxxxxxx"
+      },
+      "OH": {
+        "A": "................",
+        "B": ".......x........"
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "Accented backbeats with unaccented ghost snares between, sixteenth hats and a syncopated kick: the groove under most funk."
+  },
+  {
+    "id": "starter-breakbeat",
+    "name": "Breakbeat",
+    "after": "Starter beat: Breakbeat, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 130,
+    "swing": 52,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x.........x.....",
+        "B": "x.x.......x..x.."
+      },
+      "SD": {
+        "A": "....x.......x...",
+        "B": "....x..x....x..."
+      },
+      "CH": {
+        "A": "x.x.x.x.x.x.x.x.",
+        "B": "x.x.x.x.x.x.x.x."
+      },
+      "OH": {
+        "A": "..x.............",
+        "B": "..x...........x."
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "A break played on the 808: kick on 1 and the and of 3, snare on 2 and 4, a ghost snare and a second kick in bar two."
+  },
+  {
+    "id": "starter-jersey-club",
+    "name": "Jersey club",
+    "after": "Starter beat: Jersey club, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 140,
+    "swing": 50,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x...x...x.x.x.x.",
+        "B": "x...x...x.x.x.x."
+      },
+      "CP": {
+        "A": "....x.......x...",
+        "B": "....x.......x..."
+      },
+      "OH": {
+        "A": "................",
+        "B": "..............x."
+      },
+      "RS": {
+        "A": "..x.......x.....",
+        "B": "..x.......x...x."
+      }
+    },
+    "accent": {
+      "A": "....x.......x...",
+      "B": "....x.......x..."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "The club kick: quarters, then the bouncing run of five on the second half of the bar, claps on 2 and 4."
+  },
+  {
+    "id": "starter-phonk",
+    "name": "Phonk",
+    "after": "Starter beat: Phonk, the common groove of the genre, not one record's",
+    "style": "starter",
+    "year": 2025,
+    "bpm": 140,
+    "swing": 50,
+    "variations": "AB",
+    "lanes": {
+      "BD": {
+        "A": "x......x..x.....",
+        "B": "x.....x.x.....x."
+      },
+      "SD": {
+        "A": "........x.......",
+        "B": "........x......."
+      },
+      "CP": {
+        "A": "........x.......",
+        "B": "........x......."
+      },
+      "CB": {
+        "A": "x..x..x...x..x..",
+        "B": "x..x..x...x.x.x."
+      },
+      "CH": {
+        "A": "x.x.x.x.x.x.x.x.",
+        "B": "x.x.x.x.x.x.x3x3"
+      }
+    },
+    "accent": {
+      "A": "........x.......",
+      "B": "........x......."
+    },
+    "confidence": "style",
+    "sources": [
+      "https://blog.landr.com/drum-programming",
+      "https://www.native-instruments.com/en/blogs/blog/drum-patterns",
+      "https://splice.com/blog/?p=14691"
+    ],
+    "notes": "Drift phonk: a half-time snare, the 808 cowbell playing the riff, a booming kick (long decay) and hat rolls."
   }
 ]

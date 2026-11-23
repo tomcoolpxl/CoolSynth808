@@ -93,21 +93,23 @@ namespace cs808
 
     const juce::StringArray& libraryFamilies()
     {
-        static const juce::StringArray families { "Electro and hip hop", "R&B and pop", "Bass and the South", "Trap and drill",
-                                                  "House and acid", "Techno", "Breaks and big beat", "Jungle and IDM" };
+        // The starter beats first (D276): each genre's common groove, for a beginner to begin from.
+        static const juce::StringArray families { "Starter beats", "Electro and hip hop", "R&B and pop", "Bass and the South",
+                                                  "Trap and drill", "House and acid", "Techno", "Breaks and big beat",
+                                                  "Jungle and IDM" };
         return families;
     }
 
     juce::String familyOf(const juce::String& style)
     {
         static const std::vector<std::pair<juce::String, int>> table {
-            { "electro", 0 }, { "hip-hop", 0 }, { "rnb", 1 }, { "pop", 1 }, { "miami-bass", 2 }, { "trap", 3 },
-            { "chicago-house", 4 }, { "acid-house", 4 }, { "detroit-techno", 5 }, { "breakbeat", 6 }, { "big-beat", 6 },
-            { "other", 6 }, { "jungle", 7 }, { "idm", 7 } };
+            { "starter", 0 }, { "electro", 1 }, { "hip-hop", 1 }, { "rnb", 2 }, { "pop", 2 }, { "miami-bass", 3 },
+            { "trap", 4 }, { "chicago-house", 5 }, { "acid-house", 5 }, { "detroit-techno", 6 }, { "breakbeat", 7 },
+            { "big-beat", 7 }, { "other", 7 }, { "jungle", 8 }, { "idm", 8 } };
         for (const auto& [tag, family] : table)
             if (tag == style)
                 return libraryFamilies()[family];
-        return libraryFamilies()[6]; // anything else sits with the breaks
+        return libraryFamilies()[7]; // anything else sits with the breaks
     }
 
     juce::String libraryKey(const LibraryEntry& e) { return (e.builtIn ? juce::String() : juce::String("mine:")) + e.id; }

@@ -527,7 +527,7 @@ namespace cs808
         stats << juce::String(e->pattern.play.tempo, 0) << " BPM, swing " << juce::roundToInt(e->pattern.play.swing * 100.0f) << " %";
         const int bars = (1 + static_cast<int>(e->pattern.moreParts.size())) * (e->pattern.usesB ? 2 : 1);
         stats << ", " << bars << (bars == 1 ? " bar" : " bars");
-        if (e->confidence.isNotEmpty())
+        if (e->confidence.isNotEmpty() && e->confidence != "style") // a starter beat follows no record
             stats << ". Transcription: " << e->confidence << " confidence";
         g.setColour(th.ink);
         g.drawFittedText(stats, area.removeFromTop(18.0f).toNearestInt(), juce::Justification::centredLeft, 1);
