@@ -23,7 +23,9 @@ juce_add_binary_data(CoolSynth808Library
         resources/lid/rimshot_currents.json # the rim shot's
         resources/lid/clap_currents.json # the hand clap's, its maracas' side left out
         resources/lid/cowbell_currents.json # the cowbell's parts of the metal board
-        resources/lid/metal_currents.json) # its six oscillators and two band-passes
+        resources/lid/metal_currents.json # its six oscillators and two band-passes
+        resources/lid/cymbal_currents.json # the cymbal's parts
+        resources/lid/hats_currents.json) # the two hi-hats'
 
 # A JUCE audio plugin built as a standalone app for now (D267): the plugin formats are one line away.
 juce_add_plugin(CoolSynth808

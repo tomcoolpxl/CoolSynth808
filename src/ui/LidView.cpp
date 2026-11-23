@@ -740,9 +740,9 @@ namespace cs808
         };
 
         // The drums drawn complete: the bass drum, then the snare (D278).
-        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, rimShot = 3, handClap = 4, cowbell = 5, metalShared = 6, drumsDrawn = 7 };
+        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, rimShot = 3, handClap = 4, cowbell = 5, metalShared = 6, cymbal = 7, hiHats = 8, drumsDrawn = 9 };
         /** The lane each drum drawn complete plays in. */
-        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5, 6, 7, 8 };
+        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5, 6, 7, 8, 8, 9 }; // the hi-hats: the open one, and the closed (10) too
 
         Recording loadRecording(int which)
         {
@@ -753,6 +753,8 @@ namespace cs808
                               : which == handClap ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::clap_currents_json, LibraryData::clap_currents_jsonSize))
                               : which == cowbell ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::cowbell_currents_json, LibraryData::cowbell_currents_jsonSize))
                               : which == metalShared ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::metal_currents_json, LibraryData::metal_currents_jsonSize))
+                              : which == cymbal ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::cymbal_currents_json, LibraryData::cymbal_currents_jsonSize))
+                              : which == hiHats ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::hats_currents_json, LibraryData::hats_currents_jsonSize))
                                                  : juce::JSON::parse(juce::String::fromUTF8(LibraryData::bassdrum_currents_json, LibraryData::bassdrum_currents_jsonSize));
             const auto* times = root.getProperty("t", {}).getArray();
             const auto* names = root.getProperty("names", {}).getArray();
@@ -791,7 +793,13 @@ namespace cs808
                     r.parts[p.name.toString().toStdString()] = nodes;
                 }
             const auto set = root.getProperty("setting", {});
-            if (which == metalShared)
+            if (which == hiHats)
+                r.setting << "the open hat struck, then the closed hat 150 ms later, choking it; " << set.getProperty("amp", "?").toString()
+                          << " V on the trigger line, OH Decay " << set.getProperty("ohd", "?").toString() << ", the levels " << set.getProperty("ohl", "?").toString();
+            else if (which == cymbal)
+                r.setting << "the cymbal, " << set.getProperty("amp", "?").toString() << " V on the trigger line, Tone " << set.getProperty("tone", "?").toString()
+                          << ", Decay " << set.getProperty("cyd", "?").toString() << ", Level " << set.getProperty("cyl", "?").toString();
+            else if (which == metalShared)
                 r.setting << "the six oscillators running free, at 554, 825, 523, 304, 370 and 205 Hz, through the two band-passes";
             else if (which == cowbell)
                 r.setting << "the cowbell, " << set.getProperty("amp", "?").toString() << " V on the trigger line, Level "
@@ -862,6 +870,13 @@ namespace cs808
                     return "at rest: only the standing currents flow";
                 if (ms <= 1.05)
                     return "the trigger: a pulse of 1 ms";
+                if (which == hiHats)
+                    return ms < 150.0 ? (ms <= 10.0 ? "the open hat's attack: Q24 charges C62, Q21 empties C60" : "the open hat rings: C62 drains, C60 charges again through OH DECAY")
+                                      : ms <= 160.0 ? "the closed hat: Q28 charges C63, and through R173 and Q23 it empties C62: the open hat is choked"
+                                                    : "the closed hat dies away quickly; the open hat stays choked";
+                if (which == cymbal)
+                    return ms <= 20.0 ? "the attack: three envelopes open, the high band through Q16 and Q17, the low through Q18"
+                                      : "the ring: each envelope dies at its own rate, CY DECAY setting the longest";
                 if (which == metalShared)
                     return "always running: six squares summed, a high band for the cymbal and the hats, a low one for the cymbal";
                 if (which == cowbell)
@@ -980,7 +995,7 @@ namespace cs808
                     w.fill.addTriangle({ x + 3.5f, y }, { x + 8.5f, y - 2.5f }, { x + 8.5f, y + 2.5f });
                 };
 
-                if (which == snareDrum || which == lowTom || which == rimShot || which == handClap || which == cowbell || which == metalShared)
+                if (which == snareDrum || which == lowTom || which == rimShot || which == handClap || which == cowbell || which == metalShared || which == cymbal || which == hiHats)
                 {
                     if (which == snareDrum)
                         buildSnare(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
@@ -992,6 +1007,10 @@ namespace cs808
                         buildCowbell(a, W, term, R, C, DI, Q, pin, open, wiperAt, two);
                     else if (which == metalShared)
                         buildMetalShared(a, W, R, C, pin, open, gnd, term);
+                    else if (which == cymbal)
+                        buildCymbal(a, W, R, C, POT, Q, pin, open, wiperAt, two, gnd, supply, term);
+                    else if (which == hiHats)
+                        buildHats(a, W, R, C, POT, Q, pin, open, two, gnd, supply, term);
                     else
                         buildTom(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
                     buildGraph();
@@ -1788,6 +1807,279 @@ namespace cs808
                 a.tx(452, 226, "LOW BAND, TO THE CYMBAL", L);
             }
 
+            /*
+                The cymbal (D278): its parts of the engine's tools/tr808/metal.cir. IC2a's pulse and the switch; Q19
+                charging three envelopes through D6, D7 and D8; three VCAs, Q16 and Q17 on the high band and Q18 on the
+                low (the band-passes drawn on "Metal oscillators"); three high-passes, IC5a, IC5b and Q25; CY TONE
+                between them, and IC6b's mix with CY LEVEL. Ground and the supplies drawn as symbols.
+            */
+            void buildCymbal(Board::Sheet& a, auto& W, auto& R, auto& C, auto& POT, auto& Q, auto& pin, auto& open, auto& wiper,
+                             auto& two, auto& gnd, auto& supply, auto& term)
+            {
+                width = 920.0f;
+                height = 450.0f;
+                const auto Rj = juce::Justification::centredRight;
+                const auto M = juce::Justification::centred;
+                const auto DH = [&](const std::string& el, float x, float y, float Lw, const juce::String& label)
+                {
+                    auto& part = a.add(label);
+                    const float h = (Lw - 6.0f) / 2.0f;
+                    const Pt o(x, y);
+                    part.stroke.addLineSegment({ o, o + Pt(h, 0) }, 0);
+                    part.stroke.addTriangle(o + Pt(h, -3.5f), o + Pt(h, 3.5f), o + Pt(h + 6, 0));
+                    part.stroke.addLineSegment({ o + Pt(h + 6, -3.5f), o + Pt(h + 6, 3.5f) }, 0);
+                    part.stroke.addLineSegment({ o + Pt(h + 6, 0), o + Pt(Lw, 0) }, 0);
+                    two(el, Pt(x, y), Pt(x + Lw, y), el + ".id");
+                };
+
+                // The switch: IC2a's pulse (see the cowbell) through Q6 while the cymbal's step data turns Q2 on
+                pin(30, 40, "nv2", "IC2a'S PULSE", 30, 31, M); W({ { 30, 40 }, { 110, 40 }, { 110, 58 } });
+                R("r15", 80, 40, 'v', 20, "R15 ~ 4.7 k"); W({ { 80, 60 }, { 80, 70 }, { 94, 70 } });
+                Q("q6", 110, 70, true, "Q6 ~ a PNP switch: it passes the pulse into the cymbal");
+                R("r10", 80, 70, 'v', 20, "R10 ~ 22 k"); W({ { 80, 90 }, { 80, 98 } });
+                Q("q2", 80, 110, false, "Q2 ~ on while the cymbal's step data stands"); gnd(80, 122);
+                pin(24, 110, "jcy", "CY ON", 24, 121, M); W({ { 24, 110 }, { 28, 110 } }); R("r3", 28, 110, 'h', 18, "R3 ~ 22 k"); W({ { 46, 110 }, { 64, 110 } });
+                R("r6", 56, 110, 'v', 14, "R6 ~ 10 k"); gnd(56, 124);
+
+                // Q19, charging the three envelopes
+                W({ { 110, 82 }, { 110, 96 }, { 140, 96 } }); R("r83", 120, 96, 'v', 14, "R83 ~ 22 k"); gnd(120, 110);
+                R("r84", 140, 96, 'h', 22, "R84 ~ 10 k"); W({ { 162, 96 }, { 170, 96 } });
+                Q("q19", 186, 96, false, "Q19 ~ charges the three envelopes at once");
+                W({ { 186, 84 }, { 186, 76 } }); R("r85", 186, 58, 'v', 18, "R85 ~ 100", true);
+                R("r86", 186, 40, 'v', 18, "R86 ~ 100"); supply(186, 40, true);
+                W({ { 186, 58 }, { 200, 58 } }); C("c35", 200, 58, 'v', 14, "C35 ~ 47 uF"); gnd(200, 72);
+                W({ { 186, 108 }, { 186, 330 } });
+
+                // The first envelope (C38, C37): the high band through Q16
+                DH("d6", 186, 140, 14, "D6"); W({ { 200, 140 }, { 250, 140 } });
+                C("c38", 210, 140, 'v', 14, "C38 ~ 1 uF"); gnd(210, 154);
+                R("r87", 222, 140, 'v', 18, "R87 ~ 22 k"); C("c37", 222, 158, 'v', 14, "C37 ~ 2.2 uF"); gnd(222, 172);
+                R("r94", 250, 140, 'h', 22, "R94 ~ 39 k"); W({ { 272, 140 }, { 350, 140 } });
+                // The second (C40, C39): the high band through Q17, Q20 adding to it through R91
+                DH("d7", 186, 230, 14, "D7"); W({ { 200, 230 }, { 214, 230 } });
+                C("c40", 206, 230, 'v', 14, "C40 ~ 1 uF"); gnd(206, 244);
+                R("r88", 214, 230, 'h', 22, "R88 ~ 33 k"); W({ { 236, 230 }, { 250, 230 } });
+                C("c39", 242, 230, 'v', 14, "C39 ~ 0.47 uF"); gnd(242, 244);
+                R("r90", 250, 230, 'h', 22, "R90 ~ 33 k"); W({ { 272, 230 }, { 350, 230 } });
+                R("r91", 290, 230, 'v', 20, "R91 ~ 33 k"); W({ { 290, 250 }, { 302, 250 } }); R("r89", 302, 250, 'v', 14, "R89 ~ 10 k"); gnd(302, 264);
+                W({ { 290, 250 }, { 290, 262 } }); R("r92", 290, 262, 'v', 22, "R92 ~ 33 k", true); W({ { 290, 284 }, { 290, 352 } });
+                // The third (C41, CY DECAY), followed by Q20: the low band through Q18
+                DH("d8", 186, 330, 14, "D8"); W({ { 200, 330 }, { 232, 330 } });
+                C("c41", 210, 330, 'v', 14, "C41 ~ 1 uF"); gnd(210, 344);
+                R("r93", 220, 330, 'v', 18, "R93 ~ 470 k"); POT("rvr2", 220, 348, 'v', 22, "VR2 CY DECAY ~ 2 M"); gnd(220, 370);
+                Q("q20", 248, 330, false, "Q20 ~ follows the long envelope"); supply(248, 318, true);
+                W({ { 248, 342 }, { 248, 352 }, { 300, 352 } }); R("r105", 300, 352, 'h', 22, "R105 ~ 33 k"); W({ { 322, 352 }, { 340, 352 } });
+                C("c45", 330, 352, 'v', 14, "C45 ~ 2.2 uF"); gnd(330, 366);
+                R("r104", 340, 352, 'h', 22, "R104 ~ 22 k"); W({ { 362, 352 }, { 380, 352 } });
+
+                // The three VCAs: each transistor's base on a band, its collector pulling the envelope down through a diode
+                C("c47", 330, 140, 'v', 14, "C47 ~ 1.5 nF"); gnd(330, 154);
+                DH("d5", 350, 140, 14, "D5"); W({ { 364, 140 }, { 450, 140 }, { 450, 152 } });
+                C("c36", 380, 140, 'v', 14, "C36 ~ 1.5 nF"); gnd(380, 154);
+                Q("q16", 450, 164, false, "Q16 ~ a swing VCA on the high band"); R("r95", 450, 176, 'v', 14, "R95 ~ 100"); gnd(450, 190);
+                W({ { 434, 164 }, { 406, 164 }, { 406, 212 } }); C("c42", 380, 196, 'h', 14, "C42 ~ 0.022 uF"); W({ { 394, 196 }, { 406, 196 } });
+                R("r97", 406, 212, 'h', 22, "R97 ~ 1 M", true); R("r96", 428, 190, 'v', 22, "R96 ~ 1 M"); supply(428, 190, true);
+                C("c50", 330, 230, 'v', 14, "C50 ~ 1.5 nF"); gnd(330, 244);
+                DH("d11", 350, 230, 14, "D11"); W({ { 364, 230 }, { 450, 230 }, { 450, 242 } });
+                C("c43", 386, 230, 'v', 14, "C43 ~ 1.5 nF"); gnd(386, 244);
+                Q("q17", 450, 254, false, "Q17 ~ a swing VCA on the high band"); R("r98", 450, 266, 'v', 14, "R98 ~ 100"); gnd(450, 280);
+                W({ { 434, 254 }, { 406, 254 }, { 406, 302 } }); C("c44", 380, 286, 'h', 14, "C44 ~ 0.022 uF"); W({ { 394, 286 }, { 406, 286 } });
+                R("r99", 406, 302, 'h', 22, "R99 ~ 1 M", true); R("r100", 428, 280, 'v', 22, "R100 ~ 1 M"); supply(428, 280, true);
+                pin(360, 241, "nhb", "HIGH BAND", 354, 241, Rj); W({ { 360, 241 }, { 372, 241 } }); W({ { 372, 196 }, { 372, 286 } });
+                W({ { 372, 196 }, { 380, 196 } }); W({ { 372, 286 }, { 380, 286 } });
+                DH("d12", 380, 352, 14, "D12"); W({ { 394, 352 }, { 450, 352 }, { 450, 364 } });
+                Q("q18", 450, 376, false, "Q18 ~ a swing VCA on the low band"); R("r101", 450, 388, 'v', 14, "R101 ~ 100"); gnd(450, 402);
+                W({ { 434, 376 }, { 406, 376 }, { 406, 424 } }); C("c46", 380, 408, 'h', 14, "C46 ~ 0.022 uF"); W({ { 394, 408 }, { 406, 408 } });
+                pin(370, 408, "nlb", "LOW BAND", 364, 408, Rj); W({ { 370, 408 }, { 380, 408 } });
+                R("r103", 406, 424, 'h', 22, "R103 ~ 1 M", true); R("r102", 428, 402, 'v', 22, "R102 ~ 1 M"); supply(428, 402, true);
+
+                // IC5a: a third-order high-pass on the first
+                W({ { 340, 140 }, { 340, 120 }, { 500, 120 } }); C("c49", 500, 120, 'h', 14, "C49 ~ 3.3 nF"); W({ { 514, 120 }, { 530, 120 } });
+                R("r106", 522, 120, 'v', 14, "R106 ~ 6.8 k"); gnd(522, 134);
+                C("c53", 530, 120, 'h', 14, "C53 ~ 1 nF"); W({ { 544, 120 }, { 556, 120 } }); C("c54", 556, 120, 'h', 14, "C54 ~ 1 nF");
+                W({ { 570, 120 }, { 600, 120 } }); R("r109", 586, 120, 'v', 14, "R109 ~ 18 k"); gnd(586, 134);
+                a.OP(600, 102, "IC5a ~ a high-pass with a gain of 2.77"); open(600, 108, "n5am"); open(600, 120, "n5ap"); term(Pt(626, 114), {}, "nhpa", true);
+                W({ { 550, 120 }, { 550, 80 } }); R("r108", 550, 80, 'h', 22, "R108 ~ 18 k"); W({ { 572, 80 }, { 640, 80 }, { 640, 114 }, { 626, 114 } });
+                W({ { 600, 108 }, { 594, 108 }, { 594, 92 } }); R("r110", 594, 92, 'h', 22, "R110 ~ 39 k"); W({ { 616, 92 }, { 640, 92 } });
+                R("r111", 564, 92, 'h', 22, "R111 ~ 22 k", true); W({ { 586, 92 }, { 594, 92 } }); gnd(564, 92);
+                // IC5b: a second-order high-pass on the second
+                W({ { 340, 230 }, { 340, 220 }, { 500, 220 } }); C("c51", 500, 220, 'h', 14, "C51 ~ 1 nF"); W({ { 514, 220 }, { 530, 220 } });
+                C("c52", 530, 220, 'h', 14, "C52 ~ 1 nF"); W({ { 544, 220 }, { 600, 220 } }); R("r113", 560, 220, 'v', 14, "R113 ~ 18 k"); gnd(560, 234);
+                a.OP(600, 202, "IC5b ~ a high-pass with a gain of 2"); open(600, 208, "n5bm"); open(600, 220, "n5bp"); term(Pt(626, 214), {}, "nhpb", true);
+                W({ { 522, 220 }, { 522, 184 } }); R("r107", 522, 184, 'h', 22, "R107 ~ 18 k"); W({ { 544, 184 }, { 640, 184 }, { 640, 214 }, { 626, 214 } });
+                W({ { 600, 208 }, { 594, 208 }, { 594, 196 } }); R("r114", 594, 196, 'h', 22, "R114 ~ 39 k"); W({ { 616, 196 }, { 640, 196 } });
+                R("r115", 554, 196, 'h', 22, "R115 ~ 39 k", true); W({ { 576, 196 }, { 594, 196 } }); gnd(554, 196);
+                // Q25: a high-pass around a follower on the third, then a low-pass (R123, C57)
+                W({ { 366, 352 }, { 366, 340 }, { 500, 340 } }); C("c48", 500, 340, 'h', 14, "C48 ~ 1.5 nF"); W({ { 514, 340 }, { 530, 340 } });
+                C("c59", 530, 340, 'h', 14, "C59 ~ 1.5 nF"); W({ { 544, 340 }, { 560, 340 } }); R("r127", 552, 340, 'v', 14, "R127 ~ 82 k"); gnd(552, 354);
+                Q("q25", 576, 340, false, "Q25 ~ the follower of the high-pass"); supply(576, 328, true);
+                W({ { 522, 340 }, { 522, 370 } }); R("r124", 522, 370, 'h', 22, "R124 ~ 22 k"); W({ { 544, 370 }, { 576, 370 } }); W({ { 576, 352 }, { 576, 380 } });
+                R("r126", 576, 380, 'v', 14, "R126 ~ 22 k"); supply(576, 394, false);
+                W({ { 576, 364 }, { 600, 364 } }); C("c58", 600, 364, 'h', 14, "C58 ~ 0.01 uF"); R("r123", 614, 364, 'h', 22, "R123 ~ 100 k"); W({ { 636, 364 }, { 660, 364 } });
+                C("c57", 648, 364, 'v', 14, "C57 ~ 3.3 nF"); gnd(648, 378); R("r121", 660, 364, 'h', 22, "R121 ~ 10 k"); W({ { 682, 364 }, { 720, 364 } });
+
+                // CY TONE between the high band and the others, and IC6b's mix with CY LEVEL
+                W({ { 640, 114 }, { 660, 114 } }); C("c55", 660, 114, 'h', 14, "C55 ~ 0.01 uF"); R("r112", 674, 114, 'h', 22, "R112 ~ 22 k"); W({ { 696, 114 }, { 740, 114 } });
+                a.R(720, 114, false, 40, "VR4 CY TONE ~ 20 k: its wiper to ground");
+                two("rvr4a", Pt(720, 114), Pt(720, 134)); two("rvr4b", Pt(720, 134), Pt(720, 154)); wiper(720, 134); W({ { 720, 134 }, { 732, 134 } }); gnd(732, 134);
+                R("r125", 720, 154, 'v', 22, "R125 ~ 2.2 k"); W({ { 720, 176 }, { 720, 364 } });
+                W({ { 640, 214 }, { 660, 214 } }); C("c56", 660, 214, 'h', 14, "C56 ~ 0.01 uF"); R("r120", 674, 214, 'h', 22, "R120 ~ 10 k"); W({ { 696, 214 }, { 720, 214 } });
+                R("r119", 740, 114, 'h', 22, "R119 ~ 22 k"); W({ { 762, 114 }, { 780, 114 }, { 780, 190 } });
+                W({ { 720, 190 }, { 740, 190 } }); R("r129", 740, 190, 'h', 22, "R129 ~ 15 k"); W({ { 762, 190 }, { 780, 190 } });
+                W({ { 780, 150 }, { 790, 150 } }); C("c90", 790, 150, 'h', 14, "C90 ~ 0.01 uF"); W({ { 804, 150 }, { 830, 150 } });
+                a.OP(830, 144, "IC6b ~ the cymbal's output amplifier"); open(830, 150, "n6bm"); open(830, 162, "n6bp"); term(Pt(856, 156), {}, "vcy", true);
+                W({ { 830, 162 }, { 822, 162 } }); R("r118", 822, 162, 'v', 14, "R118 ~ 47 k"); gnd(822, 176);
+                W({ { 816, 150 }, { 816, 84 } });
+                C("c78", 816, 84, 'h', 14, "C78 ~ 33 uF"); POT("rvr6", 830, 84, 'h', 22, "VR6 CY LEVEL ~ 100 k"); W({ { 852, 84 }, { 870, 84 } });
+                R("r128", 816, 100, 'h', 22, "R128 ~ 470 k"); W({ { 838, 100 }, { 870, 100 } });
+                C("c77", 816, 116, 'h', 14, "C77 ~ 220 pF"); W({ { 830, 116 }, { 870, 116 } });
+                W({ { 856, 156 }, { 870, 156 }, { 870, 84 } }); W({ { 870, 156 }, { 890, 156 } });
+                {
+                    auto& out = a.add({});
+                    out.fill.addTriangle({ 898, 156 }, { 890, 152.5f }, { 890, 159.5f });
+                }
+                a.tx(890, 150, "OUT", Rj);
+            }
+
+            /*
+                The hi-hats (D278): the open and the closed hat's parts of the engine's tools/tr808/metal.cir, on one
+                sheet since they share C61's supply and the closed hat chokes the open one. Along the top the open hat:
+                its switch, Q24 charging C62, Q21 and C60 with OH DECAY timing Q22's drain, Q29 following C62 into the
+                VCA Q27 on the high band, the high-pass Q26 and IC7a with OH LEVEL. Along the bottom the closed hat:
+                its switch, Q28 charging C63 (which also empties C62 through R173 and Q23), the VCA Q30, the high-pass
+                Q31 and IC7b with CH LEVEL.
+            */
+            void buildHats(Board::Sheet& a, auto& W, auto& R, auto& C, auto& POT, auto& Q, auto& pin, auto& open, auto& two,
+                           auto& gnd, auto& supply, auto& term)
+            {
+                width = 820.0f;
+                height = 480.0f;
+                const auto L = juce::Justification::centredLeft;
+                const auto Rj = juce::Justification::centredRight;
+                const auto M = juce::Justification::centred;
+                const auto DH = [&](const std::string& el, float x, float y, float Lw, const juce::String& label)
+                {
+                    auto& part = a.add(label);
+                    const float h = (Lw - 6.0f) / 2.0f;
+                    const Pt o(x, y);
+                    part.stroke.addLineSegment({ o, o + Pt(h, 0) }, 0);
+                    part.stroke.addTriangle(o + Pt(h, -3.5f), o + Pt(h, 3.5f), o + Pt(h + 6, 0));
+                    part.stroke.addLineSegment({ o + Pt(h + 6, -3.5f), o + Pt(h + 6, 3.5f) }, 0);
+                    part.stroke.addLineSegment({ o + Pt(h + 6, 0), o + Pt(Lw, 0) }, 0);
+                    two(el, Pt(x, y), Pt(x + Lw, y), el + ".id");
+                };
+                const auto outArrow = [&](float x, float y, const juce::String& label)
+                {
+                    auto& out = a.add({});
+                    out.fill.addTriangle({ x + 8, y }, { x, y - 3.5f }, { x, y + 3.5f });
+                    a.tx(x + 12, y, label, L);
+                };
+
+                // IC2a's pulse into both switches
+                pin(14, 40, "nv2", "IC2a'S PULSE", 8, 31, L); W({ { 14, 40 }, { 110, 40 }, { 110, 58 } }); W({ { 14, 40 }, { 14, 300 }, { 110, 300 }, { 110, 318 } });
+
+                // The open hat's switch
+                R("r17", 80, 40, 'v', 20, "R17 ~ 4.7 k"); W({ { 80, 60 }, { 80, 70 }, { 94, 70 } });
+                Q("q7", 110, 70, true, "Q7 ~ a PNP switch: it passes the pulse into the open hat");
+                R("r12", 80, 70, 'v', 20, "R12 ~ 22 k"); W({ { 80, 90 }, { 80, 98 } });
+                Q("q3", 80, 110, false, "Q3 ~ on while the open hat's step data stands"); gnd(80, 122);
+                pin(24, 110, "joh", "OH ON", 24, 121, M); W({ { 24, 110 }, { 28, 110 } }); R("r1", 28, 110, 'h', 18, "R1 ~ 22 k"); W({ { 46, 110 }, { 64, 110 } });
+                R("r8", 56, 110, 'v', 14, "R8 ~ 10 k"); gnd(56, 124);
+
+                // Q24 charges C62 (fed from C61); Q21 empties C60, which charges again through OH DECAY until Q22 drains C62
+                W({ { 110, 82 }, { 110, 96 }, { 140, 96 } }); W({ { 110, 96 }, { 110, 214 } });
+                R("r135", 140, 96, 'h', 22, "R135 ~ 10 k"); W({ { 162, 96 }, { 170, 96 } });
+                Q("q24", 186, 96, false, "Q24 ~ charges C62: the open hat's envelope");
+                W({ { 186, 84 }, { 186, 76 } }); R("r137", 186, 58, 'v', 18, "R137 ~ 470", true);
+                R("r136", 186, 40, 'v', 18, "R136 ~ 100"); supply(186, 40, true);
+                W({ { 186, 58 }, { 200, 58 } }); C("c61", 200, 58, 'v', 14, "C61 ~ 47 uF: both hats' supply"); gnd(200, 72);
+                W({ { 200, 58 }, { 330, 58 }, { 330, 310 }, { 186, 310 }, { 186, 318 } });
+                W({ { 186, 108 }, { 186, 190 } });
+                W({ { 186, 130 }, { 200, 130 } }); C("c62", 200, 130, 'v', 14, "C62 ~ 0.47 uF: the open hat's envelope"); gnd(200, 144);
+                W({ { 186, 150 }, { 214, 150 } }); R("r139", 214, 150, 'v', 18, "R139 ~ 1 M"); gnd(214, 168);
+                W({ { 186, 190 }, { 200, 190 } }); R("r134", 200, 190, 'h', 22, "R134 ~ 82 k"); W({ { 222, 190 }, { 290, 190 } });
+                Q("q22", 260, 202, false, "Q22 ~ drains C62 once C60 has charged: the open hat's decay"); gnd(260, 214);
+                Q("q23", 290, 202, false, "Q23 ~ drains C62 when the closed hat sounds: the choke"); gnd(290, 214);
+                R("r131", 110, 214, 'v', 18, "R131 ~ 22 k"); W({ { 110, 232 }, { 110, 240 }, { 124, 240 } });
+                R("r130", 116, 240, 'v', 14, "R130 ~ 10 k"); gnd(116, 254);
+                Q("q21", 140, 240, false, "Q21 ~ empties C60 at each open hat"); gnd(140, 252);
+                W({ { 140, 228 }, { 236, 228 } }); C("c60", 160, 228, 'v', 14, "C60 ~ 8 uF"); gnd(160, 242);
+                R("r132", 176, 206, 'v', 22, "R132 ~ 100 k"); POT("rvr3", 176, 184, 'v', 22, "VR3 OH DECAY ~ 2 M"); supply(176, 184, true);
+                R("r133", 236, 206, 'v', 22, "R133 ~ 10 k", true); W({ { 236, 206 }, { 236, 202 }, { 244, 202 } });
+
+                // Q29 follows C62 into the open hat's VCA, Q27 on the high band
+                W({ { 186, 118 }, { 350, 118 } }); R("r140", 350, 118, 'h', 22, "R140 ~ 33 k"); W({ { 372, 118 }, { 380, 118 } });
+                Q("q29", 396, 118, false, "Q29 ~ follows C62"); supply(396, 106, true);
+                W({ { 396, 130 }, { 396, 150 } }); R("r143", 396, 150, 'v', 14, "R143 ~ 33 k"); gnd(396, 164);
+                W({ { 396, 140 }, { 410, 140 } }); R("r144", 410, 140, 'h', 22, "R144 ~ 33 k"); W({ { 432, 140 }, { 470, 140 } });
+                C("c64", 444, 140, 'v', 14, "C64 ~ 1.5 nF"); gnd(444, 154);
+                DH("d13", 470, 140, 14, "D13"); W({ { 484, 140 }, { 530, 140 }, { 530, 152 } });
+                C("c65", 500, 140, 'v', 14, "C65 ~ 1.5 nF"); gnd(500, 154);
+                Q("q27", 530, 164, false, "Q27 ~ the open hat's swing VCA"); R("r145", 530, 176, 'v', 14, "R145 ~ 100"); gnd(530, 190);
+                W({ { 514, 164 }, { 490, 164 }, { 490, 212 } }); C("c67", 466, 196, 'h', 14, "C67 ~ 0.022 uF"); W({ { 480, 196 }, { 490, 196 } });
+                R("r149", 490, 212, 'h', 22, "R149 ~ 1 M", true); R("r148", 512, 190, 'v', 22, "R148 ~ 1 M"); supply(512, 190, true);
+
+                // The high band into both VCAs
+                pin(446, 300, "nhb", "HIGH BAND", 440, 300, Rj); W({ { 446, 300 }, { 458, 300 } });
+                W({ { 458, 196 }, { 458, 436 } }); W({ { 458, 196 }, { 466, 196 } }); W({ { 458, 436 }, { 466, 436 } });
+
+                // The open hat's high-pass, Q26, and IC7a with OH LEVEL
+                W({ { 456, 140 }, { 456, 110 }, { 560, 110 } }); C("c66", 560, 110, 'h', 14, "C66 ~ 1.5 nF"); W({ { 574, 110 }, { 590, 110 } });
+                C("c68", 590, 110, 'h', 14, "C68 ~ 1.5 nF"); W({ { 604, 110 }, { 620, 110 } }); R("r146", 612, 110, 'v', 14, "R146 ~ 68 k"); gnd(612, 124);
+                Q("q26", 636, 110, false, "Q26 ~ the follower of the high-pass"); supply(636, 98, true);
+                W({ { 582, 110 }, { 582, 140 } }); R("r147", 582, 140, 'h', 22, "R147 ~ 2.7 k"); W({ { 604, 140 }, { 636, 140 } }); W({ { 636, 122 }, { 636, 150 } });
+                R("r156", 636, 150, 'v', 14, "R156 ~ 22 k"); supply(636, 164, false);
+                W({ { 636, 134 }, { 660, 134 } }); C("c80", 660, 134, 'h', 14, "C80 ~ 470 pF"); R("r160", 674, 134, 'h', 22, "R160 ~ 39 k"); W({ { 696, 134 }, { 720, 134 } });
+                a.OP(720, 128, "IC7a ~ the open hat's output amplifier"); open(720, 134, "n7am"); open(720, 146, "n7ap"); term(Pt(746, 140), {}, "voh", true);
+                W({ { 720, 146 }, { 712, 146 } }); R("r158", 712, 146, 'v', 14, "R158 ~ 47 k"); gnd(712, 160);
+                W({ { 706, 134 }, { 706, 80 } });
+                C("c81", 706, 80, 'h', 14, "C81 ~ 33 uF"); POT("rvr7", 720, 80, 'h', 22, "VR7 OH LEVEL ~ 100 k"); W({ { 742, 80 }, { 760, 80 } });
+                R("r159", 706, 96, 'h', 22, "R159 ~ 470 k"); W({ { 728, 96 }, { 760, 96 } });
+                C("c79", 706, 112, 'h', 14, "C79 ~ 220 pF"); W({ { 720, 112 }, { 760, 112 } });
+                W({ { 746, 140 }, { 760, 140 }, { 760, 80 } }); W({ { 760, 140 }, { 780, 140 } }); outArrow(780, 140, "OH");
+
+                // The closed hat's switch
+                R("r16", 80, 300, 'v', 20, "R16 ~ 4.7 k"); W({ { 80, 320 }, { 80, 330 }, { 94, 330 } });
+                Q("q8", 110, 330, true, "Q8 ~ a PNP switch: it passes the pulse into the closed hat");
+                R("r11", 80, 330, 'v', 20, "R11 ~ 22 k"); W({ { 80, 350 }, { 80, 358 } });
+                Q("q4", 80, 370, false, "Q4 ~ on while the closed hat's step data stands"); gnd(80, 382);
+                pin(24, 370, "jch", "CH ON", 24, 381, M); W({ { 24, 370 }, { 28, 370 } }); R("r2", 28, 370, 'h', 18, "R2 ~ 22 k"); W({ { 46, 370 }, { 64, 370 } });
+                R("r7", 56, 370, 'v', 14, "R7 ~ 10 k"); gnd(56, 384);
+
+                // Q28 charges C63: the closed hat's envelope, which also chokes the open hat through R173 and Q23
+                W({ { 110, 342 }, { 110, 356 }, { 140, 356 } }); R("r13", 120, 356, 'v', 14, "R13 ~ 22 k"); gnd(120, 370);
+                R("r141", 140, 356, 'h', 22, "R141 ~ 33 k"); W({ { 162, 356 }, { 170, 356 } });
+                Q("q28", 186, 356, false, "Q28 ~ charges C63: the closed hat's envelope");
+                R("r138", 186, 318, 'v', 18, "R138 ~ 470"); W({ { 186, 336 }, { 186, 344 } });
+                W({ { 186, 368 }, { 186, 420 }, { 270, 420 } });
+                W({ { 186, 390 }, { 200, 390 } }); C("c63", 200, 390, 'v', 14, "C63 ~ 0.47 uF: the closed hat's envelope"); gnd(200, 404);
+                R("r173", 270, 398, 'v', 22, "R173 ~ 330 k: the choke", true); W({ { 270, 398 }, { 270, 202 }, { 274, 202 } });
+                W({ { 186, 380 }, { 340, 380 } }); R("r142", 340, 380, 'h', 22, "R142 ~ 33 k"); W({ { 362, 380 }, { 470, 380 } });
+
+                // The closed hat's VCA, Q30 on the high band
+                C("c69", 444, 380, 'v', 14, "C69 ~ 1.5 nF"); gnd(444, 394);
+                DH("d14", 470, 380, 14, "D14"); W({ { 484, 380 }, { 530, 380 }, { 530, 392 } });
+                C("c70", 500, 380, 'v', 14, "C70 ~ 1.5 nF"); gnd(500, 394);
+                Q("q30", 530, 404, false, "Q30 ~ the closed hat's swing VCA"); R("r152", 530, 416, 'v', 14, "R152 ~ 100"); gnd(530, 430);
+                W({ { 514, 404 }, { 490, 404 }, { 490, 452 } }); C("c71", 466, 436, 'h', 14, "C71 ~ 0.022 uF"); W({ { 480, 436 }, { 490, 436 } });
+                R("r150", 490, 452, 'h', 22, "R150 ~ 1 M", true); R("r151", 512, 430, 'v', 22, "R151 ~ 1 M"); supply(512, 430, true);
+
+                // The closed hat's high-pass, Q31, and IC7b with CH LEVEL
+                W({ { 370, 380 }, { 370, 350 }, { 560, 350 } }); C("c72", 560, 350, 'h', 14, "C72 ~ 1 nF"); W({ { 574, 350 }, { 590, 350 } });
+                C("c73", 590, 350, 'h', 14, "C73 ~ 1 nF"); W({ { 604, 350 }, { 620, 350 } }); R("r155", 612, 350, 'v', 14, "R155 ~ 68 k"); gnd(612, 364);
+                Q("q31", 636, 350, false, "Q31 ~ the follower of the high-pass"); supply(636, 338, true);
+                W({ { 582, 350 }, { 582, 380 } }); R("r153", 582, 380, 'h', 22, "R153 ~ 2.7 k"); W({ { 604, 380 }, { 636, 380 } }); W({ { 636, 362 }, { 636, 390 } });
+                R("r154", 636, 390, 'v', 14, "R154 ~ 22 k"); supply(636, 404, false);
+                W({ { 636, 374 }, { 660, 374 } }); C("c74", 660, 374, 'h', 14, "C74 ~ 470 pF"); R("r162", 674, 374, 'h', 22, "R162 ~ 33 k"); W({ { 696, 374 }, { 720, 374 } });
+                a.OP(720, 368, "IC7b ~ the closed hat's output amplifier"); open(720, 374, "n7bm"); open(720, 386, "n7bp"); term(Pt(746, 380), {}, "vch", true);
+                W({ { 720, 386 }, { 712, 386 } }); R("r157", 712, 386, 'v', 14, "R157 ~ 47 k"); gnd(712, 400);
+                W({ { 706, 374 }, { 706, 320 } });
+                C("c83", 706, 320, 'h', 14, "C83 ~ 33 uF"); POT("rvr8", 720, 320, 'h', 22, "VR8 CH LEVEL ~ 100 k"); W({ { 742, 320 }, { 760, 320 } });
+                R("r161", 706, 336, 'h', 22, "R161 ~ 470 k"); W({ { 728, 336 }, { 760, 336 } });
+                C("c82", 706, 352, 'h', 14, "C82 ~ 220 pF"); W({ { 720, 352 }, { 760, 352 } });
+                W({ { 746, 380 }, { 760, 380 }, { 760, 320 } }); W({ { 760, 380 }, { 780, 380 } }); outArrow(780, 380, "CH");
+            }
+
             void buildGraph()
             {
                 // Every wire corner, junction and part lead is a point; a wire is split where a point lies on it.
@@ -1988,7 +2280,14 @@ namespace cs808
         double now = 0.0, last = 0.0;
         int selected = -1;
         juce::Random random { 1980 };
-        Choices sheet;
+        // Which sheet: a button showing it, a menu of them all (ten no longer fit side by side, D278).
+        struct SheetMenu
+        {
+            std::vector<juce::String> options;
+            std::function<int()> get;
+            std::function<void(int)> set;
+            Chip chip;
+        } sheet;
         Chip play;
         juce::Slider time { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
     };
@@ -1996,18 +2295,38 @@ namespace cs808
     LidView::LidView(Processor& p) : impl(std::make_unique<Impl>()), processor(p)
     {
         auto& i = *impl;
-        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete", "Hand clap, complete", "Cowbell, complete", "Metal oscillators" };
-        i.sheet.fontHeight = 10.0f;
+        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete", "Hand clap, complete", "Cowbell, complete", "Metal oscillators", "Cymbal, complete", "Hi-hats, complete" };
+        i.sheet.chip.fontHeight = 10.5f;
+        i.sheet.chip.text = "Sheet: Whole board";
         i.sheet.get = [this] { return impl->showFull && impl->full ? 1 + impl->full->which : 0; };
         i.sheet.set = [this](int v)
         {
             impl->showFull = v >= 1 && v <= drumsDrawn;
             impl->selected = -1;
             impl->full = impl->showFull ? &impl->drum(v - 1) : nullptr;
+            impl->sheet.chip.text = "Sheet: " + impl->sheet.options[static_cast<std::size_t>(impl->sheet.get())];
+            impl->sheet.chip.repaint();
             resized();
             repaint();
         };
-        addAndMakeVisible(i.sheet);
+        i.sheet.chip.onClick = [this](const juce::MouseEvent&)
+        {
+            juce::PopupMenu menu;
+            const int now = impl->sheet.get();
+            for (int k = 0; k < static_cast<int>(impl->sheet.options.size()); ++k)
+            {
+                if (k == 1)
+                    menu.addSeparator();
+                menu.addItem(k + 1, impl->sheet.options[static_cast<std::size_t>(k)], true, k == now);
+            }
+            menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&impl->sheet.chip),
+                               [safe = juce::Component::SafePointer<LidView>(this)](int chosen)
+                               {
+                                   if (safe != nullptr && chosen > 0)
+                                       safe->impl->sheet.set(chosen - 1);
+                               });
+        };
+        addAndMakeVisible(i.sheet.chip);
         i.play.fontHeight = 10.5f;
         i.play.text = "Play the hit";
         i.play.isOn = [this] { return impl->full && impl->full->playing; };
@@ -2037,7 +2356,7 @@ namespace cs808
         juce::StringArray all;
         for (int d = 0; d < drumsDrawn; ++d)
             for (const auto& e : impl->drum(d).errors)
-                all.add(juce::String(d == metalShared ? "the metal oscillators: " : d == cowbell ? "the cowbell: " : d == handClap ? "the hand clap: " : d == rimShot ? "the rim shot: " : d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
+                all.add(juce::String(d == hiHats ? "the hi-hats: " : d == cymbal ? "the cymbal: " : d == metalShared ? "the metal oscillators: " : d == cowbell ? "the cowbell: " : d == handClap ? "the hand clap: " : d == rimShot ? "the rim shot: " : d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
         return all;
     }
 
@@ -2045,7 +2364,7 @@ namespace cs808
     {
         auto& i = *impl;
         auto bottom = getLocalBounds().removeFromBottom(24);
-        i.sheet.setBounds(bottom.removeFromRight(250).reduced(0, 1));
+        i.sheet.chip.setBounds(bottom.removeFromRight(250).reduced(0, 1));
         const bool full = i.showFull && i.full && i.full->rec.samples > 1;
         i.play.setVisible(full);
         i.time.setVisible(full);
@@ -2093,7 +2412,7 @@ namespace cs808
 
     void LidView::struck(std::uint32_t lanes)
     {
-        if (impl->showFull && impl->full && (lanes & (1u << laneOfDrum[impl->full->which])) != 0)
+        if (impl->showFull && impl->full && (lanes & ((1u << laneOfDrum[impl->full->which]) | (impl->full->which == hiHats ? 1u << 10 : 0u))) != 0)
         {
             impl->full->pos = 0.0; // its drum struck: the hit plays from the start
             impl->full->playing = true;

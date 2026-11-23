@@ -106,6 +106,10 @@ public:
             shoot("lid-cowbell");
             editor->lidForTesting().showSheet(7);
             shoot("lid-metal-oscillators");
+            editor->lidForTesting().showSheet(8);
+            shoot("lid-cymbal");
+            editor->lidForTesting().showSheet(9);
+            shoot("lid-hi-hats");
             editor->lidForTesting().showSheet(0);
             editor->lidView = false;
             editor->patternMode = true;

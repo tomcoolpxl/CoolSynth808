@@ -22,7 +22,8 @@ Snappy, the toms' Tuning and so on, and the Accent and Volume on the left. Click
 - Fill plays the bank's fill pattern once, in the next bar; shift-click it to edit the fill.
 - Rec writes the drums you play (on MIDI, or by clicking their names) on the nearest step while it runs.
 - Drag MIDI drags the pattern into your music software as a MIDI file.
-- Under the Lid shows the circuits as they are struck.
+- Under the Lid shows the circuits as they are struck, and each drum complete, every part of its circuit with the
+  currents ngspice records for it, from the Sheet menu.
 - Controller sets up a MIDI controller: the main knob chooses the drum, knobs follow it, pads play the drums or, after
   a press of the main knob, enter its steps. Click a place and move the control to link it. Input says which MIDI
   input is the controller; Auto finds it, and notes from your other inputs then only play the drums.
