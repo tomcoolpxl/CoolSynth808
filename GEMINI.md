@@ -19,7 +19,9 @@ The shared project memory for every AI tool (`CLAUDE.md` points here).
   the message thread and reaches the audio thread through a lock the audio thread only tries.
 - `src/Project`: the project, pattern files and the library's compact form, as JSON. `src/Library`: the built-in
   beats (`resources/library/patterns.json`, compiled in) and the user's (`%APPDATA%\CoolSynth808\Patterns`).
-- `src/Editor` and `src/ui`: the panel, its widgets and themes, Under the Lid.
+- `src/Editor` and `src/ui`: the panel, its widgets and themes, Under the Lid, the controller setup.
+- `src/midi`: CoolSynth's controller layer, ported (D268), with its own `%APPDATA%\CoolSynth808\controller.json`;
+  `src/Controls` says what each place does in the 808. Pads strike on the audio thread (`Processor::setPadNotes`).
 - `tests/`: the app's tests (`CoolSynth808Tests`); the engine's run in the engine's repository.
 
 ## Rules
