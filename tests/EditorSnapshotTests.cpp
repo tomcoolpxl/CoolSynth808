@@ -101,6 +101,38 @@ public:
             shoot("lid-struck");
             editor->lidForTesting().tick(1400.0);
             shoot("lid-struck-400ms");
+            // With COOLSYNTH808_FRAMES set, a bar of a plain beat at 120 BPM, one frame every 20 ms, on the board
+            // and on the hi-hats sheet: the animation as the app plays it, to watch without the app.
+            if (juce::SystemStats::getEnvironmentVariable("COOLSYNTH808_FRAMES", {}).isNotEmpty())
+            {
+                const auto frames = folder.getChildFile("frames");
+                frames.createDirectory();
+                for (const int sheet : { 0, 9 })
+                {
+                    editor->lidForTesting().showSheet(sheet);
+                    const double start = 10000.0 + sheet * 10000.0;
+                    int nextStep = 0;
+                    for (int f = 0; f < 100; ++f)
+                    {
+                        const double now = start + f * 20.0;
+                        editor->lidForTesting().tick(now);
+                        for (; nextStep < 16 && nextStep * 125.0 <= f * 20.0; ++nextStep)
+                        {
+                            unsigned lanes = 1u << 10;                              // the closed hat on every step
+                            if (nextStep % 8 == 0 || nextStep == 10) lanes |= 1u << 0;   // the bass drum
+                            if (nextStep % 8 == 4) lanes |= 1u << 1;                // the snare
+                            if (nextStep == 14) lanes = (lanes & ~(1u << 10)) | (1u << 9);  // an open hat
+                            editor->lidForTesting().struck(lanes);
+                        }
+                        editor->layoutForLanes();
+                        const auto image = editor->createComponentSnapshot(editor->getLocalBounds(), true, 1.0f);
+                        juce::FileOutputStream out(frames.getChildFile(juce::String(sheet) + "-" + juce::String(f).paddedLeft('0', 3) + ".png"));
+                        out.setPosition(0);
+                        out.truncate();
+                        juce::PNGImageFormat().writeImageToStream(image, out);
+                    }
+                }
+            }
             editor->lidForTesting().showSheet(1);
             shoot("lid-bass-drum");
             editor->lidForTesting().showSheet(2);

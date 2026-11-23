@@ -2573,11 +2573,12 @@ namespace cs808
 
     void LidView::struck(std::uint32_t lanes)
     {
-        if (impl->showFull && impl->full && (lanes & ((1u << laneOfDrum[impl->full->which]) | (impl->full->which == hiHats ? 1u << 10 : 0u))) != 0)
-        {
-            impl->full->pos = 0.0; // its drum struck: the hit plays from the start
+        // Its drum struck, the hit plays from the start, slowed down; strikes while it plays are held off until it is
+        // through, as a scope's trigger holdoff does, or a beat restarts it every step and only the trigger shows.
+        // A hit paused or moved on its slider stays where it is.
+        if (impl->showFull && impl->full && ! impl->full->playing && impl->full->pos <= 0.0
+            && (lanes & ((1u << laneOfDrum[impl->full->which]) | (impl->full->which == hiHats ? 1u << 10 : 0u))) != 0)
             impl->full->playing = true;
-        }
         const auto& kit = processor.project().kit;
         for (int l = 0; l < laneCount; ++l)
         {
