@@ -1,0 +1,875 @@
+"""Builds patterns.json for the CoolSynth 808 pattern library and validates it."""
+import json
+import re
+import sys
+
+OUT = sys.argv[1]
+
+LANES = ["BD", "SD", "LT", "MT", "HT", "LC", "MC", "HC", "RS", "CL", "CP", "MA", "CB", "CY", "OH", "CH"]
+STYLES = {"electro", "hip-hop", "miami-bass", "rnb", "acid-house", "chicago-house", "detroit-techno",
+          "pop", "trap", "other", "big-beat", "breakbeat", "idm", "jungle"}
+STEP = re.compile(r"^[x.23]{16}$")
+EXCLUSIVE = [("LT", "LC"), ("MT", "MC"), ("HT", "HC"), ("RS", "CL"), ("CP", "MA")]
+
+
+def L(a, b=None, length=None):
+    d = {"A": a}
+    if b is not None:
+        d["B"] = b
+    if length is not None:
+        d["length"] = length
+    return d
+
+
+def ACC(a, b=None):
+    d = {"A": a}
+    if b is not None:
+        d["B"] = b
+    return d
+
+
+B = []
+
+
+def beat(**k):
+    B.append(k)
+
+
+# ---------------------------------------------------------------- electro / early hip hop
+beat(id="electro-1982", name="Electro 1982", style="electro", year=1982, bpm=127, swing=50, variations="AB",
+     after="Afrika Bambaataa & the Soulsonic Force, \"Planet Rock\" (1982), produced by Arthur Baker and John Robie, whose 808 beat was copied from Kraftwerk's \"Numbers\"",
+     lanes={"BD": L("x.....x...x.....", "x.....x...x..x.."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxx.x"),
+            "OH": L(None or "................", "..............x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="medium",
+     sources=["https://www.soundonsound.com/techniques/classic-tracks-afrika-bambaataa-soulsonic-force-planet-rock",
+              "https://www.musicradar.com/how-to/how-to-program-a-classic-electro-drum-track",
+              "https://acousticbrainz.org/67103e36-521c-4f0e-b2bd-e713d2af07e7"],
+     notes="Kick and handclap only, no snare, as Baker describes; the kick falls on 1, the and of 2 and the and of 3, with a pickup in bar two. Give the kick a long decay.")
+
+beat(id="electro-1983", name="Electro 1983", style="electro", year=1983, bpm=125, swing=50, variations="AB",
+     after="Cybotron (Juan Atkins and Rick Davis), \"Clear\" (1983), the record that launched both electro and Detroit techno",
+     lanes={"BD": L("x......x..x.....", "x......x.xx....."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("x.x.x.x.x.x.x...", "x.x.x.x.x.x.x..."),
+            "OH": L("..............x.", "..............x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://www.attackmagazine.com/technique/beat-dissected/how-to-make-an-electro-beat-inspired-by-cybotrons-clear/",
+              "https://www.native-instruments.com/blogs/blog/808-beats"],
+     notes="Tempo, straight timing and the snare-plus-clap on 2 and 4 follow Attack's breakdown; the kick and hat placement are my reconstruction of the record.")
+
+beat(id="electro-1984", name="West Coast electro 1984", style="electro", year=1984, bpm=127, swing=50, variations="AB",
+     after="Egyptian Lover, \"Egypt, Egypt\" (1984), the Los Angeles electro anthem built on his own 808 programming",
+     lanes={"BD": L("x.....x.x.....x.", "x.....x.x.x....."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxxx...."),
+            "HT": L("................", "............x..."),
+            "MT": L("................", ".............x.."),
+            "LT": L("................", "..............xx")},
+     accent=ACC("....x.......x...", "....x.......xxxx"),
+     confidence="low",
+     sources=["https://daily.redbullmusicacademy.com/2013/01/egyptian-lover-key-tracks",
+              "https://splice.com/blog/?p=28409",
+              "https://articles.roland.com/listening-guide-the-future-is-still-808-ep-01-the-origins/"],
+     notes="A reconstruction in his style: driving sixteenth hats, claps on 2 and 4, a syncopated kick and an accented tom run closing bar two. The tempo is a DJ-database estimate.")
+
+beat(id="hip-hop-1984", name="Hip hop 1984", style="hip-hop", year=1984, bpm=102, swing=54, variations="AB",
+     after="T La Rock & Jazzy Jay, \"It's Yours\" (1984), beats programmed by Rick Rubin, the first Def Jam release",
+     lanes={"BD": L("x.........x.....", "x......x..x..x.."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://www.native-instruments.com/blogs/blog/best-808-tracks",
+              "https://passionweiss.com/2020/11/06/the-making-of-t-la-rocks-its-yours",
+              "https://articles.roland.com/listening-guide-the-future-is-still-808-ep-01-the-origins/"],
+     notes="Stripped down: snare and clap together, a sparse kick turned into a bassline by raising its decay all the way, as both Native Instruments and Roland describe.")
+
+beat(id="hip-hop-1986", name="Hip hop 1986", style="hip-hop", year=1986, bpm=104, swing=52, variations="AB",
+     after="Beastie Boys, \"Paul Revere\" (1986), Adam Yauch's 808 beat played backwards on tape, produced with Rick Rubin",
+     lanes={"BD": L("x..x......x..x..", "x..x......x....."),
+            "SD": L("....x.......x...", "....x.......x...")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/Paul_Revere_(song)",
+              "https://www.songfacts.com/facts/beastie-boys/paul-revere",
+              "https://www.udiscovermusic.com/stories/licensed-to-ill-beastie-boys-album/"],
+     notes="The record's sound is a reversed tape of an 808 kick and snare; this is the rhythm as heard, with long-decay kick and snare. Reverse the rendered loop to get the swelling attacks.")
+
+# ---------------------------------------------------------------- R&B, soul, pop
+beat(id="rnb-1982", name="Electronic soul 1982", style="rnb", year=1982, bpm=94, swing=52, variations="AB",
+     after="Marvin Gaye, \"Sexual Healing\" (1982), with the 808 programmed by Gaye himself",
+     lanes={"BD": L("x......x..x....x", "x......x..x....."),
+            "SD": L("...x..x....x..x.", "...x..x....x.xx."),
+            "CL": L("..x.....x.x.....", "..x.....x.x....."),
+            "CP": L("........x.......", "........x......."),
+            "HT": L("..............x.", "...............x"),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x..."),
+            "OH": L("................", "..............x.")},
+     accent=ACC("x.......x.......", "x.......x......."),
+     confidence="medium",
+     sources=["https://www.attackmagazine.com/technique/beat-dissected/80s-electronic-soul/",
+              "https://www.gearnews.com/the-rhythm-composer-famous-808-patterns",
+              "https://en.wikipedia.org/wiki/Sexual_Healing"],
+     notes="Two bars with a loose, reggae-like kick, a ticking snare used like a hat, claves, two high-tom notes in two bars and one clap a bar, all as Attack and Gearnews describe; the exact steps are mine.")
+
+beat(id="rnb-1983", name="Minneapolis R&B 1983", style="rnb", year=1983, bpm=101, swing=54, variations="AB",
+     after="The S.O.S. Band, \"Just Be Good to Me\" (1983), written and produced by Jimmy Jam and Terry Lewis",
+     lanes={"BD": L("x.....x.x.......", "x.....x.x.x....."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxx.x"),
+            "OH": L("................", "..............x.")},
+     accent=ACC("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x."),
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/Just_Be_Good_to_Me",
+              "https://www.gearnews.com/the-rhythm-composer-famous-808-patterns",
+              "https://acousticbrainz.org/0f927dfb-d4d3-4d85-94d1-37769e762f59"],
+     notes="Snare and clap backbeat over sixteenth hats accented on the eighths, with a syncopated kick; the steps are a reconstruction.")
+
+beat(id="freestyle-1983", name="Freestyle 1983", style="other", year=1983, bpm=117, swing=50, variations="AB",
+     after="Shannon, \"Let the Music Play\" (1983), produced by Chris Barbosa and Mark Liggett, the record that started freestyle",
+     lanes={"BD": L("x..x..x...x.....", "x..x..x...x..x.."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x....."),
+            "HT": L("................", "............x..."),
+            "MT": L("................", ".............x.."),
+            "LT": L("................", "..............x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/Let_the_Music_Play_(Shannon_song)",
+              "https://daily.redbullmusicacademy.com/2015/09/key-tracks-shannon-let-the-music-play",
+              "https://articles.roland.com/listening-guide-the-future-is-still-808-ep-01-the-origins/"],
+     notes="The syncopated 3-3-2 kick under a gated snare and clap; on the record the kick and snare were run through a hard-gated reverb, so add one after the machine.")
+
+beat(id="synth-pop-1983", name="Synth-pop 1983", style="pop", year=1983, bpm=130, swing=50, variations="AB",
+     after="New Order, \"Blue Monday\" (1983), programmed by Stephen Morris on an Oberheim DMX, played here on 808 sounds",
+     lanes={"BD": L("x...x...x...x...", "x...x...xxxxxxxx"),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "OH": L("..x...x...x...x.", "..x...x...x...x.")},
+     confidence="medium",
+     sources=["https://reverb.com/news/the-happy-drum-machine-accident-that-produced-new-orders-best-known-hit",
+              "https://www.muzines.co.uk/articles/the-rhythm-method/11035",
+              "https://laughingsquid.com/blue-monday-drum-pattern/",
+              "https://www.musicradar.com/artists/he-spent-all-day-programming-a-backing-track-then-ripped-the-power-cable-out-with-his-bloody-foot-and-lost-all-the-drum-programming-the-new-order-classic-stolen-from-a-donna-summer-b-side"],
+     notes="Four-on-the-floor with the famous run of eight sixteenth kicks on beats 3 and 4 of every second bar; the snare enters after the intro. Keep the kick's decay short and equal so the run does not smear.")
+
+beat(id="pop-1987", name="Dance-pop 1987", style="pop", year=1987, bpm=119, swing=50, variations="AB",
+     after="Whitney Houston, \"I Wanna Dance with Somebody (Who Loves Me)\" (1987), with the 808 programmed by Narada Michael Walden and Preston Glass",
+     lanes={"BD": L("x...x...x...x...", "x...x...x...x..."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CB": L("..x...xx..x...x.", "..x...xx..x.x.x."),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxxxx")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="medium",
+     sources=["https://www.mixonline.com/recording/classic-tracks/classic-tracks-i-wanna-dance-with-somebody-who-loves-me",
+              "https://en.wikipedia.org/wiki/I_Wanna_Dance_with_Somebody",
+              "https://articles.roland.com/?p=109641"],
+     notes="Booming kicks, handclaps and a cowbell that runs through the whole song, as Roland and Mix describe; the cowbell's exact figure is my reading of the record.")
+
+beat(id="new-jack-swing-1988", name="New jack swing 1988", style="rnb", year=1988, bpm=106, swing=66, variations="AB",
+     after="Teddy Riley's productions, Keith Sweat \"I Want Her\" (1987) and Bobby Brown \"My Prerogative\" (1988)",
+     lanes={"BD": L("x.....xx..x.....", "x......x..x...x."),
+            "SD": L("....x.......x...", "....x.......x..3"),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxx..")},
+     accent=ACC("....x.......x...", "....x.......x..x"),
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/New_jack_swing",
+              "https://daily.redbullmusicacademy.com/2017/05/teddy-riley-new-jack-swing-oral-history",
+              "https://mixdownmag.com.au/features/columns/producer-focus-teddy-riley"],
+     notes="Heavy swing on the sixteenths, a hard snare and clap on 2 and 4, a swung kick and a triplet roll into the next bar, the style's hallmarks rather than one record's transcription.")
+
+beat(id="pop-2008", name="Electro-pop R&B 2008", style="pop", year=2008, bpm=120, swing=50, variations="AB",
+     after="Kanye West, \"Love Lockdown\" (2008), from 808s & Heartbreak: an 808 heartbeat in the verse, taiko drums in the chorus",
+     lanes={"BD": L("x..x....x..x....", "x..x....x..x...."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "LT": L("................", "x..x..x...x..x.."),
+            "MT": L("................", "....x.......x..."),
+            "HT": L("................", "..............xx")},
+     accent=ACC("x.......x.......", "x...x..xx...x.xx"),
+     confidence="low",
+     sources=["https://articles.roland.com/love-lockdown-kanye-west/",
+              "https://en.wikipedia.org/wiki/Love_Lockdown",
+              "https://www.rollingstone.com/music/music-features/making-of-808s-heartbreak-759011/"],
+     notes="A is the verse's double-beat heartbeat kick, B the chorus with the taiko part given to the 808 toms; tune the toms low and long.")
+
+beat(id="pop-2005", name="Stomp pop 2005", style="pop", year=2005, bpm=111, swing=50, variations="AB",
+     after="Gwen Stefani, \"Hollaback Girl\" (2005), produced by the Neptunes",
+     lanes={"BD": L("x.......x.x.....", "x.......x.x....."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "SD": L("................", "....x..x.x.xx.3.")},
+     accent=ACC("x...x...x...x...", "x...x...x...x..."),
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/Hollaback_Girl",
+              "https://cs.uwaterloo.ca/~dtompkin/music/track/CHRRADIO_091/CHRRADIO_091-01.html"],
+     notes="Stomp and handclap carry it; bar B adds the marching-snare figure of the chorus. Tempo from DJ databases; the stomp placement is my reading of the record.")
+
+beat(id="hip-hop-2004", name="West Coast minimal 2004", style="hip-hop", year=2004, bpm=92, swing=54, variations="AB",
+     after="Snoop Dogg featuring Pharrell, \"Drop It Like It's Hot\" (2004), produced by the Neptunes",
+     lanes={"BD": L("x.........x.....", "x......x..x....."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "RS": L(".x.x..x...x.x..x", ".x.x..x...x.x.x.")},
+     accent=ACC(".x....x.......x.", ".x....x.......x."),
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/Drop_It_Like_It%27s_Hot",
+              "https://www.flavorwire.com/382507/happy-40th-birthday-pharrell-the-10-best-neptunes-productions-of-all-time",
+              "https://cs.uwaterloo.ca/~dtompkin/music/track/RADIO204_12A/RADIO204_12A-07.html"],
+     notes="Tongue clicks on the rim shot, a white-noise burst on the snare (snappy up, tone down) and a sparse kick; the click figure is my reading of the record.")
+
+# ---------------------------------------------------------------- Miami bass and the South
+beat(id="miami-bass-1985", name="Miami bass 1985", style="miami-bass", year=1985, bpm=132, swing=50, variations="AB",
+     after="MC A.D.E., \"Bass Rock Express\" (1985), produced by Amos Larkins II, often called the first Miami bass record",
+     lanes={"BD": L("x.........x.....", "x.........x..x.."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x..."),
+            "OH": L("................", "..............x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/MC_ADE",
+              "https://daily.redbullmusicacademy.com/2015/10/amos-larkins-interview",
+              "https://www.complex.com/music/2011/12/the-50-best-miami-rap-songs/throw-the-p"],
+     notes="Few, long kicks with the decay turned right up so each boom holds like a bass note, under claps and eighth hats.")
+
+beat(id="miami-bass-1986", name="Miami bass 1986", style="miami-bass", year=1986, bpm=123, swing=50, variations="AB",
+     after="2 Live Crew, \"Throw the D\" (1986), built by Mr. Mixx on a TR-808",
+     lanes={"BD": L("x......xx.x.....", "x......xx.x..x.."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxx.x"),
+            "OH": L("................", "..............x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://daily.redbullmusicacademy.com/2016/07/mr-mixx-interview",
+              "https://en.wikipedia.org/wiki/Mr._Mixx",
+              "https://www.cs.uwaterloo.ca/~dtompkin/music/track/TWOLIVCR_GH1/TWOLIVCR_GH1-02.html"],
+     notes="Sustained 808 kicks in the Planet Rock lineage under sixteenth hats; the record also layers the \"Dance to the Drummer's Beat\" break, which this pattern leaves out.")
+
+beat(id="miami-bass-1993", name="Atlanta bass 1993", style="miami-bass", year=1993, bpm=129, swing=50, variations="AB",
+     after="Tag Team, \"Whoomp! (There It Is)\" (1993), produced by Steve Roll'n and DC the Brain Supreme",
+     lanes={"BD": L("x.....x...x..x..", "x.....x.x.x....."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("xx.xxx.xxx.xxx.x", "xx.xxx.xxx.xxx.x"),
+            "OH": L("..x...x...x...x.", "..x...x...x...x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/Whoomp!_(There_It_Is)",
+              "https://cs.uwaterloo.ca/~dtompkin/music/track/POWERTRK_010/POWERTRK_010-05.html"],
+     notes="A reconstruction of the party-bass groove; tempo from a DJ database.")
+
+beat(id="miami-bass-1994", name="Jacksonville bass 1994", style="miami-bass", year=1994, bpm=131, swing=50, variations="AB",
+     after="69 Boyz, \"Tootsee Roll\" (1994), produced by Quad City DJ's (Jay Ski and Lemonhead)",
+     lanes={"BD": L("x..x......x..x..", "x..x..x...x....."),
+            "CP": L("....x.......x...", "....x.......x.xx"),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x."),
+            "OH": L("...x.......x....", "...x.......x....")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/Tootsee_Roll",
+              "https://cs.uwaterloo.ca/~dtompkin/music/track/POWERTRK_076/POWERTRK_076-04.html"],
+     notes="A reconstruction; the tempo is a DJ-database figure between 131 and 133.")
+
+beat(id="bounce-1986", name="Bounce 1986", style="hip-hop", year=1986, bpm=102, swing=52, variations="AB",
+     after="The Showboys, \"Drag Rap\" (1986), whose 808 section became the Triggerman beat at the root of New Orleans bounce",
+     lanes={"BD": L("x..x..x...x.....", "x..x..x...x..x.."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CB": L("..x...x...x...x.", "..x...x.x.x...x."),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://daily.redbullmusicacademy.com/2018/06/loop-history-triggerman",
+              "https://afropop.org/articles/let-the-beat-build-a-bounce-rhythm-primer",
+              "https://en.wikipedia.org/wiki/Triggerman_(beat)"],
+     notes="Kick, snare, cowbell and hat in the order the producers laid them down; the syncopation is my reading of the 808 section, not a verified transcription.")
+
+beat(id="memphis-1995", name="Memphis rap 1995", style="hip-hop", year=1995, bpm=74, swing=50, variations="AB",
+     after="the Memphis underground of DJ Spanish Fly and early Three 6 Mafia (DJ Paul and Juicy J)",
+     lanes={"BD": L("x.....x...x....x", "x.....x.x......."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CB": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.xxxx"),
+            "CH": L("x.x.x.x.x.x.x3x3", "x.x.x.x3x.x.x3x3")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://futureaudioworkshop.com/?p=633508",
+              "https://splice.com/blog/what-is-memphis-rap/",
+              "https://en.wikipedia.org/wiki/Memphis_rap"],
+     notes="Slow, with the 808 cowbell, booming sub kicks, sharp snares and hat rolls the sources name as the style's backbone; a style tribute.")
+
+beat(id="hip-hop-1999", name="New Orleans hip hop 1999", style="hip-hop", year=1999, bpm=92, swing=54, variations="AB",
+     after="Mannie Fresh's 808 productions for Cash Money, above all Juvenile's \"Back That Thang Up\" (1999)",
+     lanes={"BD": L("x.......x.x.....", "x......xx......."),
+            "SD": L("................", "............x.3."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("xx.xxx.xxx.xxx.x", "xx.xxx.xxx.xxx.x"),
+            "OH": L("..x...x...x...x.", "..x...x...x...x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://articles.roland.com/?p=110003",
+              "https://en.wikipedia.org/wiki/Back_That_Azz_Up"],
+     notes="Roland says nearly the whole rhythm track is 808; the steps are a reconstruction with a snare roll into the turn.")
+
+beat(id="crunk-2003", name="Crunk 2003", style="hip-hop", year=2003, bpm=101, swing=50, variations="AB",
+     after="Lil Jon & the East Side Boyz featuring Ying Yang Twins, \"Get Low\" (2003)",
+     lanes={"BD": L("x.x.....x.x.....", "x.x.....x.x..x.."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="medium",
+     sources=["https://en.wikipedia.org/wiki/Get_Low_(Lil_Jon_%26_the_East_Side_Boyz_song)",
+              "https://music.apple.com/nz/playlist/lil-jon-essentials/pl.ebe3fa749987450c8e485bc54cc8a0d9",
+              "https://cs.uwaterloo.ca/~dtompkin/music/track/RADIO203_12A/RADIO203_12A-13.html",
+              "https://articles.roland.com/?p=110003"],
+     notes="The boom-boom-clap: two kicks an eighth apart, then the clap; long 808 kick for the low end.")
+
+beat(id="crunk-rnb-2004", name="Crunk&B 2004", style="rnb", year=2004, bpm=105, swing=50, variations="AB",
+     after="Usher featuring Lil Jon and Ludacris, \"Yeah!\" (2004), produced by Lil Jon",
+     lanes={"BD": L("x.......x.x.....", "x.....x...x....."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxxx2x2x")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://www.wikipedia.org/wiki/Yeah_(Usher_song)",
+              "https://daily.redbullmusicacademy.com/2019/09/lil-jon-usher-ludacris-yeah",
+              "https://cs.uwaterloo.ca/~dtompkin/music/track/RADIO204_03A/RADIO204_03A-06.html"],
+     notes="A reconstruction; tempo 105 from the published sheet music. The sources do not confirm 808 sounds on this record, so it is a crunk-style tribute on the 808.")
+
+beat(id="snap-2005", name="Snap 2005", style="hip-hop", year=2005, bpm=80, swing=54, variations="AB",
+     after="Atlanta snap: D4L \"Laffy Taffy\" (2005) and Dem Franchize Boyz \"Lean wit It, Rock wit It\" (2006)",
+     lanes={"BD": L("x......x.......x", "x.........x....."),
+            "CL": L("....x.......x...", "....x.......x..."),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.xx")},
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/Snap_music",
+              "https://stereogum.com/2209651/the-number-ones-d4ls-laffy-taffy/columns/the-number-ones",
+              "https://en.wikipedia.org/wiki/Laffy_Taffy_(song)"],
+     notes="A finger snap where the snare would be (the claves stand in for the snap), a sparse 808 kick and hats, the parts Wikipedia lists for the style.")
+
+beat(id="snap-2007", name="Snap 2007", style="hip-hop", year=2007, bpm=70, swing=50, variations="AB",
+     after="Soulja Boy, \"Crank That (Soulja Boy)\" (2007), made with FL Studio's stock sounds",
+     lanes={"BD": L("x.........x.....", "x......x..x....."),
+            "CL": L("....x.......x...", "....x.......x..."),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxx2x2x2")},
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/Crank_That_(Soulja_Boy)",
+              "https://www.vice.com/en/article/fl-studio-soulja-boy-porter-robinson-madeon-feature"],
+     notes="Snaps, hats and a sparse kick; the steel-drum hook is melodic and not part of the kit. Not made on an 808; a tribute in the snap style, tempo felt at 70 (140 double time).")
+
+beat(id="trap-2010", name="Trap 2010", style="trap", year=2010, bpm=150, swing=50, variations="AB",
+     after="Lex Luger's productions, above all Waka Flocka Flame \"Hard in da Paint\" (2010)",
+     lanes={"BD": L("x.....x.......x.", "x.....x...x....."),
+            "SD": L("........x.......", "........x.....33"),
+            "CP": L("........x.......", "........x......."),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x2x2"),
+            "CY": L("x...............", "................")},
+     accent=ACC("........x.......", "........x......."),
+     confidence="low",
+     sources=["https://blog.native-instruments.com/watch-lex-luger-build-a-cinematic-trap-beat-with-maschine/",
+              "https://www.native-instruments.com/blogs/blog/how-to-make-a-trap-beat",
+              "https://en.wikipedia-on-ipfs.org/wiki/Hard_in_da_Paint"],
+     notes="Half-time snare and clap on beat 3, a long tuned 808 kick, eighth hats breaking into rolls and a snare roll into the next bar; a style tribute.")
+
+beat(id="drill-2012", name="Chicago drill 2012", style="trap", year=2012, bpm=132, swing=50, variations="AB",
+     after="Young Chop's beats for Chief Keef, above all \"I Don't Like\" (2012)",
+     lanes={"BD": L("x.....x.........", "x.....x...x....."),
+            "SD": L("........x.......", "........x......x"),
+            "CP": L("........x.......", "........x......."),
+            "CH": L("x.x.x.x.x2x.x.x.", "x.x.x.x.x.x.x3x3")},
+     accent=ACC("........x.......", "........x......."),
+     confidence="low",
+     sources=["https://www.xxlmag.com/young-chop-i-dont-like-best-beat-all-time/",
+              "https://getsongbpm.com/song/i-don-t-like-remix-explicit/yw1P3w",
+              "https://www.complex.com/music/2012/12/young-chops-25-favorite-beats/"],
+     notes="Sparse 808 kicks, a half-time snare and clap, and rolling hats; a style tribute, tempo from a database entry for the remix.")
+
+beat(id="trap-2016", name="Atlanta trap 2016", style="trap", year=2016, bpm=127, swing=50, variations="AB",
+     after="Metro Boomin's productions, above all Migos featuring Lil Uzi Vert \"Bad and Boujee\" (2016)",
+     lanes={"BD": L("x......x..x.....", "x......x.x......"),
+            "CP": L("........x.......", "........x......."),
+            "SD": L("........x.......", "........x......."),
+            "CH": L("x.x.x3x.x.x.x3x.", "x.x.x3x.x3x.3333"),
+            "OH": L("................", "..............x.", )},
+     accent=ACC("........x.......", "........x......."),
+     confidence="low",
+     sources=["https://medium.com/that-good-you-need/weekly-billboard-theory-bad-and-boujee-a6b3723efe8b",
+              "https://www.musicradar.com/how-to/how-to-program-6-classic-hip-hop-trap-and-grime-beats"],
+     notes="Eighth hats with triplet-like rolls, half-time clap and snare, syncopated 808. The grid has no true triplets; the rolls stand in for them.")
+
+beat(id="drill-2018", name="UK drill 2018", style="trap", year=2018, bpm=142, swing=50, variations="AB",
+     after="the London drill sound of the late 2010s (67, Headie One, Skengdo x AM and their producers)",
+     lanes={"BD": L("x.........x.....", "x......x........"),
+            "SD": L("........x.......", "...x........x..x"),
+            "CH": L("x..x..x.x..x..x.", "x..x..x.x..x.3x.")},
+     accent=ACC("........x.......", "............x..."),
+     confidence="medium",
+     sources=["https://www.attackmagazine.com/technique/beat-dissected/uk-drill/",
+              "https://beatstorapon.com/blog/how-to-make-a-drill-beat/",
+              "https://violetrecording.com/how-to-make-uk-drill-beats/"],
+     notes="The 3-3-2 hat figure Attack describes, the snare on beat 3 of bar one and beat 4 of bar two with ghost notes, as Beatstorapon describes; the 808 bass slides belong to a melodic part, not this kit.")
+
+beat(id="drill-2019", name="Brooklyn drill 2019", style="trap", year=2019, bpm=142, swing=50, variations="AB",
+     after="808Melo's beats for Pop Smoke, \"Welcome to the Party\" and \"Dior\" (2019)",
+     lanes={"BD": L("x......x...x....", "x.....x...x....."),
+            "SD": L("........x.......", "............x..."),
+            "CP": L("........x.......", "............x..."),
+            "RS": L("..x.......x.....", "..x.......x...x."),
+            "CH": L("x..x..x...x..x..", "x..x..x...x.3x..")},
+     accent=ACC("........x.......", "............x..."),
+     confidence="low",
+     sources=["https://articles.roland.com/?p=110003",
+              "https://en.wikipedia.org/wiki/808Melo",
+              "https://articles.roland.com/?p=29732"],
+     notes="UK drill's skeleton with more space left in the beat, as 808Melo puts it; the gliding 808 bass is a melodic part outside this kit.")
+
+# ---------------------------------------------------------------- acid and Chicago house
+beat(id="acid-1982", name="Proto-acid 1982", style="acid-house", year=1982, bpm=124, swing=50, variations="AB",
+     after="Charanjit Singh, Synthesizing: Ten Ragas to a Disco Beat (1982), 808, 303 and Jupiter-8 five years before Chicago acid",
+     lanes={"BD": L("x...x...x...x...", "x...x...x...x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("x...x...x...x...", "x...x...x...x..."),
+            "OH": L("..x...x...x...x.", "..x...x...x...x."),
+            "LT": L("................", "..........x.x.x.")},
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/Synthesizing:_Ten_Ragas_to_a_Disco_Beat",
+              "https://articles.roland.com/listening-guide-the-future-is-still-808-ep-01-the-origins/",
+              "https://djmag.com/features/how-charanjit-singh-reimagined-indian-classical-music-electronic-age"],
+     notes="A plain disco beat as the album's title promises, with a low-tom fill; the tempo is my estimate.")
+
+beat(id="chicago-house-1984", name="Chicago house 1984", style="chicago-house", year=1984, bpm=122, swing=54, variations="AB",
+     after="Jesse Saunders and Vince Lawrence, \"On and On\" (1984), recorded on a TR-808, widely called the first house record",
+     lanes={"BD": L("x...x...x...x...", "x...x...x...x..."),
+            "SD": L("....x.......x.x.", "....x..x....x.xx"),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("xx.xxx.xxx.xxx.x", "xx.xxx.xxx.xxx.x"),
+            "OH": L("..x...x...x...x.", "..x...x...x...x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="medium",
+     sources=["https://en.wikipedia.org/wiki/On_%26_On_(Jesse_Saunders_song)",
+              "https://musicradar.com/artists/this-particular-808-is-arguably-the-single-most-important-drum-machine-in-history-the-origin-of-house-music-in-5-key-tracks",
+              "https://medium.com/cuepoint/the-moment-house-music-was-born-1cd9a8d45a09"],
+     notes="Four-on-the-floor 808 kick with the shuffling snares MusicRadar describes; the snare steps and tempo are my reading.")
+
+beat(id="deep-house-1985", name="Deep house 1985", style="chicago-house", year=1985, bpm=120, swing=56, variations="AB",
+     after="Mr. Fingers (Larry Heard), \"Mystery of Love\" (1985), made on a TR-707 and Jupiter-6, played here on 808 sounds",
+     lanes={"BD": L("x...x...x...x...", "x...x...x...x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "SD": L("................", "..............xx"),
+            "CH": L("xx.xxx.xxx.xxx.x", "xx.xxx.xxx.xxx.."),
+            "OH": L("..x...x...x...x.", "..x...x...x...x."),
+            "CB": L("................", "...........x....")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://www.wnyc.org/story/classic-dose-larry-heard/",
+              "https://daily.redbullmusicacademy.com/2017/02/larry-heard-fingers-inc",
+              "https://en.wikipedia.org/wiki/Mystery_of_Love_(Larry_Heard_song)"],
+     notes="Steady kick, clap, sixteenth hats with open hats on the off-beats and a small snare pickup; the classic deep house skeleton rather than a verified transcription.")
+
+beat(id="chicago-house-1986", name="Piano house 1986", style="chicago-house", year=1986, bpm=123, swing=54, variations="AB",
+     after="Marshall Jefferson, \"Move Your Body (The House Music Anthem)\" (1986)",
+     lanes={"BD": L("x...x...x...x...", "x...x...x...x..."),
+            "SD": L(".......x.......x", ".......x.....xxx"),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("xx.xxx.xxx.xxx.x", "xx.xxx.xxx.xxx.."),
+            "OH": L("..x...x...x...x.", "..x...x...x...x.")},
+     accent=ACC("....x.......x...", "....x.......x.xx"),
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/Move_Your_Body_(Marshall_Jefferson_song)",
+              "https://gearspace.com/threads/interview-with-marshall-jefferson.1397606/"],
+     notes="A reconstruction; the drum machine on the record is not confirmed by the sources.")
+
+beat(id="acid-house-1987", name="Acid house 1987", style="acid-house", year=1987, bpm=120, swing=54, variations="AB",
+     after="Phuture (DJ Pierre, Spanky, Herb J), \"Acid Tracks\" (1987), drums on a TR-707 and TR-727, played here on 808 sounds",
+     lanes={"BD": L("x...x...x...x...", "x...x...x...x..."),
+            "CP": L("....x.......x...", "....x.......x.x."),
+            "CH": L("xx.xxx.xxx.xxx.x", "xx.xxx.xxx.xxx.x"),
+            "OH": L("..x...x...x...x.", "..x...x...x...x."),
+            "MC": L("x.......x.......", "x.......x...x..."),
+            "HC": L("...x..x....x..x.", "...x..x....x.x.x")},
+     confidence="medium",
+     sources=["https://articles.roland.com/lifetime-achievement-dj-pierre-and-phuture/",
+              "https://en.wikipedia.com/wiki/Acid_Trax",
+              "https://djmag.com/content/game-changers-phuture-acid-tracks"],
+     notes="707-style kick, clap and hats with the 727's Latin percussion given to the 808 congas; the 303 line is the record's point and sits outside the kit.")
+
+beat(id="acid-house-1988-uk", name="UK acid house 1988", style="acid-house", year=1988, bpm=120, swing=52, variations="AB",
+     after="A Guy Called Gerald, \"Voodoo Ray\" (1988), 808 driving a 303 and two SH-101s",
+     lanes={"BD": L("x..x....x.x.....", "x..x....x...x.x."),
+            "SD": L("....x.......x..x", "....x.x.....x.xx"),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxxxx")},
+     accent=ACC("..x...x...x...x.", "..x...x...x...x."),
+     confidence="low",
+     sources=["https://www.soundonsound.com/techniques/classic-tracks-guy-called-gerald-voodoo-ray",
+              "https://www.native-instruments.com/blogs/blog/best-808-tracks",
+              "https://daily.redbullmusicacademy.com/2013/01/key-tracks-guy-called-gerald-on-voodoo-ray"],
+     notes="A syncopated, broken 808 beat with subtle snare fills and hats brought to life by the accent, as Native Instruments describes; steps are my reconstruction.")
+
+beat(id="acid-house-1988-chicago", name="Chicago acid house 1988", style="acid-house", year=1988, bpm=118, swing=52, variations="AB",
+     after="Bam Bam (Chris Westbrook), \"Where's Your Child?\" (1988)",
+     lanes={"BD": L("x...x...x...x...", "x...x...x...x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "OH": L("..x...x...x...x.", "..x...x...x...x."),
+            "RS": L("...x.......x....", "...x.......x.x.x")},
+     confidence="low",
+     sources=["https://909originals.com/2017/10/05/throwback-thursday-bam-bam-wheres-your-child-1988/",
+              "https://en.wikipedia.org/wiki/Bam_Bam_(band)",
+              "https://factmag.com/2014/01/22/20-best-acid-house"],
+     notes="Slow and brooding, kept bare so the 303 and the voice carry it; the drum machine on the record is not confirmed.")
+
+beat(id="chicago-house-1989", name="Chicago house 1989", style="chicago-house", year=1989, bpm=120, swing=50, variations="AB",
+     after="Lil Louis, \"French Kiss\" (1989), drums from a TR-808 and TR-707",
+     lanes={"BD": L("x...x...x...x...", "x...x...x...x..."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x."),
+            "OH": L(".x...x...x...x..", ".x...x...x...x..")},
+     confidence="low",
+     sources=["https://direct.djmag.com/pointblank/point-blank-deconstruction-lil-louis-french-kiss-w-ski-oakenfull-live-bmc",
+              "https://en.wikipedia.org/wiki/French_Kiss_(Lil_Louis_song)"],
+     notes="Minimal kick, snare and hats; the record's famous move is slowing to a stop and back, so ride the tempo by hand.")
+
+beat(id="uk-house-1989", name="UK house 1989", style="other", year=1989, bpm=121, swing=52, variations="AB",
+     after="808 State, \"Pacific State\" (1989), whose drums were actually a TR-909 with an important clap pattern",
+     lanes={"BD": L("x...x...x...x...", "x...x...x...x..."),
+            "CP": L("....x..x....x...", "....x..x....x.xx"),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x."),
+            "OH": L("..x...x...x...x.", "..x...x...x...x.")},
+     confidence="low",
+     sources=["https://equipboard.com/albums/808-state-pacific",
+              "https://www.soundonsound.com/techniques/classic-tracks-808-state-pacific-state",
+              "https://en.wikipedia.org/wiki/Pacific_State_(song)"],
+     notes="Graham Massey says the clap pattern matters most; the clap figure here is my reading of it.")
+
+beat(id="ghetto-house-1995", name="Ghetto house 1995", style="chicago-house", year=1995, bpm=132, swing=54, variations="AB",
+     after="the Dance Mania sound of DJ Funk and his peers in mid-1990s Chicago",
+     lanes={"BD": L("x...x...x...x.x.", "x...x...x...x.x."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("..x...x...x...x.", "..x...x.......x."),
+            "OH": L("................", "..........x.....")},
+     accent=ACC("x...x...x...x...", "x...x...x...x..."),
+     confidence="medium",
+     sources=["https://www.attackmagazine.com/technique/beat-dissected/maniac-ghetto-house/",
+              "https://en.wikipedia.org/wiki/Ghetto_house"],
+     notes="Four-on-the-floor with a quieter ghost kick on the last off-beat (left unaccented), claps on 2 and 4, off-beat hats and one open hat in bar two, as in Attack's breakdown.")
+
+beat(id="footwork-2010", name="Footwork 2010", style="chicago-house", year=2010, bpm=160, swing=50, variations="AB",
+     after="Chicago footwork of RP Boo and DJ Rashad",
+     lanes={"BD": L("x..x..x...x..x..", "x..x..x..x..x.x."),
+            "CP": L("........x.......", "........x.....x."),
+            "LT": L("......x.......x.", "...x..x....x...."),
+            "CH": L("x..x..x..x..x..x", "x..x..x..x..x.3.")},
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/Footwork_(genre)",
+              "https://articles.roland.com/?p=110003",
+              "https://www.musicradar.com/tuition/tech/how-to-make-a-juke-style-pitched-808-kick-pattern-554083"],
+     notes="Kicks grouped in threes against the 16-step bar, a half-time clap, low 808 toms and triplet-feel hats; a style tribute at 160.")
+
+# ---------------------------------------------------------------- Detroit
+beat(id="detroit-techno-1985", name="Detroit techno 1985", style="detroit-techno", year=1985, bpm=125, swing=50, variations="AB",
+     after="Model 500 (Juan Atkins), \"No UFO's\" (1985), 909 kick with 808 cowbell, hats and a second kick",
+     lanes={"BD": L("x...x..xx...x..x", "x..xx...x..xx..."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CB": L("..x..x....x..x..", "..x..x....x..x.."),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x."),
+            "OH": L("...x.......x....", "...x.......x....")},
+     accent=ACC("x...x...x...x...", "x...x...x...x..."),
+     confidence="medium",
+     sources=["https://www.attackmagazine.com/technique/deconstructed/model-500-no-ufos/",
+              "https://www.soundonsound.com/techniques/classic-tracks-model-500-no-ufos"],
+     notes="The 4/4 kick and the extra sixteenth kick share one lane here: accented kicks are the main pulse, unaccented ones the second kick. Cowbell, hats and snare-clap as Attack lists them; their steps are my reading.")
+
+beat(id="techno-1993", name="Minimal techno 1993", style="detroit-techno", year=1993, bpm=132, swing=50, variations="AB",
+     after="Plastikman (Richie Hawtin), \"Spastik\" (1993), a track of nothing but drum-machine snares and kick",
+     lanes={"BD": L("x...x...x...x...", "x...x...x...x..."),
+            "SD": L("..x.x2..x..3.x.x", "x.2.x.x3..x2x.33")},
+     confidence="low",
+     sources=["https://articles.roland.com/?p=109641",
+              "https://en.wikipedia.org/wiki/Spastik"],
+     notes="A kick and an ever-shifting web of snare hits and rolls; on the record the snares are also panned and pitched by hand, which this grid leaves to the player.")
+
+beat(id="ghettotech-1997", name="Ghettotech 1997", style="detroit-techno", year=1997, bpm=150, swing=50, variations="AB",
+     after="Detroit booty music of DJ Assault and his peers",
+     lanes={"BD": L("x...x...x...x...", "x...x...x...x.xx"),
+            "CP": L("....x.......x...", "....x.......x.33"),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxxx...."),
+            "OH": L("................", "............x...")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://daily.redbullmusicacademy.com/2017/05/ghettotech-oral-history",
+              "https://en.wikipedia.org/wiki/Ghettotech"],
+     notes="Fast clipped 808 kick and clap, chattering hats and a clap roll into the turn; a style tribute.")
+
+beat(id="electro-1999", name="Detroit electro 1999", style="electro", year=1999, bpm=130, swing=50, variations="AB",
+     after="Drexciya (James Stinson and Gerald Donald), the Neptune's Lair era",
+     lanes={"BD": L("x......x..x...x.", "x......x.x....x."),
+            "SD": L("....x.......x...", "....x.......x..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxx.."),
+            "MT": L("................", "..............x.")},
+     accent=ACC("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x."),
+     confidence="low",
+     sources=["https://www.redbull.com/us-en/key-tracks-that-use-a-roland-808-drum-machine",
+              "https://blog.landr.com/808-beats-patterns"],
+     notes="Gritty, minimal electro; Red Bull says the 808 was central to Stinson's work, but no source documents a specific pattern, so this is a style tribute.")
+
+# ---------------------------------------------------------------- breakbeats and big beat
+beat(id="break-amen", name="Funk break 1969", style="breakbeat", year=1969, bpm=137, swing=50,
+     after="The Winstons, \"Amen, Brother\" (1969), Gregory Coleman's four-bar drum solo, the most sampled break",
+     parts=[{"variations": "AB",
+             "lanes": {"BD": L("x.x.......xx....", "x.x.......xx...."),
+                       "SD": L("....x..x.x..x..x", "....x..x.x..x..x"),
+                       "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x.")},
+             "accent": ACC("....x.......x...", "....x.......x...")},
+            {"variations": "AB",
+             "lanes": {"BD": L("x.x.......x.....", "..xx......x....."),
+                       "SD": L("....x..x.x....x.", ".x..x..x.x....x."),
+                       "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.....x."),
+                       "CY": L("................", "..........x.....")},
+             "accent": ACC("....x.........x.", "....x.........x.")}],
+     confidence="high",
+     sources=["https://ethanhein.substack.com/p/building-the-amen-break",
+              "https://www.ethanhein.com/wp/2025/amen-break-listening-guide/",
+              "https://musicradar.com/news/learn-to-play-the-amen-break-drum-beat",
+              "https://en.wikipedia.org/wiki/Amen_break"],
+     notes="All four bars over two chained patterns (about 136 to 137 BPM on the record); the 808 has no ride, so the closed hat plays the ride's eighths and the cymbal the single crash. Ghost snares are unaccented, backbeats accented.")
+
+beat(id="break-funky-drummer", name="Funk break 1970", style="breakbeat", year=1970, bpm=100, swing=56, variations="A",
+     after="James Brown, \"Funky Drummer\" (1970), Clyde Stubblefield's break",
+     lanes={"BD": L("x.x...x...x..x.."),
+            "SD": L("....x..x.x.xx..x"),
+            "CH": L("xxxxxxx.xxxxx.xx"),
+            "OH": L(".......x.....x..")},
+     accent=ACC("....x.......x..."),
+     confidence="high",
+     sources=["https://ethanhein.substack.com/p/building-the-funky-drummer-beat",
+              "https://articles.roland.com/behind-the-beat-funky-drummer-by-james-brown/",
+              "https://musicradar.com/how-to/how-to-program-a-funky-drummer-style-midi-break-in-your-daw"],
+     notes="Accented backbeats on 2 and 4, unaccented ghost snares, open hats on the a of 2 and the e of 4; swing stands in for Stubblefield's push.")
+
+beat(id="big-beat-1997", name="Big beat 1997", style="big-beat", year=1997, bpm=109, swing=52, variations="AB",
+     after="The Chemical Brothers, \"Block Rockin' Beats\" (1997), built on Bernard Purdie's \"Changes\" break with a bigger kick layered in",
+     lanes={"BD": L("x......x.xx.....", "x.x....x.x...x.."),
+            "SD": L("....x..x....x...", "....x.......x.x."),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x."),
+            "CY": L("x...............", "................")},
+     accent=ACC("x...x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://alijamieson.co.uk/2025/01/08/drums-like-block-rockin-beats/",
+              "https://en.wikipedia.com/wiki/Block_Rockin_Beats",
+              "https://cs.uwaterloo.ca/~dtompkin/music/track/HOTTRACK_043/HOTTRACK_043-04.html"],
+     notes="A ride-led funk break with a punchy kick on top; play it loud into a hard compressor afterwards, which is half the style.")
+
+beat(id="big-beat-1996", name="Breakbeat rave 1996", style="big-beat", year=1996, bpm=142, swing=50, variations="AB",
+     after="The Prodigy, \"Firestarter\" and \"Breathe\" (1996)",
+     lanes={"BD": L("x.........x.....", "x.x.......x..x.."),
+            "SD": L("....x..x.x..x...", "....x.......x.33"),
+            "CH": L("..x.......x.....", "..x.......x....."),
+            "OH": L("......x.......x.", "......x........."),
+            "CY": L("x...............", "................")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://www.kvraudio.com/forum/viewtopic.php?p=971528",
+              "https://www.beatport.com/track/firestarter/3278303",
+              "https://en.wikipedia.org/wiki/Big_beat"],
+     notes="A broken break with no steady eighth or sixteenth hat, as the KVR thread notes of the Prodigy; a style tribute, not a transcription of either record.")
+
+beat(id="big-beat-1998", name="Big beat 1998", style="big-beat", year=1998, bpm=152, swing=50, variations="AB",
+     after="Fatboy Slim, \"The Rockafeller Skank\" (1998)",
+     lanes={"BD": L("x.....x.x.x.....", "x.....x.x.....x."),
+            "SD": L("....x..x....x..x", "....x..x....x.xx"),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x..."),
+            "OH": L("................", "..............x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://en.wikipedia.org/wiki/The_Rockafeller_Skank",
+              "https://musicradar.com/news/beat-building-how-to-build-a-big-beat-beat",
+              "https://www.beatport.com/track/fool/6916"],
+     notes="A fast break with ghost snares, meant to be slammed through compression; Wikipedia credits its drum intro to DeWayne Quirico on \"I Fought the Law\". A style tribute, tempo from a Beatport listing.")
+
+# ---------------------------------------------------------------- IDM
+beat(id="idm-1991", name="Ambient acid 1991", style="idm", year=1991, bpm=120, swing=50, variations="AB",
+     after="Aphex Twin (as The Aphex Twin / AFX), the Analogue Bubblebath EP (1991), his acid and 808 side",
+     lanes={"BD": L("x...x...x...x...", "x...x...x..xx..."),
+            "CP": L("....x.......x...", "....x.......x..."),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxxxx"),
+            "HC": L("...x.....x....x.", "...x.....x..x.x."),
+            "LC": L("......x.......x.", "......x....x....")},
+     accent=ACC("..x...x...x...x.", "..x...x...x...x."),
+     confidence="low",
+     sources=["https://musicradar.com/news/everything-you-need-to-know-about-acid-house",
+              "https://en.wikipedia.org/wiki/Analogue_Bubblebath",
+              "https://factmag.com/2017/04/14/aphex-twin-gear-synths-samplers-drum-machines"],
+     notes="Followed the acid side rather than Analord (which FACT ties to the 909) or the drill 'n' bass of Come to Daddy; a style tribute with bubbling congas.")
+
+beat(id="idm-1996", name="Drill 'n' bass 1996", style="idm", year=1996, bpm=172, swing=50,
+     after="Squarepusher (Tom Jenkinson), Feed Me Weird Things (1996)",
+     parts=[{"variations": "AB",
+             "lanes": {"BD": L("x.x.......x.x...", "x.....x.xx...x.."),
+                       "SD": L("....x..3.x..x.2.", ".2..x.33..3.x333"),
+                       "CH": L("x.x.x.x.x.x.x.x.", "x.x.2.x.x.2.x...")}},
+            {"variations": "AB",
+             "lanes": {"BD": L("x..x..x...x..x..", "xx........x....."),
+                       "SD": L("..3.x..x3..x3.x.", "3333x..x33332222"),
+                       "CH": L("x2x.x2x.x2x.x2x.", "................"),
+                       "CY": L("................", "x...............")}}],
+     confidence="low",
+     sources=["https://daily.bandcamp.com/features/squarepushers-feed-me-weird-things-interview",
+              "https://wikipedia.com/wiki/Drill_and_bass",
+              "https://en.wikipedia.org/wiki/Feed_Me_Weird_Things"],
+     notes="Four bars of jungle-speed chopped figures and snare rolls, ending on a long roll; a style tribute.")
+
+# ---------------------------------------------------------------- jungle
+beat(id="jungle-1992", name="Darkcore jungle 1992", style="jungle", year=1992, bpm=160, swing=50, variations="AB",
+     after="Rufige Kru (Goldie), \"Terminator\" (1992), with its time-stretched, metallic breakbeat",
+     lanes={"BD": L("x.x.......x.....", "x.x.......x....."),
+            "SD": L("....x..x.x..x..x", "....x..x.x..3333"),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.2222x.x.")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://www.musicradar.com/tuition/tech/how-to-make-old-skool-jungle-style-breaks-464788",
+              "https://en.wikipedia.org/wiki/Jungle_music",
+              "https://www.musicradar.com/how-to/how-to-program-6-different-jungle-and-drum-n-bass-grooves"],
+     notes="An Amen-type bar, then the stuttering rolls that stand in for the record's time-stretched hits.")
+
+beat(id="jungle-1994-ragga", name="Ragga jungle 1994", style="jungle", year=1994, bpm=170, swing=50, variations="AB",
+     after="Shy FX & UK Apache, \"Original Nuttah\" (1994), an Amen break in an unusual shuffling pattern",
+     lanes={"BD": L("x.x.......xx....", "x.........x.x..."),
+            "SD": L("....x..x.x..x..x", ".x..x..xx.x..x.x"),
+            "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x.")},
+     accent=ACC("....x.......x...", "....x..x.....x.."),
+     confidence="low",
+     sources=["https://kmag.co.uk/tunes-that-shaped-dnb-original-nuttah/",
+              "https://en.wikipedia.org/wiki/Original_Nuttah",
+              "https://www.musicradar.com/how-to/how-to-program-a-jungle-inspired-breakbeat-loop"],
+     notes="The Amen's first bar, then a re-cut bar whose snares tumble over each other; a reconstruction of the feel K Mag describes.")
+
+beat(id="jungle-1994-chopped", name="Jungle 1994", style="jungle", year=1994, bpm=166, swing=50,
+     after="the chopped-Amen edits of DJ Hype and Remarc in 1994",
+     parts=[{"variations": "AB",
+             "lanes": {"BD": L("x.x.......xx....", "x.........x..x.."),
+                       "SD": L("....x..x.x..x..x", "....x..x.x.3x..x"),
+                       "CH": L("x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x.x.")},
+             "accent": ACC("....x.......x...", "....x.......x...")},
+            {"variations": "AB",
+             "lanes": {"BD": L("x.x.......x.....", "x.x..........x.."),
+                       "SD": L(".3.3x..x3333x.33", "x.x.x3x3x.x.3333"),
+                       "CH": L("x.x.x.x.x.x.....", "................"),
+                       "CY": L("................", "x...............")},
+             "accent": ACC("....x.......x...", "x...x...x...x...")}],
+     confidence="low",
+     sources=["https://www.loopmasters.com/articles/4377-How-To-Make-Jungle-Breaks-A-Drum-Bass-Jungle-Break-Beat-Tutorial",
+              "https://www.musicradar.com/tuition/tech/how-to-make-old-skool-jungle-style-breaks-464788",
+              "https://mixmag.net/feature/the-20-best-tracks-that-sample-the-amen-break"],
+     notes="Four bars: two of plain Amen, then two of re-sequenced chops and snare rolls in the edit style; a style tribute.")
+
+beat(id="jungle-1995", name="Atmospheric jungle 1995", style="jungle", year=1995, bpm=164, swing=52, variations="AB",
+     after="LTJ Bukem, \"Horizons\" (1995) and the Good Looking sound",
+     lanes={"BD": L("x.........x.....", "x.........x..x.."),
+            "SD": L("....x..x....x...", "....x.x.....x.x."),
+            "CH": L("xxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxxxx"),
+            "RS": L("..x.......x.....", "..x.......x....x")},
+     accent=ACC("....x.......x...", "....x.......x..."),
+     confidence="low",
+     sources=["https://www.thevinylfactory.com/features/an-introduction-to-ltj-bukem-in-10-records",
+              "https://www.musicradar.com/how-to/how-to-program-6-different-jungle-and-drum-n-bass-grooves",
+              "https://abasschronicle.co.uk/history-sessions-atmospheric-dnb/"],
+     notes="A rolling two-step: the second kick an eighth before the second snare, as MusicRadar describes, with ghost snares and busy hats played soft.")
+
+
+# ---------------------------------------------------------------- tidy and validate
+def clean_lanes(lanes):
+    out = {}
+    for name, lane in lanes.items():
+        lane = {k: v for k, v in lane.items() if v is not None}
+        steps = [lane.get("A", ""), lane.get("B", "")]
+        if all(s == "" or set(s) <= {"."} for s in steps):
+            continue  # drop lanes that never play
+        if "A" not in lane or lane["A"] is None:
+            lane["A"] = "." * 16
+        out[name] = lane
+    return out
+
+
+errors = []
+
+
+def check_pattern(bid, variations, lanes, accent):
+    if variations not in ("A", "AB"):
+        errors.append(f"{bid}: variations {variations}")
+    used = set(lanes)
+    for a, b in EXCLUSIVE:
+        if a in used and b in used:
+            errors.append(f"{bid}: {a} and {b} share a lane")
+    for name, lane in lanes.items():
+        if name not in LANES:
+            errors.append(f"{bid}: unknown lane {name}")
+        for key in ("A", "B"):
+            if key in lane and not STEP.match(lane[key]):
+                errors.append(f"{bid}: {name}.{key} = {lane[key]!r}")
+        if variations == "AB" and "B" not in lane:
+            errors.append(f"{bid}: {name} has no B")
+        if variations == "A" and "B" in lane:
+            errors.append(f"{bid}: {name} has B in an A-only pattern")
+        if "length" in lane and not (1 <= lane["length"] <= 16):
+            errors.append(f"{bid}: {name} length")
+    if accent:
+        for key in ("A", "B"):
+            if key in accent and not re.match(r"^[x.]{16}$", accent[key]):
+                errors.append(f"{bid}: accent.{key}")
+        if variations == "AB" and "B" not in accent:
+            errors.append(f"{bid}: accent has no B")
+
+
+ordered = []
+ids = set()
+names = set()
+for b in B:
+    item = {"id": b["id"], "name": b["name"], "after": b["after"], "style": b["style"], "year": b["year"],
+            "bpm": b["bpm"], "swing": b["swing"]}
+    if b["id"] in ids:
+        errors.append(f"duplicate id {b['id']}")
+    if b["name"] in names:
+        errors.append(f"duplicate name {b['name']}")
+    ids.add(b["id"]); names.add(b["name"])
+    if b["style"] not in STYLES:
+        errors.append(f"{b['id']}: style {b['style']}")
+    if not (50 <= b["swing"] <= 75):
+        errors.append(f"{b['id']}: swing")
+    if "parts" in b:
+        parts = []
+        for i, p in enumerate(b["parts"]):
+            lanes = clean_lanes(p["lanes"])
+            check_pattern(f"{b['id']}[{i}]", p["variations"], lanes, p.get("accent"))
+            part = {"variations": p["variations"], "lanes": lanes}
+            if p.get("accent"):
+                part["accent"] = p["accent"]
+            parts.append(part)
+        item["parts"] = parts
+    else:
+        lanes = clean_lanes(b["lanes"])
+        check_pattern(b["id"], b["variations"], lanes, b.get("accent"))
+        item["variations"] = b["variations"]
+        item["lanes"] = lanes
+        if b.get("accent"):
+            item["accent"] = b["accent"]
+    item["confidence"] = b["confidence"]
+    item["sources"] = b["sources"]
+    item["notes"] = b["notes"]
+    ordered.append(item)
+
+if errors:
+    print("\n".join(errors))
+    sys.exit(1)
+
+with open(OUT, "w", encoding="utf-8") as f:
+    json.dump(ordered, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+print(f"{len(ordered)} beats written")
