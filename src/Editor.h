@@ -72,7 +72,7 @@ namespace cs808
         /** The library's shelf over the panel (the header's Library), and while it is open, the shelf. */
         void openLibrary();
         [[nodiscard]] LibraryShelf* libraryForTesting() noexcept { return library.get(); }
-        /** A library beat played in place of the pattern being edited, nothing written to undo (D272); stopAudition
+        /** A library beat played in place of the pattern being edited, nothing written to undo (D273); stopAudition
             gives the project back as it was. Playing starts if it was stopped, and stops again with the audition. */
         void startAudition(const LibraryEntry& e);
         void stopAudition();
@@ -104,7 +104,7 @@ namespace cs808
         std::unique_ptr<LaneRows> laneRows;
         std::unique_ptr<LidView> lid;
         std::unique_ptr<LibraryShelf> library;
-        // An audition (D272): the project and the chain as they were, and whether the audition started playing.
+        // An audition (D273): the project and the chain as they were, and whether the audition started playing.
         std::unique_ptr<Project> auditionSaved;
         std::vector<int> auditionChain;
         bool auditionStartedPlaying = false;

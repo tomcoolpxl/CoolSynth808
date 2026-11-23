@@ -700,7 +700,7 @@ namespace cs808
         const float scale = getWidth() / static_cast<float>(baseWidth);
         content->setTransform(juce::AffineTransform::scale(scale));
         // The overlays cover the window, whatever its size; in a window narrower than the panel they are laid out at
-        // the panel's width and drawn smaller with it, so their columns keep their room (D272).
+        // the panel's width and drawn smaller with it, so their columns keep their room (D273).
         for (juce::Component* overlay : { static_cast<juce::Component*>(library.get()), static_cast<juce::Component*>(controllerPanel.get()) })
         {
             if (overlay == nullptr)
@@ -1236,7 +1236,7 @@ namespace cs808
         // The beat goes into the pattern being edited; a beat of several parts into the patterns after it too, and
         // they become the chain. Edited, the fill takes the beat's first part and the chain stays. Its tempo, swing,
         // variation and switches come with it. One undo step takes it all back (the review of D267); an audition
-        // takes none (D272).
+        // takes none (D273).
         if (undoable)
             processor.beginGesture();
         processor.editPlay([&](PlaySettings& p) { p = e.pattern.play; }, undoable);

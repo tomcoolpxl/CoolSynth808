@@ -104,7 +104,7 @@ public:
             editor->setSize(1240, 600);
             editor->openControllerSetup();
             shoot("controller");
-            // The library's shelf (D272), a beat of two halves chosen, and drawn smaller in a narrow window.
+            // The library's shelf (D273), a beat of two halves chosen, and drawn smaller in a narrow window.
             editor->openLibrary();
             if (auto* shelf = editor->libraryForTesting())
             {

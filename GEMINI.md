@@ -20,7 +20,7 @@ The shared project memory for every AI tool (`CLAUDE.md` points here).
 - `src/Project`: the project, pattern files and the library's compact form, as JSON. `src/Library`: the built-in
   beats (`resources/library/patterns.json`, compiled in) and the user's (`%APPDATA%\CoolSynth808\Patterns`).
 - `src/Editor` and `src/ui`: the panel, its widgets and themes, Under the Lid, the controller setup, the library's
-  shelf (`ui/LibraryShelf`, D272).
+  shelf (`ui/LibraryShelf`, D273).
 - `src/midi`: CoolSynth's controller layer, ported (D268), with its own `%APPDATA%\CoolSynth808\controller.json`;
   `src/Controls` says what each place does in the 808. Pads strike on the audio thread (`Processor::setPadNotes`).
   `src/StandaloneMidiIn` sorts the standalone's MIDI inputs: the controller's linked controls apart from the sound's

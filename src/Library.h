@@ -7,7 +7,7 @@
 /*
     The pattern library: the classic beats built into the app (resources/library/patterns.json, compiled in) and
     the patterns you keep yourself (%APPDATA%\CoolSynth808\Patterns, one .cs808pattern file each). Shown on a shelf
-    (ui/LibraryShelf, CoolSynth's D272); the built-in beats are read-only, yours can be renamed or recycled.
+    (ui/LibraryShelf, CoolSynth's D273); the built-in beats are read-only, yours can be renamed or recycled.
 */
 namespace cs808
 {
@@ -37,7 +37,7 @@ namespace cs808
     /** A style tag as a heading: "acid-house" becomes "Acid house". */
     [[nodiscard]] juce::String styleHeading(const juce::String& style);
 
-    /** The shelf's families of styles, in their order (CoolSynth's D272), and the family a style belongs to. */
+    /** The shelf's families of styles, in their order (CoolSynth's D273), and the family a style belongs to. */
     [[nodiscard]] const juce::StringArray& libraryFamilies();
     [[nodiscard]] juce::String familyOf(const juce::String& style);
     /** An entry's key, unique across the built-in beats and yours. */

@@ -10,7 +10,7 @@
 #include "ui/Widgets.h"
 
 /*
-    The pattern library as a shelf (CoolSynth's D272, the user's choice of the three mockups): over the panel, a
+    The pattern library as a shelf (CoolSynth's D273, the user's choice of the three mockups): over the panel, a
     column of shelves (your own patterns, the classics by family, a decade), the list of what they hold with a small
     picture of each beat, and the chosen beat in full. Audition plays it in place of the pattern you are editing until
     you load it or stop; Load puts it in that pattern, one undo step. The built-in beats are kept as they are: Keep a
