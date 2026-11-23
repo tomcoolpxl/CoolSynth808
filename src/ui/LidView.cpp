@@ -740,15 +740,16 @@ namespace cs808
         };
 
         // The drums drawn complete: the bass drum, then the snare (D278).
-        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, drumsDrawn = 3 };
+        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, rimShot = 3, drumsDrawn = 4 };
         /** The lane each drum drawn complete plays in. */
-        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2 };
+        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5 };
 
         Recording loadRecording(int which)
         {
             Recording r;
             const auto root = which == snareDrum ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::snare_currents_json, LibraryData::snare_currents_jsonSize))
                               : which == lowTom  ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::tom_currents_json, LibraryData::tom_currents_jsonSize))
+                              : which == rimShot ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::rimshot_currents_json, LibraryData::rimshot_currents_jsonSize))
                                                  : juce::JSON::parse(juce::String::fromUTF8(LibraryData::bassdrum_currents_json, LibraryData::bassdrum_currents_jsonSize));
             const auto* times = root.getProperty("t", {}).getArray();
             const auto* names = root.getProperty("names", {}).getArray();
@@ -787,7 +788,10 @@ namespace cs808
                     r.parts[p.name.toString().toStdString()] = nodes;
                 }
             const auto set = root.getProperty("setting", {});
-            if (which == lowTom)
+            if (which == rimShot)
+                r.setting << "the rim shot (the claves' parts switched out), " << set.getProperty("amp", "?").toString()
+                          << " V on the trigger line, Level " << set.getProperty("lev", "?").toString();
+            else if (which == lowTom)
                 r.setting << "the low tom, " << set.getProperty("amp", "?").toString() << " V on the trigger line, Tuning "
                           << set.getProperty("tune", "?").toString() << ", Level " << set.getProperty("lev", "?").toString()
                           << ", the pink noise as a " << juce::String(juce::roundToInt(set.getProperty("pn", "0").toString().getDoubleValue() * 1000.0))
@@ -846,6 +850,9 @@ namespace cs808
                     return "at rest: only the standing currents flow";
                 if (ms <= 1.05)
                     return "the trigger: a pulse of 1 ms";
+                if (which == rimShot)
+                    return ms <= 5.0 ? "the attack: both resonators ring, and Q62 lets them through while the envelope lasts"
+                                     : "the tail: the envelope has closed Q62, the resonators ring on unheard";
                 if (which == lowTom)
                     return ms <= 15.0 ? "the attack: the resonator rings, the diodes bend its pitch down, the noise gate opens"
                                       : "the ring: the tone dies away, the gate lets less and less noise through";
@@ -934,10 +941,12 @@ namespace cs808
                     w.fill.addTriangle({ x + 3.5f, y }, { x + 8.5f, y - 2.5f }, { x + 8.5f, y + 2.5f });
                 };
 
-                if (which == snareDrum || which == lowTom)
+                if (which == snareDrum || which == lowTom || which == rimShot)
                 {
                     if (which == snareDrum)
                         buildSnare(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
+                    else if (which == rimShot)
+                        buildRimShot(a, W, term, R, C, POT, DI, Q, pin, open, two);
                     else
                         buildTom(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
                     buildGraph();
@@ -1254,6 +1263,127 @@ namespace cs808
                 a.tx(580, 146, "OUT", Rj);
             }
 
+            /*
+                The rim shot (D278): every part of the engine's tools/tr808/rimclave.cir as a rim shot (the claves'
+                parts drawn, switched out by SW11). Two pulses into two bridged-T resonators along the top, IC21 at
+                about 455 Hz and IC20a at about 1.8 kHz with IC20b turning it over; along the bottom the envelope, the
+                VCA Q62 that lets the two through while it lasts, the high-pass Q63 and the way into the mixer IC19.
+            */
+            void buildRimShot(Board::Sheet& a, auto& W, auto& term, auto& R, auto& C, auto& POT, auto& DI, auto& Q,
+                              auto& pin, auto& open, auto& two)
+            {
+                width = 700.0f;
+                height = 362.0f;
+                const auto L = juce::Justification::centredLeft;
+                const auto Rj = juce::Justification::centredRight;
+                const auto M = juce::Justification::centred;
+                // A diode lying down, its anode at (x, y) on the left.
+                const auto DH = [&](const std::string& el, float x, float y, float Lw, const juce::String& label)
+                {
+                    auto& part = a.add(label);
+                    const float h = (Lw - 6.0f) / 2.0f;
+                    const Pt o(x, y);
+                    part.stroke.addLineSegment({ o, o + Pt(h, 0) }, 0);
+                    part.stroke.addTriangle(o + Pt(h, -3.5f), o + Pt(h, 3.5f), o + Pt(h + 6, 0));
+                    part.stroke.addLineSegment({ o + Pt(h + 6, -3.5f), o + Pt(h + 6, 3.5f) }, 0);
+                    part.stroke.addLineSegment({ o + Pt(h + 6, 0), o + Pt(Lw, 0) }, 0);
+                    two(el, Pt(x, y), Pt(x + Lw, y), el + ".id");
+                };
+
+                // The rails: +15 V along the top and down to the lower half; 0 V along the bottom, a line over the
+                // resonators and one under them.
+                pin(40, 12, "vcc", "+15 V", 40, 7, M); W({ { 40, 12 }, { 580, 12 } }); W({ { 580, 12 }, { 580, 208 } }); W({ { 230, 208 }, { 580, 208 } });
+                pin(40, 340, "0", "0 V", 40, 351, M); W({ { 40, 340 }, { 612, 340 } });
+                W({ { 168, 24 }, { 168, 196 }, { 168, 340 } }); W({ { 168, 24 }, { 420, 24 } }); W({ { 160, 196 }, { 612, 196 } });
+
+                // The common trigger, as the bass drum's
+                {
+                    auto& p = a.add("The step's pulse ~ 1 ms, from the sequencer");
+                    p.circles.push_back({ Pt(17, 150), 8.5f });
+                }
+                a.glyph({ { 12, 153 }, { 15, 153 }, { 15, 147 }, { 19, 147 }, { 19, 153 }, { 22, 153 } });
+                term(Pt(25.5f, 150), {}, "n6", true); W({ { 25.5f, 150 }, { 28, 150 } });
+                R("r117", 28, 150, 'h', 22, "R117 ~ 47 k"); Q("q31", 66, 150, false, "Q31 ~ turns off for the pulse, letting Q32 rise"); W({ { 66, 162 }, { 66, 340 } });
+                W({ { 66, 138 }, { 66, 106 } }); R("r120", 66, 84, 'v', 22, "R120 ~ 4.7 k"); pin(66, 84, "nx", "ACCENT, 5 TO 15 V", 71, 80, L);
+                W({ { 66, 110 }, { 76, 110 } }); Q("q32", 92, 110, false, "Q32 ~ the follower onto the trigger line"); W({ { 92, 98 }, { 92, 12 } });
+                W({ { 92, 122 }, { 92, 130 } }); R("r113", 92, 130, 'v', 22, "R113 ~ 4.7 k, holds the line down"); W({ { 92, 152 }, { 92, 166 }, { 66, 166 } });
+                W({ { 92, 130 }, { 110, 130 }, { 110, 112 }, { 150, 112 }, { 150, 118 } });
+                // The rim shot's switch
+                R("r299", 122, 112, 'v', 18, "R299 ~ 4.7 k"); W({ { 122, 130 }, { 134, 130 } });
+                Q("q60", 150, 130, true, "Q60 ~ a PNP switch: it can only push current into the voice");
+                R("r298", 122, 130, 'v', 26, "R298 ~ 10 k"); W({ { 122, 156 }, { 122, 160 } }); Q("q59", 122, 172, false, "Q59 ~ on while the rim shot's step data stands"); W({ { 122, 184 }, { 122, 340 } });
+                pin(74, 172, "nrs", "RS ON", 72, 182, M); W({ { 74, 172 }, { 76, 172 } }); R("r297", 76, 172, 'h', 22, "R297 ~ 22 k"); W({ { 98, 172 }, { 106, 172 } });
+                R("r303", 102, 172, 'v', 18, "R303 ~ 10 k"); W({ { 102, 190 }, { 102, 340 } });
+                W({ { 150, 142 }, { 150, 220 }, { 344, 220 } }); W({ { 150, 150 }, { 160, 150 } }); R("r300", 160, 150, 'v', 18, "R300 ~ 22 k"); W({ { 160, 168 }, { 160, 196 } });
+
+                // The first resonator: its pulse, IC21 and its bridged-T (about 455 Hz)
+                W({ { 176, 220 }, { 176, 170 } }); C("c111", 176, 170, 'h', 14, "C111 ~ 0.01 uF"); W({ { 190, 170 }, { 204, 170 } });
+                R("r307", 196, 170, 'v', 18, "R307 ~ 100 k"); W({ { 196, 188 }, { 196, 196 } });
+                DH("d62", 204, 170, 14, "D62 ~ passes the pulse's front only"); R("r301", 218, 170, 'h', 22, "R301 ~ 47 k");
+                W({ { 240, 170 }, { 276, 170 }, { 276, 158 }, { 290, 158 } }); R("r302", 256, 170, 'v', 18, "R302 ~ 10 k"); W({ { 256, 188 }, { 256, 196 } });
+                a.OP(290, 140, "IC21 ~ the low resonator: a bridged-T at about 455 Hz"); open(290, 146, "ninv21"); open(290, 158, "np21"); term(Pt(316, 152), {}, "no21", true);
+                W({ { 290, 146 }, { 282, 146 }, { 282, 104 }, { 272, 104 } }); C("c116", 258, 104, 'h', 14, "C116 ~ 4.7 nF", true);
+                R("r315", 258, 24, 'v', 18, "R315 ~ 5.6 k", true); W({ { 258, 42 }, { 258, 104 } });
+                C("c115", 258, 72, 'h', 14, "C115 ~ 4.7 nF"); W({ { 272, 72 }, { 330, 72 } }); W({ { 330, 72 }, { 330, 152 }, { 316, 152 } });
+                W({ { 282, 124 }, { 296, 124 } }); R("r316", 296, 124, 'h', 22, "R316 ~ 1 M"); W({ { 318, 124 }, { 330, 124 } });
+
+                // The second resonator: its pulse, IC20a and its bridged-T (about 1.8 kHz with C118), IC20b turning it over
+                W({ { 344, 220 }, { 344, 176 } }); C("c114", 344, 176, 'h', 14, "C114 ~ 1 nF"); W({ { 358, 176 }, { 372, 176 } });
+                R("r306", 364, 176, 'v', 16, "R306 ~ 22 k"); W({ { 364, 192 }, { 364, 196 } });
+                DH("d64", 372, 176, 14, "D64"); R("r310", 386, 176, 'h', 22, "R310 ~ 33 k");
+                W({ { 408, 176 }, { 426, 176 }, { 426, 158 }, { 440, 158 } }); R("r311", 416, 176, 'v', 16, "R311 ~ 10 k"); W({ { 416, 192 }, { 416, 196 } });
+                a.OP(440, 140, "IC20a ~ the high resonator: a bridged-T at about 1.8 kHz for the rim shot"); open(440, 146, "ninv20"); open(440, 158, "np20"); term(Pt(466, 152), {}, "no20a", true);
+                W({ { 440, 146 }, { 432, 146 }, { 432, 104 }, { 422, 104 } }); C("c119", 408, 104, 'h', 14, "C119 ~ 2.2 nF", true);
+                R("r312", 408, 24, 'v', 18, "R312 ~ 1.07 k", true); W({ { 408, 42 }, { 408, 104 } });
+                C("c117", 408, 72, 'h', 14, "C117 ~ 2.2 nF"); C("c118", 408, 88, 'h', 14, "C118 ~ 2.2 nF, across C117 for the rim shot");
+                W({ { 422, 72 }, { 480, 72 } }); W({ { 422, 88 }, { 480, 88 } }); W({ { 480, 72 }, { 480, 152 }, { 466, 152 } });
+                W({ { 432, 124 }, { 446, 124 } }); R("r308", 446, 124, 'h', 22, "R308 ~ 820 k"); W({ { 468, 124 }, { 480, 124 } });
+                R("r313", 408, 56, 'h', 22, "R313 ~ 500 k, for the claves: they ring on"); W({ { 430, 56 }, { 556, 56 }, { 556, 120 } });
+                W({ { 480, 146 }, { 490, 146 } }); R("r314", 490, 146, 'h', 22, "R314 ~ 33 k"); W({ { 512, 146 }, { 520, 146 } });
+                a.OP(520, 140, "IC20b ~ turns the high resonator over"); open(520, 146, "nin20b"); open(520, 158, "0"); term(Pt(546, 152), {}, "no20b", true);
+                W({ { 520, 158 }, { 512, 158 }, { 512, 196 } });
+                W({ { 516, 146 }, { 516, 120 } }); R("r309", 516, 120, 'h', 22, "R309 ~ 33 k"); W({ { 538, 120 }, { 556, 120 }, { 556, 152 }, { 546, 152 } });
+
+                // The envelope from the trigger, and the VCA Q62 that lets the two resonators through while it lasts
+                DI("d61", 200, 220, 20, "D61"); W({ { 200, 240 }, { 206, 240 } }); R("r107", 206, 240, 'h', 22, "R107 ~ 1 k");
+                W({ { 228, 240 }, { 250, 240 } }); C("c24", 236, 240, 'v', 14, "C24 ~ 0.47 uF: the envelope"); W({ { 236, 254 }, { 236, 340 } });
+                R("r108", 250, 240, 'h', 22, "R108 ~ 10 k"); DH("d63", 272, 240, 14, "D63"); W({ { 286, 240 }, { 336, 240 } }); W({ { 320, 240 }, { 320, 244 } });
+                Q("q62", 320, 256, false, "Q62 ~ the swing VCA: the resonators through, shaped by the envelope"); W({ { 320, 268 }, { 320, 340 } });
+                W({ { 330, 152 }, { 330, 276 } }); R("r318", 330, 276, 'v', 22, "R318 ~ 220 k");
+                W({ { 556, 152 }, { 556, 166 } }); W({ { 556, 160 }, { 566, 160 }, { 566, 298 }, { 542, 298 } });
+                R("r320", 520, 298, 'h', 22, "R320 ~ 22 k", true); W({ { 520, 298 }, { 280, 298 } });
+                R("r317", 290, 298, 'v', 18, "R317 ~ 10 k"); W({ { 290, 316 }, { 290, 340 } });
+                C("c120", 280, 270, 'v', 14, "C120 ~ 10 uF", true); W({ { 280, 284 }, { 280, 298 } }); W({ { 280, 256 }, { 280, 270 } }); W({ { 280, 256 }, { 304, 256 } });
+                R("r321", 292, 208, 'v', 22, "R321 ~ 2.2 M"); W({ { 292, 230 }, { 292, 256 } });
+
+                // The high-pass after the VCA: Q63, a follower in a two-pole filter
+                C("c121", 336, 240, 'h', 14, "C121 ~ 4.7 nF"); W({ { 350, 240 }, { 364, 240 } });
+                R("r322", 358, 240, 'v', 18, "R322 ~ 10 k"); W({ { 358, 258 }, { 358, 270 }, { 408, 270 } });
+                C("c122", 364, 240, 'h', 14, "C122 ~ 4.7 nF"); W({ { 378, 240 }, { 392, 240 } });
+                R("r325", 384, 240, 'v', 18, "R325 ~ 330 k"); W({ { 384, 258 }, { 384, 340 } });
+                Q("q63", 408, 240, false, "Q63 ~ the follower of the high-pass"); W({ { 408, 228 }, { 408, 208 } }); W({ { 408, 252 }, { 408, 270 } });
+                R("r323", 408, 270, 'v', 18, "R323 ~ 22 k"); pin(408, 288, "vee", "-15 V", 414, 292, L);
+
+                // Into the mixer: the rim shot through R324, the claves (switched out) through R319
+                W({ { 408, 262 }, { 424, 262 } }); R("r324", 424, 262, 'h', 22, "R324 ~ 130 k, for the rim shot"); W({ { 446, 262 }, { 470, 262 } });
+                R("r319", 556, 166, 'v', 22, "R319 ~ 220 k, for the claves"); W({ { 556, 188 }, { 556, 250 }, { 458, 250 }, { 458, 262 } });
+                C("c125", 470, 262, 'h', 14, "C125 ~ 0.01 uF"); R("r326", 484, 262, 'h', 22, "R326 ~ 10 k"); W({ { 506, 262 }, { 600, 262 } });
+
+                // The mixer, IC19, and the Level
+                W({ { 600, 84 }, { 600, 262 } });
+                a.OP(620, 140, "IC19 ~ the output amplifier"); open(620, 146, "nsum"); open(620, 158, "0"); term(Pt(646, 152), {}, "vout", true);
+                W({ { 600, 146 }, { 620, 146 } }); W({ { 620, 158 }, { 612, 158 }, { 612, 196 } });
+                C("c153", 600, 84, 'h', 14, "C153 ~ 22 pF"); W({ { 614, 84 }, { 660, 84 } });
+                R("r330", 600, 100, 'h', 22, "R330 ~ 470 k"); W({ { 622, 100 }, { 660, 100 } });
+                POT("rvr16", 600, 116, 'h', 22, "VR16 LEVEL ~ 100 k"); C("c126", 622, 116, 'h', 14, "C126 ~ 33 uF"); W({ { 636, 116 }, { 660, 116 } });
+                W({ { 646, 152 }, { 660, 152 }, { 660, 84 } }); W({ { 660, 152 }, { 680, 152 } });
+                {
+                    auto& out = a.add({});
+                    out.fill.addTriangle({ 688, 152 }, { 680, 148.5f }, { 680, 155.5f });
+                }
+                a.tx(680, 146, "OUT", Rj);
+            }
+
             void buildGraph()
             {
                 // Every wire corner, junction and part lead is a point; a wire is split where a point lies on it.
@@ -1451,7 +1581,7 @@ namespace cs808
     LidView::LidView(Processor& p) : impl(std::make_unique<Impl>()), processor(p)
     {
         auto& i = *impl;
-        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete" };
+        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete" };
         i.sheet.fontHeight = 10.0f;
         i.sheet.get = [this] { return impl->showFull && impl->full ? 1 + impl->full->which : 0; };
         i.sheet.set = [this](int v)
@@ -1492,7 +1622,7 @@ namespace cs808
         juce::StringArray all;
         for (int d = 0; d < drumsDrawn; ++d)
             for (const auto& e : impl->drum(d).errors)
-                all.add(juce::String(d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
+                all.add(juce::String(d == rimShot ? "the rim shot: " : d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
         return all;
     }
 
