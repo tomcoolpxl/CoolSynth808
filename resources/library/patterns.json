@@ -277,6 +277,10 @@
       "OH": {
         "A": "................",
         "B": "..............x."
+      },
+      "CB": {
+        "A": "x..x..x...x..x..",
+        "B": "x..x..x...x.x.x."
       }
     },
     "accent": {
@@ -287,9 +291,10 @@
     "sources": [
       "https://en.wikipedia.org/wiki/Just_Be_Good_to_Me",
       "https://www.gearnews.com/the-rhythm-composer-famous-808-patterns",
+      "https://medium.com/the-riff/oh-yes-there-was-more-cowbell-6529af38e253",
       "https://acousticbrainz.org/0f927dfb-d4d3-4d85-94d1-37769e762f59"
     ],
-    "notes": "Snare and clap backbeat over sixteenth hats accented on the eighths, with a syncopated kick; the steps are a reconstruction."
+    "notes": "Snare and clap backbeat over sixteenth hats accented on the eighths, a syncopated kick, and the 808 cowbell the record is known for, off the quarter notes; the steps are a reconstruction."
   },
   {
     "id": "freestyle-1983",
@@ -424,29 +429,37 @@
     "style": "rnb",
     "year": 1988,
     "bpm": 106,
-    "swing": 66,
+    "swing": 64,
     "variations": "AB",
     "lanes": {
       "BD": {
-        "A": "x.....xx..x.....",
-        "B": "x......x..x...x."
+        "A": "x..x...xx.x.....",
+        "B": "x..x...x..x..x.x"
       },
       "SD": {
         "A": "....x.......x...",
-        "B": "....x.......x..3"
+        "B": "....x.......x.x."
       },
       "CP": {
         "A": "....x.......x...",
         "B": "....x.......x..."
       },
+      "RS": {
+        "A": "..x.......x....x",
+        "B": "..x.......x....."
+      },
       "CH": {
-        "A": "xxxxxxxxxxxxxxxx",
-        "B": "xxxxxxxxxxxxxx.."
+        "A": "x.xxx.xxx.xxx.x.",
+        "B": "x.xxx.xxx.xxx..."
+      },
+      "OH": {
+        "A": "................",
+        "B": "..............x."
       }
     },
     "accent": {
       "A": "....x.......x...",
-      "B": "....x.......x..x"
+      "B": "....x.......x..."
     },
     "confidence": "low",
     "sources": [
@@ -454,7 +467,7 @@
       "https://daily.redbullmusicacademy.com/2017/05/teddy-riley-new-jack-swing-oral-history",
       "https://mixdownmag.com.au/features/columns/producer-focus-teddy-riley"
     ],
-    "notes": "Heavy swing on the sixteenths, a hard snare and clap on 2 and 4, a swung kick and a triplet roll into the next bar, the style's hallmarks rather than one record's transcription."
+    "notes": "Heavy swing on the sixteenths, a hard snare and clap on 2 and 4, a bouncing kick with pickups, rim shots between the backbeats, hats that skip a step for the shuffle and an open hat into the next bar: the style's hallmarks rather than one record's transcription. Rewritten after a listening pass (D275)."
   },
   {
     "id": "pop-2008",

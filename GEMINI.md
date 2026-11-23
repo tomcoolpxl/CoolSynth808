@@ -26,6 +26,8 @@ The shared project memory for every AI tool (`CLAUDE.md` points here).
   `src/StandaloneMidiIn` sorts the standalone's MIDI inputs: the controller's linked controls apart from the sound's
   notes (D271); `src/StandaloneMidiOut` keeps the clock's output thread running.
 - `tests/`: the app's tests (`CoolSynth808Tests`); the engine's run in the engine's repository.
+- `tools/RenderLibrary`: `CoolSynth808Render <folder> [id ...]` writes the built-in beats as WAV files, for listening
+  passes (D275); `listening/` holds them and is not committed.
 
 ## Rules
 

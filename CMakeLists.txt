@@ -67,6 +67,21 @@ target_link_libraries(CoolSynth808
         coolsynth_config_flags
         juce::juce_recommended_warning_flags)
 
+# The built-in beats as WAV files, for listening beside their records.
+juce_add_console_app(CoolSynth808Render)
+target_sources(CoolSynth808Render PRIVATE tools/RenderLibrary.cpp ${COOLSYNTH808_SOURCES})
+target_include_directories(CoolSynth808Render PRIVATE src)
+target_compile_features(CoolSynth808Render PUBLIC cxx_std_20)
+target_compile_definitions(CoolSynth808Render PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(CoolSynth808Render
+    PRIVATE
+        coolsynth_engine
+        juce::juce_audio_utils
+        juce::juce_gui_extra
+        CoolSynth808Library
+        coolsynth_config_flags
+        juce::juce_recommended_warning_flags)
+
 if(BUILD_TESTING)
     juce_add_console_app(CoolSynth808Tests)
     target_sources(CoolSynth808Tests
