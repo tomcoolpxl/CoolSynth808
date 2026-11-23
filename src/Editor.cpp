@@ -367,6 +367,23 @@ namespace cs808
     public:
         explicit LaneRows(Editor& e) : editor(e)
         {
+            // Each lane's knobs, small, as the mockup has them: the same knobs as the columns above.
+            std::array<int, panelLanes> count {};
+            for (int k = 0; k < knobCount; ++k)
+            {
+                const int l = knobs[static_cast<std::size_t>(k)].lane + 1;
+                auto* knob = new Knob();
+                minis.add(knob);
+                addAndMakeVisible(knob);
+                knob->small = true;
+                knob->label = knobs[static_cast<std::size_t>(k)].label;
+                knob->defaultValue = knobDefault(k);
+                knob->get = [this, k] { return editor.processor.project().kit.knob[static_cast<std::size_t>(k)]; };
+                knob->set = [this, k](float v) { editor.processor.editKit([k, v](KitValues& kit) { kit.knob[static_cast<std::size_t>(k)] = v; }); };
+                knob->gestureStart = [this] { editor.processor.beginGesture(); };
+                knob->gestureEnd = [this] { editor.processor.endGesture(); editor.refresh(); };
+                miniPlace.push_back({ l, count[static_cast<std::size_t>(l)]++ });
+            }
             for (int l = 0; l < panelLanes; ++l)
             {
                 auto* box = new NumberBox();
@@ -390,6 +407,8 @@ namespace cs808
         {
             for (int l = 0; l < panelLanes; ++l)
                 lengths[l]->setBounds(keysRight - margin + 22, l * laneHeight + 6, 90, laneHeight - 12);
+            for (int i = 0; i < minis.size(); ++i)
+                minis[i]->setBounds(222 + miniPlace[static_cast<std::size_t>(i)].second * 23, miniPlace[static_cast<std::size_t>(i)].first * laneHeight + 5, 21, 21);
         }
 
         void paint(juce::Graphics& g) override
@@ -542,6 +561,8 @@ namespace cs808
 
         Editor& editor;
         juce::OwnedArray<NumberBox> lengths;
+        juce::OwnedArray<Knob> minis;
+        std::vector<std::pair<int, int>> miniPlace; // lane, place in the lane
         int pressedLane = 0, pressedStep = -1;
         bool dragged = false;
         float startChance = 1.0f;
@@ -669,6 +690,20 @@ namespace cs808
         }
 
         void selectedRowsChanged(int) override { repaint(); }
+
+        void listBoxItemClicked(int row, const juce::MouseEvent& e) override
+        {
+            if (! e.mods.isPopupMenu() || row < 0 || row >= static_cast<int>(entries.size()) || entries[static_cast<std::size_t>(row)].builtIn)
+                return;
+            juce::PopupMenu m;
+            m.addItem(1, "Move to the Recycle Bin");
+            const auto file = entries[static_cast<std::size_t>(row)].file;
+            m.showMenuAsync(juce::PopupMenu::Options(), [this, file](int r)
+            {
+                if (r == 1 && file.moveToTrash())
+                    reload();
+            });
+        }
 
         void listBoxItemDoubleClicked(int row, const juce::MouseEvent&) override
         {
