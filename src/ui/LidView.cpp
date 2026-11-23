@@ -740,9 +740,9 @@ namespace cs808
         };
 
         // The drums drawn complete: the bass drum, then the snare (D278).
-        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, rimShot = 3, drumsDrawn = 4 };
+        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, rimShot = 3, handClap = 4, drumsDrawn = 5 };
         /** The lane each drum drawn complete plays in. */
-        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5 };
+        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5, 6 };
 
         Recording loadRecording(int which)
         {
@@ -750,6 +750,7 @@ namespace cs808
             const auto root = which == snareDrum ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::snare_currents_json, LibraryData::snare_currents_jsonSize))
                               : which == lowTom  ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::tom_currents_json, LibraryData::tom_currents_jsonSize))
                               : which == rimShot ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::rimshot_currents_json, LibraryData::rimshot_currents_jsonSize))
+                              : which == handClap ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::clap_currents_json, LibraryData::clap_currents_jsonSize))
                                                  : juce::JSON::parse(juce::String::fromUTF8(LibraryData::bassdrum_currents_json, LibraryData::bassdrum_currents_jsonSize));
             const auto* times = root.getProperty("t", {}).getArray();
             const auto* names = root.getProperty("names", {}).getArray();
@@ -788,7 +789,11 @@ namespace cs808
                     r.parts[p.name.toString().toStdString()] = nodes;
                 }
             const auto set = root.getProperty("setting", {});
-            if (which == rimShot)
+            if (which == handClap)
+                r.setting << "the hand clap (the maracas' side, switched out, not drawn), " << set.getProperty("amp", "?").toString()
+                          << " V on the trigger line, Level " << set.getProperty("lev", "?").toString() << ", C.P. OFFSET at "
+                          << set.getProperty("tm3", "?").toString() << ", the noise bus at 130 mV rms (two sines standing in for it)";
+            else if (which == rimShot)
                 r.setting << "the rim shot (the claves' parts switched out), " << set.getProperty("amp", "?").toString()
                           << " V on the trigger line, Level " << set.getProperty("lev", "?").toString();
             else if (which == lowTom)
@@ -850,6 +855,9 @@ namespace cs808
                     return "at rest: only the standing currents flow";
                 if (ms <= 1.05)
                     return "the trigger: a pulse of 1 ms";
+                if (which == handClap)
+                    return ms <= 32.0 ? "the claps: the sawtooth fires the VCA again and again, each clap the band-passed noise"
+                                      : "the reverb: Q70 lets the noise through as its envelope dies away";
                 if (which == rimShot)
                     return ms <= 5.0 ? "the attack: both resonators ring, and Q62 lets them through while the envelope lasts"
                                      : "the tail: the envelope has closed Q62, the resonators ring on unheard";
@@ -941,12 +949,14 @@ namespace cs808
                     w.fill.addTriangle({ x + 3.5f, y }, { x + 8.5f, y - 2.5f }, { x + 8.5f, y + 2.5f });
                 };
 
-                if (which == snareDrum || which == lowTom || which == rimShot)
+                if (which == snareDrum || which == lowTom || which == rimShot || which == handClap)
                 {
                     if (which == snareDrum)
                         buildSnare(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
                     else if (which == rimShot)
                         buildRimShot(a, W, term, R, C, POT, DI, Q, pin, open, two);
+                    else if (which == handClap)
+                        buildClap(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
                     else
                         buildTom(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
                     buildGraph();
@@ -1384,6 +1394,188 @@ namespace cs808
                 a.tx(680, 146, "OUT", Rj);
             }
 
+            /*
+                The hand clap (D278): every part of the engine's tools/tr808/clap.cir on the clap's side of SW12 (the
+                maracas' side carries nothing in a clap and is left off this sheet). Along the top: the trigger, the
+                clap's envelopes and the C.P. OFFSET, the band-pass IC21 on the white noise, the reverb's VCA Q70, the
+                BA662 (IC22) and the mixer IC19. Along the bottom: IC23's four comparators (each a switch to -15 V)
+                that make the sawtooth, Q73 emptying it, and the exponential converter Q71 and Q72 that turns it into
+                the BA662's control current: the claps.
+            */
+            void buildClap(Board::Sheet& a, auto& W, auto& term, auto& R, auto& C, auto& POT, auto& DI, auto& Q, auto& pin,
+                           auto& open, auto& wiper, auto& two)
+            {
+                width = 1060.0f;
+                height = 420.0f;
+                static_cast<void>(DI);
+                const auto L = juce::Justification::centredLeft;
+                const auto Rj = juce::Justification::centredRight;
+                const auto M = juce::Justification::centred;
+                const auto DH = [&](const std::string& el, float x, float y, float Lw, const juce::String& label)
+                {
+                    auto& part = a.add(label);
+                    const float h = (Lw - 6.0f) / 2.0f;
+                    const Pt o(x, y);
+                    part.stroke.addLineSegment({ o, o + Pt(h, 0) }, 0);
+                    part.stroke.addTriangle(o + Pt(h, -3.5f), o + Pt(h, 3.5f), o + Pt(h + 6, 0));
+                    part.stroke.addLineSegment({ o + Pt(h + 6, -3.5f), o + Pt(h + 6, 3.5f) }, 0);
+                    part.stroke.addLineSegment({ o + Pt(h + 6, 0), o + Pt(Lw, 0) }, 0);
+                    two(el, Pt(x, y), Pt(x + Lw, y), el + ".id");
+                };
+                const auto DU = [&](const std::string& el, float x, float y, float Lh, const juce::String& label)
+                {
+                    auto& part = a.add(label);
+                    const float h = (Lh - 6.0f) / 2.0f;
+                    const Pt o(x, y);
+                    part.stroke.addLineSegment({ o, o + Pt(0, h) }, 0);
+                    part.stroke.addLineSegment({ o + Pt(-3.5f, h), o + Pt(3.5f, h) }, 0);
+                    part.stroke.addTriangle(o + Pt(0, h), o + Pt(-3.5f, h + 6), o + Pt(3.5f, h + 6));
+                    part.stroke.addLineSegment({ o + Pt(0, h + 6), o + Pt(0, Lh) }, 0);
+                    two(el, Pt(x, y + Lh), Pt(x, y), el + ".id");
+                };
+                // A comparator of IC23: on, it ties its output to -15 V while its - input is above its + input.
+                const auto CMP = [&](float x, float y, const std::string& minus, const std::string& plus, const std::string& out, const juce::String& label)
+                {
+                    a.OP(x, y, label);
+                    open(x, y + 6, minus);
+                    open(x, y + 18, plus);
+                    term(Pt(x + 26, y + 12), {}, out, true);
+                };
+
+                // The rails: +15 V along the top and down to the lower half, 0 V and -15 V along the bottom, a ground
+                // line over the envelopes and one between the halves.
+                pin(40, 12, "vcc", "+15 V", 40, 7, M); W({ { 40, 12 }, { 1040, 12 } }); W({ { 1040, 12 }, { 1040, 208 } }); W({ { 190, 208 }, { 1040, 208 } });
+                pin(40, 392, "0", "0 V", 34, 392, Rj); W({ { 40, 392 }, { 1000, 392 } });
+                pin(40, 408, "vee", "-15 V", 34, 408, Rj); W({ { 40, 408 }, { 1000, 408 } });
+                W({ { 168, 24 }, { 168, 196 }, { 168, 392 } }); W({ { 168, 24 }, { 460, 24 } }); W({ { 160, 196 }, { 1000, 196 } });
+
+                // The common trigger, as the bass drum's
+                {
+                    auto& p = a.add("The step's pulse ~ 1 ms, from the sequencer");
+                    p.circles.push_back({ Pt(17, 150), 8.5f });
+                }
+                a.glyph({ { 12, 153 }, { 15, 153 }, { 15, 147 }, { 19, 147 }, { 19, 153 }, { 22, 153 } });
+                term(Pt(25.5f, 150), {}, "n6", true); W({ { 25.5f, 150 }, { 28, 150 } });
+                R("r117", 28, 150, 'h', 22, "R117 ~ 47 k"); Q("q31", 66, 150, false, "Q31 ~ turns off for the pulse, letting Q32 rise"); W({ { 66, 162 }, { 66, 392 } });
+                W({ { 66, 138 }, { 66, 106 } }); R("r120", 66, 84, 'v', 22, "R120 ~ 4.7 k"); pin(66, 84, "nx", "ACCENT, 5 TO 15 V", 71, 80, L);
+                W({ { 66, 110 }, { 76, 110 } }); Q("q32", 92, 110, false, "Q32 ~ the follower onto the trigger line"); W({ { 92, 98 }, { 92, 12 } });
+                W({ { 92, 122 }, { 92, 130 } }); R("r113", 92, 130, 'v', 22, "R113 ~ 4.7 k, holds the line down"); W({ { 92, 152 }, { 92, 166 }, { 66, 166 } });
+                W({ { 92, 130 }, { 110, 130 }, { 110, 112 }, { 150, 112 }, { 150, 118 } });
+                // The clap's switch, and its trigger out (Q30)
+                R("r105", 122, 112, 'v', 18, "R105 ~ 4.7 k"); W({ { 122, 130 }, { 134, 130 } });
+                Q("q29", 150, 130, true, "Q29 ~ a PNP switch: it can only push current into the clap");
+                R("r106", 122, 130, 'v', 26, "R106 ~ 10 k"); W({ { 122, 156 }, { 122, 160 } }); Q("q28", 122, 172, false, "Q28 ~ on while the clap's step data stands"); W({ { 122, 184 }, { 122, 392 } });
+                pin(74, 172, "ncpd", "CP ON", 72, 182, M); W({ { 74, 172 }, { 76, 172 } }); R("r103", 76, 172, 'h', 22, "R103 ~ 22 k"); W({ { 98, 172 }, { 106, 172 } });
+                R("r104", 102, 172, 'v', 18, "R104 ~ 10 k"); W({ { 102, 190 }, { 102, 392 } });
+                W({ { 150, 142 }, { 176, 142 } }); W({ { 176, 40 }, { 176, 300 } });
+                R("r109", 176, 300, 'h', 22, "R109 ~ 33 k"); W({ { 198, 300 }, { 214, 300 } }); R("r110", 206, 300, 'v', 18, "R110 ~ 10 k"); W({ { 206, 318 }, { 206, 392 } });
+                Q("q30", 230, 300, false, "Q30 ~ the clap's trigger out, to the CP TRIG jack"); W({ { 230, 312 }, { 230, 392 } });
+                W({ { 230, 208 }, { 230, 256 } }); R("r111", 230, 256, 'v', 22, "R111 ~ 33 k"); W({ { 230, 278 }, { 230, 288 } });
+
+                // The clap's envelopes: Q69 follows the trigger, charging the reverb's (C139, C138) and the accent's (C143)
+                R("rswc", 176, 60, 'h', 22, "SW12 ~ on the clap's side: closed"); W({ { 198, 60 }, { 220, 60 } });
+                Q("q69", 236, 60, false, "Q69 ~ follows the trigger"); W({ { 236, 48 }, { 236, 12 } }); W({ { 236, 72 }, { 236, 116 } });
+                R("r360", 210, 60, 'v', 22, "R360 ~ 27 k"); W({ { 210, 82 }, { 210, 228 }, { 330, 228 }, { 330, 276 }, { 340, 276 } });
+                R("r361", 244, 228, 'v', 22, "R361 ~ 22 k"); W({ { 244, 250 }, { 244, 408 } });
+                DH("d69", 236, 84, 14, "D69"); W({ { 250, 84 }, { 280, 84 } }); C("c139", 264, 70, 'v', 14, "C139 ~ 0.039 uF: the reverb's envelope", true); W({ { 264, 70 }, { 264, 24 } });
+                R("r348", 280, 84, 'h', 22, "R348 ~ 1 M"); W({ { 302, 84 }, { 320, 84 } }); C("c138", 312, 70, 'v', 14, "C138 ~ 0.047 uF", true); W({ { 312, 70 }, { 312, 24 } });
+                R("r349", 320, 84, 'h', 22, "R349 ~ 1 M, to Q70"); W({ { 342, 84 }, { 350, 84 }, { 350, 40 }, { 540, 40 }, { 540, 142 } });
+                DH("d68", 236, 116, 14, "D68"); W({ { 250, 116 }, { 272, 116 } }); C("c143", 260, 116, 'v', 14, "C143 ~ 1 uF: the accent"); W({ { 260, 130 }, { 260, 196 } });
+                R("r362", 272, 116, 'h', 22, "R362 ~ 330 k"); W({ { 294, 116 }, { 346, 116 } }); R("r364", 306, 116, 'v', 18, "R364 ~ 2.2 k"); W({ { 306, 134 }, { 306, 196 } });
+                a.R(320, 136, false, 40, "TM3 C.P. OFFSET ~ 10 k trimmer: where the claps start");
+                two("rtma", Pt(320, 136), Pt(320, 156)); two("rtmb", Pt(320, 156), Pt(320, 176)); wiper(320, 156);
+                W({ { 320, 136 }, { 306, 136 } }); W({ { 320, 176 }, { 320, 186 }, { 280, 186 }, { 280, 408 } });
+                R("r370", 336, 116, 'v', 22, "R370 ~ 47 k", true); W({ { 336, 138 }, { 336, 156 }, { 320, 156 } });
+
+                // The band-pass on the white noise: IC21
+                pin(360, 100, "nwn", "WHITE NOISE, 130 mV", 356, 104, Rj); W({ { 360, 100 }, { 364, 100 } });
+                R("r332", 364, 100, 'h', 22, "R332 ~ 27 k"); W({ { 386, 100 }, { 392, 100 } }); W({ { 364, 100 }, { 364, 88 } });
+                C("c127", 364, 88, 'h', 14, "C127 ~ 820 pF"); W({ { 378, 88 }, { 392, 88 }, { 392, 100 } });
+                R("r333", 392, 100, 'v', 18, "R333 ~ 10 k"); W({ { 392, 118 }, { 392, 196 } });
+                W({ { 392, 100 }, { 404, 100 } }); C("c128", 404, 100, 'h', 14, "C128 ~ 5.2 nF"); W({ { 418, 100 }, { 418, 136 }, { 430, 136 } });
+                a.OP(430, 130, "IC21 ~ a band-pass: the noise's clap colour"); open(430, 136, "nm21"); open(430, 148, "0"); term(Pt(456, 142), {}, "no21", true);
+                W({ { 430, 148 }, { 424, 148 }, { 424, 196 } });
+                W({ { 392, 88 }, { 392, 64 } }); C("c129", 392, 64, 'h', 14, "C129 ~ 5.2 nF"); W({ { 406, 64 }, { 470, 64 }, { 470, 142 }, { 456, 142 } });
+                W({ { 418, 118 }, { 440, 118 } }); R("r334", 440, 118, 'h', 22, "R334 ~ 100 k", true); W({ { 462, 118 }, { 470, 118 } });
+
+                // The reverb's VCA: Q70
+                W({ { 470, 142 }, { 484, 142 } }); R("r342", 484, 142, 'h', 22, "R342 ~ 15 k"); W({ { 506, 142 }, { 520, 142 } });
+                R("r346", 514, 142, 'v', 18, "R346 ~ 680"); W({ { 514, 160 }, { 514, 196 } });
+                C("c137", 520, 142, 'h', 14, "C137 ~ 0.033 uF"); W({ { 534, 142 }, { 550, 142 } });
+                Q("q70", 566, 142, false, "Q70 ~ the reverb's VCA: the noise, fading with C139");
+                R("r363", 566, 100, 'v', 22, "R363 ~ 10 k"); W({ { 566, 100 }, { 566, 12 } }); W({ { 566, 122 }, { 566, 130 } });
+                W({ { 566, 126 }, { 590, 126 } }); C("c146", 590, 126, 'v', 14, "C146 ~ 0.018 uF"); W({ { 590, 140 }, { 590, 196 } });
+                W({ { 566, 154 }, { 566, 160 }, { 582, 160 } }); R("r369", 566, 160, 'v', 18, "R369 ~ 330"); W({ { 566, 178 }, { 566, 196 } });
+                R("r200", 582, 160, 'v', 18, "R200's place ~ 10 k to -15 V, the change"); W({ { 582, 178 }, { 582, 186 }, { 684, 186 }, { 684, 408 } });
+                W({ { 590, 126 }, { 604, 126 } }); C("c152", 604, 126, 'h', 14, "C152 ~ 4.7 nF"); R("r376", 618, 126, 'h', 22, "R376 ~ 47 k"); W({ { 640, 126 }, { 940, 126 } });
+
+                // IC22, the BA662: the noise in at pins 2 and 3, the control current at pin 1, the claps out
+                {
+                    auto& block = a.add("IC22 ~ BA662: an amplifier whose gain follows the current into pin 1");
+                    block.stroke.addRectangle(700, 40, 60, 70);
+                }
+                a.tx(730, 76, "IC22", M);
+                W({ { 470, 64 }, { 470, 50 }, { 650, 50 } }); C("c136", 650, 50, 'h', 14, "C136 ~ 0.022 uF"); R("r372", 664, 50, 'h', 22, "R372 ~ 39 k");
+                W({ { 686, 50 }, { 700, 50 } }); open(700, 50, "np2"); R("r382", 692, 50, 'v', 18, "R382 ~ 1 k"); W({ { 692, 68 }, { 692, 196 } });
+                open(700, 70, "np3"); W({ { 700, 70 }, { 698, 70 } }); R("r381", 698, 70, 'v', 18, "R381 ~ 1 k"); W({ { 698, 88 }, { 698, 196 } });
+                term(Pt(760, 60), {}, "np6", true); W({ { 760, 60 }, { 790, 60 } }); R("r383", 790, 60, 'v', 18, "R383 ~ 82 k"); W({ { 790, 78 }, { 790, 196 } });
+                term(Pt(760, 90), {}, "np8", true); W({ { 760, 90 }, { 770, 90 }, { 770, 150 } });
+                C("c150", 770, 150, 'h', 14, "C150 ~ 1 nF"); R("r378", 784, 150, 'h', 22, "R378 ~ 100 k"); W({ { 806, 150 }, { 940, 150 } });
+                open(730, 110, "np1"); W({ { 730, 110 }, { 730, 120 }, { 800, 120 } }); R("r374", 800, 120, 'h', 22, "R374 ~ 10 k", true);
+                W({ { 822, 120 }, { 910, 120 }, { 910, 320 }, { 846, 320 }, { 846, 308 } });
+
+                // IC23: the ladder, and four comparators that make the sawtooth
+                W({ { 300, 196 }, { 300, 240 } }); R("r353", 300, 240, 'v', 16, "R353 ~ 4.7 k"); R("r352", 300, 256, 'v', 16, "R352 ~ 4.7 k");
+                R("r351", 300, 272, 'v', 18, "R351 ~ 4.7 k"); W({ { 300, 290 }, { 300, 408 } });
+                CMP(340, 270, "n8", "n9r", "n14", "IC23a ~ holds C140 at -15 V while the trigger stands");
+                W({ { 300, 272 }, { 316, 272 }, { 316, 288 }, { 340, 288 } });
+                W({ { 300, 256 }, { 310, 256 }, { 310, 244 }, { 412, 244 }, { 412, 276 }, { 420, 276 } });
+                W({ { 366, 282 }, { 406, 282 }, { 406, 288 }, { 420, 288 } });
+                R("r350", 380, 264, 'v', 18, "R350 ~ 1 M", true); W({ { 380, 264 }, { 380, 196 } });
+                C("c140", 394, 268, 'v', 14, "C140 ~ 0.027 uF: about 30 ms of claps", true); W({ { 394, 268 }, { 394, 196 } });
+                CMP(420, 270, "n6r", "n14", "n1", "IC23b ~ holds pin 1 low while C140 is under -5 V");
+                W({ { 446, 282 }, { 490, 282 }, { 490, 276 }, { 500, 276 } });
+                W({ { 412, 244 }, { 470, 244 }, { 470, 300 }, { 494, 300 }, { 494, 288 }, { 500, 288 } });
+                CMP(500, 270, "n1", "n6r", "n13", "IC23c ~ lets C144 charge while pin 1 is low");
+                W({ { 526, 282 }, { 560, 282 } }); R("r365", 540, 264, 'v', 18, "R365 ~ 82 k"); W({ { 540, 264 }, { 540, 196 } });
+                DH("d71", 560, 282, 14, "D71"); W({ { 574, 282 }, { 620, 282 } });
+                C("c144", 586, 282, 'v', 14, "C144 ~ 0.39 uF: the sawtooth"); W({ { 586, 296 }, { 586, 392 } });
+                R("r356", 600, 282, 'v', 22, "R356 ~ 1 M"); W({ { 600, 304 }, { 600, 334 }, { 640, 334 } });
+                R("r355", 456, 282, 'v', 22, "R355 ~ 2.7 k"); W({ { 456, 304 }, { 456, 314 }, { 632, 314 }, { 632, 322 }, { 640, 322 } });
+                R("r354", 484, 314, 'v', 18, "R354 ~ 5.6 k"); W({ { 484, 332 }, { 484, 392 } });
+                CMP(640, 316, "n4", "n5", "n2", "IC23d ~ fires Q73 at the top of each tooth");
+                W({ { 600, 334 }, { 600, 350 }, { 610, 350 } }); C("c142", 610, 350, 'h', 14, "C142 ~ 220 pF"); W({ { 624, 350 }, { 676, 350 }, { 676, 328 }, { 666, 328 } });
+                R("r359", 676, 350, 'v', 18, "R359 ~ 10 k"); W({ { 676, 368 }, { 676, 392 } });
+                W({ { 676, 328 }, { 700, 328 } }); R("r358", 700, 328, 'h', 22, "R358 ~ 68 k"); W({ { 722, 328 }, { 744, 328 } });
+                Q("q73", 760, 328, false, "Q73 ~ empties C144: the end of each clap"); W({ { 760, 340 }, { 760, 408 } });
+                W({ { 480, 282 }, { 480, 256 }, { 700, 256 } }); C("c141", 700, 256, 'h', 14, "C141 ~ 1 nF"); W({ { 714, 256 }, { 744, 256 } });
+                DU("d70", 730, 256, 20, "D70"); W({ { 730, 276 }, { 730, 408 } });
+                R("r357", 744, 256, 'v', 22, "R357 ~ 68 k"); W({ { 744, 278 }, { 744, 328 } });
+                W({ { 620, 282 }, { 620, 296 }, { 628, 296 } }); R("r367", 628, 296, 'h', 22, "R367 ~ 330"); W({ { 650, 296 }, { 760, 296 }, { 760, 316 } });
+
+                // The exponential converter: Q72 from the sawtooth, Q71 from the offset and the accent
+                W({ { 760, 296 }, { 780, 296 } }); R("r368", 780, 296, 'h', 22, "R368 ~ 470 k"); W({ { 802, 296 }, { 830, 296 } });
+                R("r371", 816, 296, 'v', 18, "R371 ~ 15 k"); W({ { 816, 314 }, { 816, 392 } });
+                Q("q72", 846, 296, true, "Q72 ~ the sawtooth, exponentially, into IC22's pin 1");
+                W({ { 846, 284 }, { 846, 258 }, { 880, 258 } }); R("r366", 856, 208, 'v', 22, "R366 ~ 15 k"); W({ { 856, 230 }, { 856, 258 } });
+                Q("q71", 880, 270, true, "Q71 ~ sets where the claps start: the offset and the accent"); W({ { 880, 282 }, { 880, 408 } });
+                W({ { 346, 116 }, { 346, 236 }, { 864, 236 }, { 864, 270 } });
+
+                // The mixer, IC19, and the Level
+                W({ { 940, 84 }, { 940, 150 } });
+                a.OP(960, 130, "IC19 ~ the mixer: the claps and the reverb summed"); open(960, 136, "nsum"); open(960, 148, "0"); term(Pt(986, 142), {}, "vout", true);
+                W({ { 940, 136 }, { 960, 136 } }); W({ { 960, 148 }, { 952, 148 }, { 952, 196 } });
+                C("c149", 940, 84, 'h', 14, "C149 ~ 220 pF"); W({ { 954, 84 }, { 1000, 84 } });
+                R("r375", 940, 100, 'h', 22, "R375 ~ 470 k"); W({ { 962, 100 }, { 1000, 100 } });
+                POT("rvr17", 940, 116, 'h', 22, "VR17 LEVEL ~ 100 k"); C("c145", 962, 116, 'h', 14, "C145 ~ 33 uF"); W({ { 976, 116 }, { 1000, 116 } });
+                W({ { 986, 142 }, { 1000, 142 }, { 1000, 84 } }); W({ { 1000, 142 }, { 1016, 142 } });
+                {
+                    auto& out = a.add({});
+                    out.fill.addTriangle({ 1024, 142 }, { 1016, 138.5f }, { 1016, 145.5f });
+                }
+                a.tx(1016, 136, "OUT", Rj);
+            }
+
             void buildGraph()
             {
                 // Every wire corner, junction and part lead is a point; a wire is split where a point lies on it.
@@ -1581,7 +1773,7 @@ namespace cs808
     LidView::LidView(Processor& p) : impl(std::make_unique<Impl>()), processor(p)
     {
         auto& i = *impl;
-        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete" };
+        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete", "Hand clap, complete" };
         i.sheet.fontHeight = 10.0f;
         i.sheet.get = [this] { return impl->showFull && impl->full ? 1 + impl->full->which : 0; };
         i.sheet.set = [this](int v)
@@ -1622,7 +1814,7 @@ namespace cs808
         juce::StringArray all;
         for (int d = 0; d < drumsDrawn; ++d)
             for (const auto& e : impl->drum(d).errors)
-                all.add(juce::String(d == rimShot ? "the rim shot: " : d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
+                all.add(juce::String(d == handClap ? "the hand clap: " : d == rimShot ? "the rim shot: " : d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
         return all;
     }
 

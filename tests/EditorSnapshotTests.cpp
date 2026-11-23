@@ -100,6 +100,8 @@ public:
             shoot("lid-low-tom");
             editor->lidForTesting().showSheet(4);
             shoot("lid-rim-shot");
+            editor->lidForTesting().showSheet(5);
+            shoot("lid-hand-clap");
             editor->lidForTesting().showSheet(0);
             editor->lidView = false;
             editor->patternMode = true;
