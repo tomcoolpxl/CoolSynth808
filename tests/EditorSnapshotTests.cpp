@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "Editor.h"
+#include "ui/LidView.h"
 #include "Library.h"
 #include "Processor.h"
 
@@ -37,6 +38,14 @@ public:
                 expectEquals(editor->getWidth(), width);
                 expectGreaterThan(editor->getHeight(), 200);
             }
+        }
+
+        beginTest("the_complete_bass_drum_matches_its_netlist");
+        {
+            auto p = std::make_unique<Processor>();
+            std::unique_ptr<juce::AudioProcessorEditor> e(p->createEditor());
+            const auto problems = dynamic_cast<Editor*>(e.get())->lidForTesting().completeDrumProblems();
+            expect(problems.isEmpty(), problems.joinIntoString("; "));
         }
 
         if (folderName.isEmpty())
@@ -82,6 +91,9 @@ public:
             editor->lanesOpen = true;
             editor->lidView = true;
             shoot("lid");
+            editor->lidForTesting().showSheet(1);
+            shoot("lid-bass-drum");
+            editor->lidForTesting().showSheet(0);
             editor->lidView = false;
             editor->patternMode = true;
             shoot("pattern-mode");

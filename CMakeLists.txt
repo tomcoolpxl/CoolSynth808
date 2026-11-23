@@ -15,7 +15,9 @@ add_subdirectory(external/coolsynth-engine)
 juce_add_binary_data(CoolSynth808Library
     HEADER_NAME LibraryData.h
     NAMESPACE LibraryData
-    SOURCES resources/library/patterns.json)
+    SOURCES
+        resources/library/patterns.json
+        resources/lid/bassdrum_currents.json) # the bass drum's currents, recorded from ngspice by the engine's tools/kick808/mockup_currents.py
 
 # A JUCE audio plugin built as a standalone app for now (D267): the plugin formats are one line away.
 juce_add_plugin(CoolSynth808

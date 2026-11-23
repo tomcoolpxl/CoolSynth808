@@ -57,6 +57,7 @@ namespace cs808
         [[nodiscard]] int playheadStep(int panelLane) const;
         void refresh();
         void layoutForLanes();
+        [[nodiscard]] LidView& lidForTesting() noexcept { return *lid; }
 
     private:
         void timerCallback() override;
