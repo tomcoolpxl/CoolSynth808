@@ -90,6 +90,31 @@ namespace coolsynth::midi
         void setKeyboardKeys(int count);
         static constexpr std::array<int, 6> keyboardSizes { 0, 25, 37, 49, 61, 88 };
 
+        // ---- The controller's input (CoolSynth's D271) ------------------------------------------------------------
+        /** Which MIDI input is the controller. The standalone app opens every input at once and sorts them: the
+            controller's linked controls go to the controller, everything else to the sound. A DAW sends a plugin one
+            stream and never says where a message came from: there, as with Any input, every input may be the
+            controller. Kept with the setup, for this computer. */
+        enum class InputChoice { automatic, any, device };
+        [[nodiscard]] InputChoice inputChoice() const noexcept { return choice; }
+        [[nodiscard]] const juce::MidiDeviceInfo& chosenInput() const noexcept { return chosen; }
+        void setInput(InputChoice how, const juce::MidiDeviceInfo& device = {});
+        /** The input the links were last learned from: Auto's pick when no ready setup names its ports. */
+        [[nodiscard]] const juce::MidiDeviceInfo& learnedInput() const noexcept { return learned; }
+        /** Message thread: the controller's input among those plugged in now; none, and every input may be it. */
+        [[nodiscard]] std::optional<juce::MidiDeviceInfo> controllerInput() const;
+        /** For the panel: "Auto (Arturia MiniLab 3)", "Auto (any input)", "Any input", a device's name. */
+        [[nodiscard]] juce::String inputDescription() const;
+        /** The rule controllerInput follows, on the inputs given. Auto: the ready setup's port, then the input
+            learned from, then none. A chosen device is the controller even unplugged (nothing comes from it then). */
+        [[nodiscard]] static std::optional<juce::MidiDeviceInfo> resolveInput(InputChoice how, const juce::MidiDeviceInfo& chosen,
+                                                                              const juce::MidiDeviceInfo& learned,
+                                                                              const juce::String& profileId,
+                                                                              const juce::Array<juce::MidiDeviceInfo>& plugged);
+        /** MIDI threads (the standalone's router): the input a control came from while learning. Learning that ends
+            in a link makes it the learned input. */
+        void noteLearnSource(const juce::MidiDeviceInfo& device);
+
         // ---- Learning -------------------------------------------------------------------------------------------
         struct Heard
         {
@@ -132,6 +157,12 @@ namespace coolsynth::midi
         void save();
         void lookForKnownController();
         void finishLearning(bool rested = false);
+        void takeLearnSource(); // the input learned from, as a learning ends in a link
+
+        InputChoice choice = InputChoice::automatic;
+        juce::MidiDeviceInfo chosen, learned;
+        juce::CriticalSection sourceLock;  // the MIDI threads' pendingSource
+        juce::MidiDeviceInfo pendingSource; // the input of the last control heard while learning
 
         ControllerMap current;
         Origin currentOrigin = Origin::none;

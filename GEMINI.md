@@ -22,6 +22,8 @@ The shared project memory for every AI tool (`CLAUDE.md` points here).
 - `src/Editor` and `src/ui`: the panel, its widgets and themes, Under the Lid, the controller setup.
 - `src/midi`: CoolSynth's controller layer, ported (D268), with its own `%APPDATA%\CoolSynth808\controller.json`;
   `src/Controls` says what each place does in the 808. Pads strike on the audio thread (`Processor::setPadNotes`).
+  `src/StandaloneMidiIn` sorts the standalone's MIDI inputs: the controller's linked controls apart from the sound's
+  notes (D271); `src/StandaloneMidiOut` keeps the clock's output thread running.
 - `tests/`: the app's tests (`CoolSynth808Tests`); the engine's run in the engine's repository.
 
 ## Rules

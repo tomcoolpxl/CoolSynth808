@@ -127,6 +127,42 @@ public:
             send(juce::MidiMessage::controllerEvent(1, 27, 0));
         }
 
+        // D271: the standalone sorts its inputs; a pad's note from the controller strikes the pad's drum, the same note
+        // from another input (a DAW's General MIDI drums) plays its own.
+        beginTest("sorted_inputs_a_pad_from_the_controller_and_the_same_note_from_elsewhere");
+        {
+            p->setInputsRouted(true);
+            (void) p->takeStruckLanes();
+            (void) block(juce::MidiMessage::noteOn(10, 37, static_cast<juce::uint8>(80))); // from another input
+            auto bits = p->takeStruckLanes();
+            expect((bits & (1u << 5)) != 0, "the rim shot, its General MIDI drum");
+            expect((bits & (1u << 1)) == 0, "not the pad's snare");
+            p->takeControllerMessage(juce::MidiMessage::noteOn(10, 37, static_cast<juce::uint8>(80))); // from the controller
+            (void) block(juce::MidiMessage::controllerEvent(1, 7, 100)); // an unlinked control: the sound's
+            bits = p->takeStruckLanes();
+            expect((bits & (1u << 1)) != 0, "the pad's snare");
+            expect((bits & (1u << 5)) == 0, "and not the rim shot");
+            p->takeControllerEvents([&](const midi::ControllerEvent& ev) { controls.handle(ev); });
+            p->setInputsRouted(false);
+        }
+
+        beginTest("the_controller_input_auto_takes_the_ready_setups_port_then_the_input_learned_from");
+        {
+            using Choice = midi::ControllerSetup::InputChoice;
+            const juce::MidiDeviceInfo miniLab { "Minilab3 MIDI", "id-minilab" }, loop { "loopMIDI Port", "id-loop" },
+                                       gone { "Old keyboard", "id-gone" };
+            const juce::Array<juce::MidiDeviceInfo> plugged { loop, miniLab };
+            const auto resolve = [&](Choice how, const juce::MidiDeviceInfo& chosen, const juce::MidiDeviceInfo& learned,
+                                     const juce::String& profile) { return midi::ControllerSetup::resolveInput(how, chosen, learned, profile, plugged); };
+            expect(! resolve(Choice::any, {}, loop, "arturia.minilab3").has_value(), "Any input: none");
+            expect(resolve(Choice::automatic, {}, loop, "arturia.minilab3") == miniLab, "the ready setup's port first");
+            expect(resolve(Choice::automatic, {}, loop, {}) == loop, "then the input learned from");
+            expect(resolve(Choice::automatic, {}, { "loopMIDI Port", "id-changed" }, {}) == loop, "by name when its id moved");
+            expect(! resolve(Choice::automatic, {}, gone, {}).has_value(), "unplugged: none, every input may be it");
+            expect(resolve(Choice::device, loop, {}, "arturia.minilab3") == loop, "a chosen device");
+            expect(resolve(Choice::device, gone, {}, {}) == gone, "even unplugged");
+        }
+
         e.reset();
         p.reset();
         midi::ControllerSetup::instance().useForTesting({});

@@ -1,6 +1,7 @@
 #include "Processor.h"
 
 #include "Editor.h"
+#include "StandaloneMidiIn.h"
 #include "StandaloneMidiOut.h"
 
 namespace cs808
@@ -35,7 +36,10 @@ namespace cs808
             note.store(-1, std::memory_order_relaxed);
         // The computer's controller setup (D211, D268): read once for the program. Tests (no wrapper) set their own.
         if (wrapperType == wrapperType_Standalone)
+        {
             midiOutKeeper = makeStandaloneMidiOutKeeper(); // MIDI clock out at its own samples (the review of D267)
+            midiInRouter = makeStandaloneMidiInRouter(*this); // the controller's input apart from the sound's (D271)
+        }
         if (wrapperType != wrapperType_Undefined)
         {
             startedSetup = true;
@@ -46,6 +50,7 @@ namespace cs808
 
     Processor::~Processor()
     {
+        midiInRouter.reset(); // gives the inputs back to the standalone's player before anything here goes
         // The last one: the setup's timers go while JUCE still runs (the review of D211).
         if (startedSetup && liveProcessors.fetch_sub(1, std::memory_order_relaxed) == 1)
             coolsynth::midi::ControllerSetup::instance().shutDown();
@@ -384,6 +389,38 @@ namespace cs808
         }
     }
 
+    bool Processor::takeControl(const juce::MidiMessage& m, int samplePosition, int n) noexcept
+    {
+        const auto event = coolsynth::midi::toControllerEvent(m);
+        if (! event)
+            return false;
+        if (const auto scope = controllerFifo.write(1); scope.blockSize1 > 0)
+            controllerEvents[static_cast<std::size_t>(scope.startIndex1)] = *event;
+        const int index = padIndex(event->control);
+        const int note = index >= 0 ? padNotes[static_cast<std::size_t>(index)].load(std::memory_order_relaxed) : -1;
+        if (note < 0 || ! (event->note ? event->value > 0 : event->value >= 64))
+            return false;
+        // Hit hard, a pad is accented: an 808's drum is accented or not (D268).
+        const auto velocity = static_cast<juce::uint8>(! event->note || event->value >= 100 ? 127 : 1);
+        keptBlock.addEvent(juce::MidiMessage::noteOn(midiChannel, note, velocity), samplePosition);
+        keptBlock.addEvent(juce::MidiMessage::noteOff(midiChannel, note), std::min(n - 1, samplePosition + 1));
+        return true;
+    }
+
+    void Processor::takeControllerMessage(const juce::MidiMessage& message) noexcept
+    {
+        if (message.getRawDataSize() != 3 || ! (message.isNoteOnOrOff() || message.isController()))
+            return;
+        const juce::SpinLock::ScopedLockType lock(routedWriters);
+        if (const auto scope = routedFifo.write(1); scope.blockSize1 > 0)
+        {
+            auto& r = routedMessages[static_cast<std::size_t>(scope.startIndex1)];
+            const auto* data = message.getRawData();
+            r.bytes = { data[0], data[1], data[2] };
+            r.milliseconds = juce::Time::getMillisecondCounterHiRes();
+        }
+    }
+
     void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
     {
         const juce::ScopedNoDenormals noDenormals;
@@ -395,34 +432,44 @@ namespace cs808
         pullFromUi();
 
         // A controller's linked controls go to the panel, not the sound (D211, D268); its pads strike their drums here,
-        // without waiting for the message thread.
+        // without waiting for the message thread. The standalone app sorts its inputs first (D271): the block's MIDI
+        // is then the sound's, and the controller's own messages come from its input's queue.
         keptBlock.clear();
         bool changed = false;
+        const bool routedNow = inputsRouted.load(std::memory_order_relaxed);
         for (const auto metadata : midi)
         {
             const auto& m = metadata.getMessage();
-            if (coolsynth::midi::ControllerSetup::wanted(m))
-                if (const auto event = coolsynth::midi::toControllerEvent(m))
-                {
-                    if (const auto scope = controllerFifo.write(1); scope.blockSize1 > 0)
-                        controllerEvents[static_cast<std::size_t>(scope.startIndex1)] = *event;
-                    const int index = padIndex(event->control);
-                    const int note = index >= 0 ? padNotes[static_cast<std::size_t>(index)].load(std::memory_order_relaxed) : -1;
-                    if (note >= 0 && (event->note ? event->value > 0 : event->value >= 64))
-                    {
-                        // Hit hard, a pad is accented: an 808's drum is accented or not (D268).
-                        const auto velocity = static_cast<juce::uint8>(! event->note || event->value >= 100 ? 127 : 1);
-                        keptBlock.addEvent(juce::MidiMessage::noteOn(midiChannel, note, velocity), metadata.samplePosition);
-                        keptBlock.addEvent(juce::MidiMessage::noteOff(midiChannel, note), std::min(n - 1, metadata.samplePosition + 1));
-                        changed = true;
-                    }
-                }
-            if (coolsynth::midi::ControllerSetup::takesFromSound(m))
+            if (! routedNow)
             {
-                changed = true;
-                continue;
+                if (coolsynth::midi::ControllerSetup::wanted(m))
+                    changed = takeControl(m, metadata.samplePosition, n) || changed;
+                if (coolsynth::midi::ControllerSetup::takesFromSound(m))
+                {
+                    changed = true;
+                    continue;
+                }
             }
             keptBlock.addEvent(m, metadata.samplePosition);
+        }
+        {
+            // Placed in the block by when they came, as JUCE's MIDI collector places the sound's notes: the time since
+            // the last block, squeezed into this one when it was longer.
+            const double now = juce::Time::getMillisecondCounterHiRes();
+            const double since = lastBlockMilliseconds > 0.0 ? now - lastBlockMilliseconds : 0.0;
+            const double elapsed = since * 0.001 * rate;
+            const auto scope = routedFifo.read(routedFifo.getNumReady());
+            scope.forEach([&](int index)
+            {
+                const auto& r = routedMessages[static_cast<std::size_t>(index)];
+                double at = since > 0.0 ? (r.milliseconds - lastBlockMilliseconds) * 0.001 * rate : 0.0;
+                if (elapsed > static_cast<double>(n))
+                    at *= static_cast<double>(n) / elapsed;
+                const int offset = std::clamp(static_cast<int>(at), 0, n - 1);
+                const juce::MidiMessage m(r.bytes[0], r.bytes[1], r.bytes[2]);
+                changed = takeControl(m, offset, n) || changed;
+            });
+            lastBlockMilliseconds = now;
         }
         if (changed)
         {

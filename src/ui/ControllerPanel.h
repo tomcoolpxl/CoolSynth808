@@ -29,6 +29,7 @@ namespace cs808
         [[nodiscard]] juce::Rectangle<float> card() const;
         [[nodiscard]] juce::Rectangle<float> readyButton() const;
         [[nodiscard]] juce::Rectangle<float> forgetButton() const;
+        [[nodiscard]] juce::Rectangle<float> inputButton() const; // which MIDI input is the controller (D271)
         void learn(int row);
         void stopLearning();
         void timerCallback() override;

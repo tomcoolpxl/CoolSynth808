@@ -36,6 +36,12 @@ namespace cs808
         return { box.getRight() - 110.0f, box.getY(), 110.0f, 26.0f };
     }
 
+    juce::Rectangle<float> ControllerPanel::inputButton() const
+    {
+        const auto box = card().reduced(20.0f, 14.0f);
+        return { box.getRight() - 290.0f, box.getY() + 32.0f, 290.0f, 24.0f };
+    }
+
     void ControllerPanel::paint(juce::Graphics& g)
     {
         const auto& th = theme();
@@ -52,6 +58,7 @@ namespace cs808
         const auto& map = midi::ControllerSetup::instance().map();
         g.drawText(map.empty() ? juce::String("Controller") : "Controller: " + map.name, inner.removeFromTop(26.0f),
                    juce::Justification::centredLeft);
+        inner.removeFromRight(300.0f); // the input's button
         g.setColour(th.dim);
         g.setFont(uiFont(11.0f));
         g.drawText("Click a row, then move that control on your controller. Right-click a row to forget it. Esc closes.",
@@ -59,14 +66,17 @@ namespace cs808
         g.setColour(th.ink);
         g.drawText(status, inner.removeFromTop(18.0f), juce::Justification::centredLeft);
 
-        for (const auto& [area, text] : { std::pair { readyButton(), juce::String("Ready setups...") }, std::pair { forgetButton(), juce::String("Forget all") } })
+        const auto inputText = "Input: " + midi::ControllerSetup::instance().inputDescription();
+        for (const auto& [area, text] : { std::pair { readyButton(), juce::String("Ready setups...") },
+                                          std::pair { forgetButton(), juce::String("Forget all") },
+                                          std::pair { inputButton(), inputText } })
         {
             g.setColour(th.ink.withAlpha(0.08f));
             g.fillRoundedRectangle(area, 6.0f);
             g.setColour(th.ink);
             g.drawRoundedRectangle(area, 6.0f, 1.0f);
             g.setFont(uiFont(12.0f));
-            g.drawText(text, area, juce::Justification::centred);
+            g.drawFittedText(text, area.reduced(8.0f, 0.0f).toNearestInt(), juce::Justification::centred, 1);
         }
     }
 
@@ -191,6 +201,39 @@ namespace cs808
                 const auto& profile = profiles[static_cast<std::size_t>(r - 1)];
                 midi::ControllerSetup::instance().setMap(profile.map);
                 status = profile.note.isNotEmpty() ? profile.note : profile.name + " is set up.";
+                repaint();
+            });
+            return;
+        }
+        if (inputButton().contains(e.position))
+        {
+            // Auto, Any input, or one of the inputs plugged in now (D271).
+            using Choice = midi::ControllerSetup::InputChoice;
+            const auto plugged = juce::MidiInput::getAvailableDevices();
+            const auto auto_ = midi::ControllerSetup::resolveInput(Choice::automatic, {}, setup.learnedInput(),
+                                                                   setup.map().profileId, plugged);
+            juce::PopupMenu m;
+            m.addItem(1, "Auto (" + (auto_.has_value() ? auto_->name : juce::String("any input, until one is set up")) + ")",
+                      true, setup.inputChoice() == Choice::automatic);
+            m.addItem(2, "Any input", true, setup.inputChoice() == Choice::any);
+            m.addSeparator();
+            for (int i = 0; i < plugged.size(); ++i)
+                m.addItem(10 + i, plugged[i].name, true,
+                          setup.inputChoice() == Choice::device && setup.chosenInput().identifier == plugged[i].identifier);
+            if (plugged.isEmpty())
+                m.addItem(3, "No MIDI input plugged in", false, false);
+            m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withMousePosition(), [this, plugged](int r)
+            {
+                auto& s = midi::ControllerSetup::instance();
+                if (r == 1)
+                    s.setInput(Choice::automatic);
+                else if (r == 2)
+                    s.setInput(Choice::any);
+                else if (r >= 10 && r - 10 < plugged.size())
+                    s.setInput(Choice::device, plugged[r - 10]);
+                else
+                    return;
+                status = "The controller's input: " + s.inputDescription() + ".";
                 repaint();
             });
             return;

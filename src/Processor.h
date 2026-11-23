@@ -125,6 +125,16 @@ namespace cs808
         /** The controller's messages the setup links (or hears while learning), as they came. */
         void takeControllerEvents(const std::function<void(const coolsynth::midi::ControllerEvent&)>& use);
 
+        // ---- The controller's input (CoolSynth's D271) ----------------------------------------------------------
+        /** The standalone app sorts its MIDI inputs (StandaloneMidiIn): true, the sound's MIDI holds only what is not
+            the controller's, and the controller's linked controls come by takeControllerMessage. False (a DAW, the
+            tests, Any input): every message may be the controller's, as before. Any thread. */
+        void setInputsRouted(bool routed) noexcept { inputsRouted.store(routed, std::memory_order_relaxed); }
+        [[nodiscard]] bool inputsRoutedForTesting() const noexcept { return inputsRouted.load(std::memory_order_relaxed); }
+        /** MIDI threads: a linked control's message from the controller's input, for the next block. A note or a
+            controller; anything else is not taken. */
+        void takeControllerMessage(const juce::MidiMessage& message) noexcept;
+
         // ---- Rendering without a device (tests, the MIDI file) -----------------------------------------------
         [[nodiscard]] coolsynth::synth::v3::EngineV3& engineForTesting() noexcept { return engine; }
 
@@ -142,6 +152,8 @@ namespace cs808
         void pushUndo();
         void pullFromUi() noexcept;
         void playEvents(juce::MidiBuffer& midi, int numSamples, std::int64_t blockStart);
+        /** A controller's message: to the panel's queue, and a pad's drum struck into keptBlock. True if struck. */
+        bool takeControl(const juce::MidiMessage& m, int samplePosition, int numSamples) noexcept;
         void sendClock(juce::MidiBuffer& out, double beat0, double beat1, int numSamples, bool started, bool stopped);
 
         // message thread
@@ -172,7 +184,7 @@ namespace cs808
         std::array<Strike, 128> strikes {};
 
         // audio thread
-        // One layer, no effects, one sound (CoolSynth's D270): about 60 MB instead of 640, the same samples.
+        // One layer, no effects, one sound (CoolSynth's D270): about 35 MB instead of 610, the same samples.
         coolsynth::synth::v3::EngineV3 engine { coolsynth::synth::v3::EngineShape::singleLayer() };
         coolsynth::synth::StepSequencer sequencer;
         coolsynth::synth::v3::EngineSettings engineSettings {};
@@ -201,6 +213,19 @@ namespace cs808
         juce::MidiBuffer keptBlock; // the audio thread's, sized in prepareToPlay
         bool startedSetup = false;
         std::unique_ptr<juce::Timer> midiOutKeeper;
+
+        // The controller's input, sorted by the standalone app (D271): its MIDI threads write, the audio thread reads.
+        struct RoutedMessage
+        {
+            std::array<juce::uint8, 3> bytes {};
+            double milliseconds = 0.0; // when it came, on the hi-res millisecond counter
+        };
+        std::atomic<bool> inputsRouted { false };
+        juce::SpinLock routedWriters; // one writer at a time: each input may have its own thread
+        juce::AbstractFifo routedFifo { 256 };
+        std::array<RoutedMessage, 256> routedMessages {};
+        double lastBlockMilliseconds = 0.0; // audio thread
+        std::unique_ptr<juce::Timer> midiInRouter; // last: it is gone before anything it writes to
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Processor)
     };

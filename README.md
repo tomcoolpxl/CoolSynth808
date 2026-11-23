@@ -24,7 +24,8 @@ Snappy, the toms' Tuning and so on, and the Accent and Volume on the left. Click
 - Drag MIDI drags the pattern into your music software as a MIDI file.
 - Under the Lid shows the circuits as they are struck.
 - Controller sets up a MIDI controller: the main knob chooses the drum, knobs follow it, pads play the drums or, after
-  a press of the main knob, enter its steps. Click a place and move the control to link it.
+  a press of the main knob, enter its steps. Click a place and move the control to link it. Input says which MIDI
+  input is the controller; Auto finds it, and notes from your other inputs then only play the drums.
 
 It follows a MIDI clock when one comes in (its start, stop and tempo), and sends its own when none does. The audio
 and MIDI settings are in the Options menu of the window.

@@ -72,6 +72,8 @@ namespace coolsynth::midi
         testFile = juce::File();
         driverOn = true;
         keys = 0;
+        choice = InputChoice::automatic;
+        chosen = learned = {};
         fileTimer.reset();
         current = std::move(map);
         currentOrigin = current.empty() ? Origin::none : Origin::saved;
@@ -92,6 +94,8 @@ namespace coolsynth::midi
         current = std::move(map);
         currentOrigin = current.empty() ? Origin::none : Origin::saved;
         foundProfile = {};
+        if (current.empty())
+            learned = {}; // Forget all: nothing was learned from anywhere
         save();
         publish();
         if (current.empty() && ! testing)
@@ -117,13 +121,97 @@ namespace coolsynth::midi
         ++changes;
     }
 
+    void ControllerSetup::setInput(InputChoice how, const juce::MidiDeviceInfo& device)
+    {
+        const auto next = how == InputChoice::device ? device : juce::MidiDeviceInfo {};
+        if (how == choice && next == chosen)
+            return;
+        choice = how;
+        chosen = next;
+        save();
+        ++changes;
+    }
+
+    std::optional<juce::MidiDeviceInfo> ControllerSetup::resolveInput(InputChoice how, const juce::MidiDeviceInfo& chosenDevice,
+                                                                      const juce::MidiDeviceInfo& learnedDevice,
+                                                                      const juce::String& profileId,
+                                                                      const juce::Array<juce::MidiDeviceInfo>& plugged)
+    {
+        // By its identifier first; a device plugged into another port may come back under another one, so by name too.
+        const auto find = [&plugged](const juce::MidiDeviceInfo& d) -> std::optional<juce::MidiDeviceInfo>
+        {
+            if (d.identifier.isEmpty() && d.name.isEmpty())
+                return std::nullopt;
+            for (const auto& p : plugged)
+                if (d.identifier.isNotEmpty() && p.identifier == d.identifier)
+                    return p;
+            for (const auto& p : plugged)
+                if (d.name.isNotEmpty() && p.name == d.name)
+                    return p;
+            return std::nullopt;
+        };
+        switch (how)
+        {
+            case InputChoice::any:
+                return std::nullopt;
+            case InputChoice::device:
+                if (chosenDevice.identifier.isEmpty() && chosenDevice.name.isEmpty())
+                    return std::nullopt;
+                if (const auto found = find(chosenDevice))
+                    return found;
+                return chosenDevice;
+            case InputChoice::automatic:
+            default:
+                if (const auto* profile = profileId.isNotEmpty() ? readyProfile(profileId) : nullptr)
+                    for (const auto& p : plugged)
+                        for (const auto& port : profile->portNames)
+                            if (p.name.containsIgnoreCase(port))
+                                return p;
+                return find(learnedDevice);
+        }
+    }
+
+    std::optional<juce::MidiDeviceInfo> ControllerSetup::controllerInput() const
+    {
+        return resolveInput(choice, chosen, learned, current.profileId, juce::MidiInput::getAvailableDevices());
+    }
+
+    juce::String ControllerSetup::inputDescription() const
+    {
+        if (choice == InputChoice::any)
+            return "Any input";
+        if (choice == InputChoice::device)
+        {
+            bool plugged = false;
+            for (const auto& p : juce::MidiInput::getAvailableDevices())
+                plugged = plugged || p.identifier == chosen.identifier || p.name == chosen.name;
+            return chosen.name + (plugged ? juce::String() : juce::String(" (not plugged in)"));
+        }
+        const auto input = controllerInput();
+        return input.has_value() ? "Auto (" + input->name + ")" : juce::String("Auto (any input)");
+    }
+
+    void ControllerSetup::noteLearnSource(const juce::MidiDeviceInfo& device)
+    {
+        const juce::ScopedLock lock(sourceLock);
+        pendingSource = device;
+    }
+
+    void ControllerSetup::takeLearnSource()
+    {
+        const juce::ScopedLock lock(sourceLock);
+        if (pendingSource.identifier.isNotEmpty())
+            learned = pendingSource;
+    }
+
     void ControllerSetup::save()
     {
         if (testing)
             return;
         const auto f = file();
         const bool saved = currentOrigin == Origin::saved;
-        if (! saved && driverOn && keys == 0)
+        const bool inputOwn = choice != InputChoice::automatic || learned.identifier.isNotEmpty();
+        if (! saved && driverOn && keys == 0 && ! inputOwn)
             f.deleteFile(); // nothing of the player's own to keep
         else
         {
@@ -133,6 +221,18 @@ namespace coolsynth::midi
                 object->setProperty("miniLabDriver", driverOn);
                 if (keys != 0)
                     object->setProperty("keyboardKeys", keys);
+                if (choice != InputChoice::automatic)
+                    object->setProperty("input", choice == InputChoice::any ? "any" : "device");
+                if (choice == InputChoice::device)
+                {
+                    object->setProperty("inputId", chosen.identifier);
+                    object->setProperty("inputName", chosen.name);
+                }
+                if (learned.identifier.isNotEmpty())
+                {
+                    object->setProperty("learnedInputId", learned.identifier);
+                    object->setProperty("learnedInputName", learned.name);
+                }
             }
             f.getParentDirectory().createDirectory();
             f.replaceWithText(juce::JSON::toString(value));
@@ -146,10 +246,12 @@ namespace coolsynth::midi
         fileTime = f.getLastModificationTime();
         if (! f.existsAsFile())
         {
-            if (! driverOn || keys != 0)
+            if (! driverOn || keys != 0 || choice != InputChoice::automatic || learned.identifier.isNotEmpty())
             {
                 driverOn = true;
                 keys = 0;
+                choice = InputChoice::automatic;
+                chosen = learned = {};
                 ++changes;
             }
             if (currentOrigin == Origin::saved)
@@ -167,6 +269,12 @@ namespace coolsynth::midi
             // A size CoolSynth does not offer (a hand-edited file) is no size.
             const int read = static_cast<int>(object->getProperty("keyboardKeys"));
             keys = std::find(keyboardSizes.begin(), keyboardSizes.end(), read) != keyboardSizes.end() ? read : 0;
+            const auto input = object->getProperty("input").toString();
+            choice = input == "any" ? InputChoice::any : input == "device" ? InputChoice::device : InputChoice::automatic;
+            chosen = choice == InputChoice::device
+                         ? juce::MidiDeviceInfo { object->getProperty("inputName").toString(), object->getProperty("inputId").toString() }
+                         : juce::MidiDeviceInfo {};
+            learned = { object->getProperty("learnedInputName").toString(), object->getProperty("learnedInputId").toString() };
         }
         auto map = ControllerMap::fromVar(value);
         // A saved copy of a ready setup from an older CoolSynth (0.3.0 kept only the MiniLab's Arturia program): when it
@@ -296,6 +404,7 @@ namespace coolsynth::midi
         onProgress = std::move(progress);
         candidate.reset();
         values.clear();
+        noteLearnSource({});
         learning.store(true, std::memory_order_relaxed);
         learningNow.store(true, std::memory_order_relaxed);
         if (learnTimer == nullptr)
@@ -335,6 +444,7 @@ namespace coolsynth::midi
                 return; // a release says nothing new
             // A key or a pad: a button, at once.
             auto done = onHeard;
+            takeLearnSource();
             stopAllLearning();
             if (done)
                 done({ event.control, Encoding::absolute, true });
@@ -390,6 +500,7 @@ namespace coolsynth::midi
             heard.encoding = heard.button ? Encoding::absolute : guessEncoding(values);
         }
         auto done = onHeard;
+        takeLearnSource();
         stopAllLearning();
         if (done)
             done(heard);
