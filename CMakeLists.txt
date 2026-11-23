@@ -21,7 +21,8 @@ juce_add_binary_data(CoolSynth808Library
         resources/lid/snare_currents.json # the snare's, by its tools/tr808/lid_currents.py (D278)
         resources/lid/tom_currents.json # the low tom's, the same way
         resources/lid/rimshot_currents.json # the rim shot's
-        resources/lid/clap_currents.json) # the hand clap's, its maracas' side left out
+        resources/lid/clap_currents.json # the hand clap's, its maracas' side left out
+        resources/lid/cowbell_currents.json) # the cowbell's parts of the metal board
 
 # A JUCE audio plugin built as a standalone app for now (D267): the plugin formats are one line away.
 juce_add_plugin(CoolSynth808

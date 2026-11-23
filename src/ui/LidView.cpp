@@ -740,9 +740,9 @@ namespace cs808
         };
 
         // The drums drawn complete: the bass drum, then the snare (D278).
-        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, rimShot = 3, handClap = 4, drumsDrawn = 5 };
+        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, rimShot = 3, handClap = 4, cowbell = 5, drumsDrawn = 6 };
         /** The lane each drum drawn complete plays in. */
-        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5, 6 };
+        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5, 6, 7 };
 
         Recording loadRecording(int which)
         {
@@ -751,6 +751,7 @@ namespace cs808
                               : which == lowTom  ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::tom_currents_json, LibraryData::tom_currents_jsonSize))
                               : which == rimShot ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::rimshot_currents_json, LibraryData::rimshot_currents_jsonSize))
                               : which == handClap ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::clap_currents_json, LibraryData::clap_currents_jsonSize))
+                              : which == cowbell ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::cowbell_currents_json, LibraryData::cowbell_currents_jsonSize))
                                                  : juce::JSON::parse(juce::String::fromUTF8(LibraryData::bassdrum_currents_json, LibraryData::bassdrum_currents_jsonSize));
             const auto* times = root.getProperty("t", {}).getArray();
             const auto* names = root.getProperty("names", {}).getArray();
@@ -789,7 +790,10 @@ namespace cs808
                     r.parts[p.name.toString().toStdString()] = nodes;
                 }
             const auto set = root.getProperty("setting", {});
-            if (which == handClap)
+            if (which == cowbell)
+                r.setting << "the cowbell, " << set.getProperty("amp", "?").toString() << " V on the trigger line, Level "
+                          << set.getProperty("cbl", "?").toString() << ", its two oscillators at 554 and 825 Hz as both measured units have them";
+            else if (which == handClap)
                 r.setting << "the hand clap (the maracas' side, switched out, not drawn), " << set.getProperty("amp", "?").toString()
                           << " V on the trigger line, Level " << set.getProperty("lev", "?").toString() << ", C.P. OFFSET at "
                           << set.getProperty("tm3", "?").toString() << ", the noise bus at 130 mV rms (two sines standing in for it)";
@@ -855,6 +859,9 @@ namespace cs808
                     return "at rest: only the standing currents flow";
                 if (ms <= 1.05)
                     return "the trigger: a pulse of 1 ms";
+                if (which == cowbell)
+                    return ms <= 8.0 ? "the attack: C9 charged, then R82 and C34 pull it down fast"
+                                     : "the ring: the two oscillators through their VCAs, fading with C9";
                 if (which == handClap)
                     return ms <= 32.0 ? "the claps: the sawtooth fires the VCA again and again, each clap the band-passed noise"
                                       : "the reverb: Q70 lets the noise through as its envelope dies away";
@@ -949,7 +956,7 @@ namespace cs808
                     w.fill.addTriangle({ x + 3.5f, y }, { x + 8.5f, y - 2.5f }, { x + 8.5f, y + 2.5f });
                 };
 
-                if (which == snareDrum || which == lowTom || which == rimShot || which == handClap)
+                if (which == snareDrum || which == lowTom || which == rimShot || which == handClap || which == cowbell)
                 {
                     if (which == snareDrum)
                         buildSnare(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
@@ -957,6 +964,8 @@ namespace cs808
                         buildRimShot(a, W, term, R, C, POT, DI, Q, pin, open, two);
                     else if (which == handClap)
                         buildClap(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
+                    else if (which == cowbell)
+                        buildCowbell(a, W, term, R, C, DI, Q, pin, open, wiperAt, two);
                     else
                         buildTom(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
                     buildGraph();
@@ -1576,6 +1585,123 @@ namespace cs808
                 a.tx(1016, 136, "OUT", Rj);
             }
 
+            /*
+                The cowbell (D278): its parts of the engine's tools/tr808/metal.cir, the voicing board. The common
+                trigger, IC2a narrowing it for the four metal voices, the cowbell's switch; its envelope (C9, with R82
+                and C34 for the fall after the attack); two VCAs, Q15 and Q14, each gating one oscillator (the 554 and
+                825 Hz squares, drawn as pins); the band-pass IC2b mixing them; CB LEVEL and the follower IC6a.
+            */
+            void buildCowbell(Board::Sheet& a, auto& W, auto& term, auto& R, auto& C, auto& DI, auto& Q, auto& pin, auto& open,
+                              auto& wiper, auto& two)
+            {
+                width = 860.0f;
+                height = 362.0f;
+                const auto Rj = juce::Justification::centredRight;
+                const auto M = juce::Justification::centred;
+                const auto DH = [&](const std::string& el, float x, float y, float Lw, const juce::String& label)
+                {
+                    auto& part = a.add(label);
+                    const float h = (Lw - 6.0f) / 2.0f;
+                    const Pt o(x, y);
+                    part.stroke.addLineSegment({ o, o + Pt(h, 0) }, 0);
+                    part.stroke.addTriangle(o + Pt(h, -3.5f), o + Pt(h, 3.5f), o + Pt(h + 6, 0));
+                    part.stroke.addLineSegment({ o + Pt(h + 6, -3.5f), o + Pt(h + 6, 3.5f) }, 0);
+                    part.stroke.addLineSegment({ o + Pt(h + 6, 0), o + Pt(Lw, 0) }, 0);
+                    two(el, Pt(x, y), Pt(x + Lw, y), el + ".id");
+                };
+
+                // The rails: +15 V along the top and down to the middle; 0 V along the bottom, over IC2a and between
+                // the halves.
+                pin(40, 12, "vcc", "+15 V", 40, 7, M); W({ { 40, 12 }, { 540, 12 } }); W({ { 540, 12 }, { 540, 208 } }); W({ { 190, 208 }, { 540, 208 } });
+                pin(40, 340, "0", "0 V", 40, 351, M); W({ { 40, 340 }, { 800, 340 } });
+                W({ { 168, 24 }, { 168, 196 }, { 168, 340 } }); W({ { 168, 24 }, { 240, 24 } }); W({ { 160, 196 }, { 800, 196 } });
+
+                // The common trigger (the main board's, its parts named with a T in the netlist)
+                {
+                    auto& p = a.add("The step's pulse ~ 1 ms, from the sequencer");
+                    p.circles.push_back({ Pt(17, 150), 8.5f });
+                }
+                a.glyph({ { 12, 153 }, { 15, 153 }, { 15, 147 }, { 19, 147 }, { 19, 153 }, { 22, 153 } });
+                term(Pt(25.5f, 150), {}, "n6", true); W({ { 25.5f, 150 }, { 28, 150 } });
+                R("rt117", 28, 150, 'h', 22, "R117 ~ 47 k"); Q("qt31", 66, 150, false, "Q31 ~ turns off for the pulse, letting Q32 rise"); W({ { 66, 162 }, { 66, 340 } });
+                W({ { 66, 138 }, { 66, 106 } }); R("rt120", 66, 84, 'v', 22, "R120 ~ 4.7 k"); pin(66, 84, "nx", "ACCENT, 5 TO 15 V", 61, 80, Rj);
+                W({ { 66, 110 }, { 76, 110 } }); Q("qt32", 92, 110, false, "Q32 ~ the follower onto the trigger line"); W({ { 92, 98 }, { 92, 12 } });
+                W({ { 92, 122 }, { 92, 130 } }); R("rt113", 92, 130, 'v', 22, "R113 ~ 4.7 k, holds the line down"); W({ { 92, 152 }, { 92, 166 }, { 66, 166 } });
+                W({ { 92, 130 }, { 110, 130 }, { 110, 40 }, { 180, 40 }, { 180, 100 } });
+
+                // IC2a narrows the trigger to some 7 to 14 V for the four metal voices
+                R("r19", 180, 78, 'h', 22, "R19 ~ 100 k"); W({ { 202, 78 }, { 230, 78 } });
+                R("r18", 180, 100, 'h', 22, "R18 ~ 3.3 k"); W({ { 202, 100 }, { 214, 100 } });
+                DI("d1", 202, 100, 20, "D1 ~ clamps the line"); W({ { 202, 120 }, { 202, 196 } });
+                R("r20", 214, 78, 'v', 22, "R20 ~ 15 k", true);
+                R("r21", 222, 78, 'v', 18, "R21 ~ 3.3 k"); W({ { 222, 96 }, { 222, 196 } });
+                a.OP(230, 60, "IC2a ~ a gain of 31: the trigger, narrowed for the metal voices"); open(230, 66, "n2m"); open(230, 78, "nz"); term(Pt(256, 72), {}, "nv2", true);
+                W({ { 230, 66 }, { 224, 66 }, { 224, 50 } }); R("r22", 224, 30, 'v', 20, "R22 ~ 3.3 k", true); W({ { 224, 30 }, { 224, 24 } });
+                W({ { 224, 50 }, { 236, 50 } }); R("r23", 236, 50, 'h', 22, "R23 ~ 100 k"); W({ { 258, 50 }, { 266, 50 }, { 266, 72 }, { 256, 72 } });
+
+                // The cowbell's switch
+                W({ { 266, 72 }, { 300, 72 }, { 300, 88 } }); R("r14", 276, 72, 'v', 22, "R14 ~ 4.7 k"); W({ { 276, 94 }, { 276, 100 }, { 284, 100 } });
+                Q("q5", 300, 100, true, "Q5 ~ a PNP switch: it passes IC2a's pulse into the cowbell");
+                R("r9", 276, 100, 'v', 22, "R9 ~ 22 k"); W({ { 276, 122 }, { 276, 128 } });
+                Q("q1", 276, 140, false, "Q1 ~ on while the cowbell's step data stands"); W({ { 276, 152 }, { 276, 196 } });
+                pin(230, 140, "jcb", "CB ON", 230, 151, M); W({ { 230, 140 }, { 234, 140 } }); R("r4", 234, 140, 'h', 18, "R4 ~ 22 k"); W({ { 252, 140 }, { 260, 140 } });
+                R("r5", 256, 140, 'v', 18, "R5 ~ 10 k"); W({ { 256, 158 }, { 256, 196 } });
+
+                // The envelope: C9, and R82 with C34 for the quick fall after the attack
+                W({ { 300, 112 }, { 300, 124 }, { 312, 124 } }); R("r122", 312, 124, 'h', 22, "R122 ~ 1 k"); W({ { 334, 124 }, { 340, 124 } });
+                DH("d2", 340, 124, 14, "D2"); W({ { 354, 124 }, { 400, 124 } });
+                C("c9", 366, 124, 'v', 14, "C9 ~ 0.47 uF: the envelope"); W({ { 366, 138 }, { 366, 196 } });
+                R("r82", 378, 124, 'v', 22, "R82 ~ 33 k"); C("c34", 378, 146, 'v', 14, "C34 ~ 1 uF: takes the first charge away"); W({ { 378, 160 }, { 378, 196 } });
+                R("r28", 400, 68, 'v', 22, "R28 ~ 100 k", true); W({ { 400, 90 }, { 400, 124 }, { 400, 236 } });
+                R("r29", 400, 236, 'v', 22, "R29 ~ 100 k");
+
+                // The first VCA, Q15: the 554 Hz oscillator, let through while the envelope lasts
+                W({ { 400, 68 }, { 440, 68 } }); DH("d3", 440, 68, 14, "D3"); W({ { 454, 68 }, { 520, 68 }, { 520, 88 } });
+                pin(426, 100, "no1", "OSCILLATOR 1, 554 Hz", 426, 112, M); W({ { 426, 100 }, { 432, 100 } });
+                R("r62", 432, 100, 'h', 22, "R62 ~ 33 k"); W({ { 454, 100 }, { 476, 100 } }); R("r63", 464, 100, 'v', 18, "R63 ~ 2.2 k"); W({ { 464, 118 }, { 464, 196 } });
+                C("c32", 476, 100, 'h', 14, "C32 ~ 10 uF"); W({ { 490, 100 }, { 504, 100 } });
+                W({ { 496, 100 }, { 496, 108 } }); R("r30", 496, 108, 'v', 22, "R30 ~ 470 k", true); W({ { 496, 130 }, { 496, 208 } });
+                Q("q15", 520, 100, false, "Q15 ~ a swing VCA: it pulls the envelope down in time with oscillator 1");
+                R("r31", 520, 112, 'v', 18, "R31 ~ 100"); W({ { 520, 130 }, { 520, 196 } });
+
+                // The second VCA, Q14: the 825 Hz oscillator
+                W({ { 400, 258 }, { 440, 258 } }); DH("d4", 440, 258, 14, "D4"); W({ { 454, 258 }, { 520, 258 }, { 520, 270 } });
+                pin(426, 282, "no2", "OSCILLATOR 2, 825 Hz", 426, 294, M); W({ { 426, 282 }, { 432, 282 } });
+                R("r64", 432, 282, 'h', 22, "R64 ~ 33 k"); W({ { 454, 282 }, { 476, 282 } }); R("r65", 464, 282, 'v', 18, "R65 ~ 2.2 k"); W({ { 464, 300 }, { 464, 340 } });
+                C("c33", 476, 282, 'h', 14, "C33 ~ 10 uF"); W({ { 490, 282 }, { 504, 282 } });
+                W({ { 496, 208 }, { 496, 226 } }); R("r32", 496, 226, 'v', 22, "R32 ~ 470 k"); W({ { 496, 248 }, { 496, 282 } });
+                Q("q14", 520, 282, false, "Q14 ~ a swing VCA: it pulls the envelope down in time with oscillator 2");
+                R("r33", 520, 294, 'v', 18, "R33 ~ 100"); W({ { 520, 312 }, { 520, 340 } });
+
+                // IC2b: a band-pass that mixes the two
+                W({ { 420, 68 }, { 420, 50 }, { 560, 50 } }); R("r26", 560, 50, 'h', 22, "R26 ~ 10 k"); W({ { 582, 50 }, { 590, 50 } });
+                C("c30", 590, 50, 'h', 14, "C30 ~ 2.2 nF"); W({ { 604, 50 }, { 616, 50 } });
+                W({ { 420, 258 }, { 420, 330 }, { 560, 330 } }); R("r27", 560, 330, 'h', 22, "R27 ~ 10 k"); W({ { 582, 330 }, { 590, 330 } });
+                C("c31", 590, 330, 'h', 14, "C31 ~ 2.2 nF"); W({ { 604, 330 }, { 616, 330 } });
+                W({ { 616, 50 }, { 616, 330 } });
+                W({ { 616, 240 }, { 628, 240 } }); R("r24", 628, 240, 'v', 18, "R24 ~ 2.2 k"); W({ { 628, 258 }, { 628, 340 } });
+                a.OP(660, 130, "IC2b ~ a band-pass: the cowbell's clang"); open(660, 136, "n2bm"); open(660, 148, "0"); term(Pt(686, 142), {}, "ncbo", true);
+                W({ { 660, 148 }, { 652, 148 }, { 652, 196 } });
+                C("c28", 616, 136, 'h', 14, "C28 ~ 0.01 uF"); W({ { 630, 136 }, { 660, 136 } });
+                C("c29", 616, 104, 'h', 14, "C29 ~ 3.3 nF"); W({ { 630, 104 }, { 700, 104 }, { 700, 142 }, { 686, 142 } });
+                W({ { 640, 136 }, { 640, 118 } }); R("r25", 640, 118, 'h', 22, "R25 ~ 470 k"); W({ { 662, 118 }, { 700, 118 } });
+
+                // CB LEVEL and the follower IC6a
+                W({ { 700, 142 }, { 708, 142 } }); C("c75", 708, 142, 'h', 14, "C75 ~ 1 uF"); R("r116", 722, 142, 'h', 22, "R116 ~ 8.2 k");
+                W({ { 744, 142 }, { 750, 142 }, { 750, 150 } });
+                a.R(750, 150, false, 40, "VR5 CB LEVEL ~ 5 k");
+                two("rvr5a", Pt(750, 150), Pt(750, 170)); two("rvr5b", Pt(750, 170), Pt(750, 190)); wiper(750, 170); W({ { 750, 190 }, { 750, 196 } });
+                W({ { 750, 170 }, { 760, 170 } }); C("c76", 760, 170, 'h', 14, "C76 ~ 0.022 uF"); W({ { 774, 170 }, { 790, 170 } });
+                R("r117", 782, 170, 'v', 18, "R117 ~ 22 k"); W({ { 782, 188 }, { 782, 196 } });
+                a.OP(790, 152, "IC6a ~ a follower"); open(790, 158, "vcb"); open(790, 170, "n6ap"); term(Pt(816, 164), {}, "vcb", true);
+                W({ { 816, 164 }, { 824, 164 }, { 824, 146 }, { 784, 146 }, { 784, 158 }, { 790, 158 } }); W({ { 824, 164 }, { 840, 164 } });
+                {
+                    auto& out = a.add({});
+                    out.fill.addTriangle({ 848, 164 }, { 840, 160.5f }, { 840, 167.5f });
+                }
+                a.tx(840, 158, "OUT", Rj);
+            }
+
             void buildGraph()
             {
                 // Every wire corner, junction and part lead is a point; a wire is split where a point lies on it.
@@ -1773,7 +1899,7 @@ namespace cs808
     LidView::LidView(Processor& p) : impl(std::make_unique<Impl>()), processor(p)
     {
         auto& i = *impl;
-        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete", "Hand clap, complete" };
+        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete", "Hand clap, complete", "Cowbell, complete" };
         i.sheet.fontHeight = 10.0f;
         i.sheet.get = [this] { return impl->showFull && impl->full ? 1 + impl->full->which : 0; };
         i.sheet.set = [this](int v)
@@ -1814,7 +1940,7 @@ namespace cs808
         juce::StringArray all;
         for (int d = 0; d < drumsDrawn; ++d)
             for (const auto& e : impl->drum(d).errors)
-                all.add(juce::String(d == handClap ? "the hand clap: " : d == rimShot ? "the rim shot: " : d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
+                all.add(juce::String(d == cowbell ? "the cowbell: " : d == handClap ? "the hand clap: " : d == rimShot ? "the rim shot: " : d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
         return all;
     }
 
