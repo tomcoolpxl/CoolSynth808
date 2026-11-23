@@ -55,7 +55,9 @@ namespace cs808
 
         [[nodiscard]] const SequencerPattern& patternShown() const;
         [[nodiscard]] const SequencerLane& laneShown(int panelLane) const;
-        void editLane(int panelLane, const std::function<void(SequencerLane&)>& edit, bool undoable = true);
+        /** Edits a lane of the pattern being edited, or of `pattern` (-1 the fill) when given. */
+        void editLane(int panelLane, const std::function<void(SequencerLane&)>& edit, bool undoable = true, int pattern = currentPattern);
+        static constexpr int currentPattern = -1000;
         [[nodiscard]] int playheadStep(int panelLane) const;
         void refresh();
         void layoutForLanes();
@@ -65,6 +67,8 @@ namespace cs808
         [[nodiscard]] Controls& controlsForTesting() noexcept { return *controls; }
         /** The controller setup over the panel (the header's Controller). */
         void openControllerSetup();
+        /** The library or controller overlay closes after the callback that asked has returned. */
+        void closeOverlaysLater();
 
     private:
         void timerCallback() override;
@@ -83,6 +87,7 @@ namespace cs808
         void savePatternToLibrary();
         void loadLibraryEntry(const LibraryEntry& e);
         void startMidiDrag();
+        void resetSelection();
 
         class Content;
         class StepKeys;
@@ -101,6 +106,8 @@ namespace cs808
         std::unique_ptr<juce::PropertiesFile> settings;
         int themeIndex = 0;
         bool midiDragging = false;
+        std::uint64_t lastLook = 0; // what the panel showed when last drawn (timerCallback)
+        int patternBeforeFill = 0;
 
         template <typename T> T& add(juce::Component& parent)
         {

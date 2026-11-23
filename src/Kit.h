@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 
 #include "synth/v3/SoundUnit.h"
 
@@ -84,6 +86,18 @@ namespace cs808
     } };
     // The Accent's index in each generator's descriptor: the 808 Drums', the Snare & Clap's, the Metal's.
     inline constexpr std::array<int, 3> accentParam { 10, 4, 7 };
+
+    /** The Volume knob's place for a volume and back: an audio taper (the cube of the place, as CoolSynth's faders,
+        D184), +6 dB at the top, silence at the bottom. */
+    [[nodiscard]] inline float volumeDbAt(float position) noexcept
+    {
+        const float p = std::clamp(position, 0.0f, 1.0f);
+        return p <= 0.001f ? -60.0f : std::max(-60.0f, 20.0f * std::log10(2.0f * p * p * p));
+    }
+    [[nodiscard]] inline float volumePosition(float db) noexcept
+    {
+        return db <= -60.0f ? 0.0f : std::clamp(std::cbrt(std::pow(10.0f, db / 20.0f) / 2.0f), 0.0f, 1.0f);
+    }
 
     /** A knob's value in the stock kit: Levels full, everything else at 12 o'clock. */
     [[nodiscard]] float knobDefault(int index) noexcept;

@@ -183,7 +183,7 @@ namespace cs808
             int id = 1;
             for (const auto& profile : midi::readyProfiles())
                 m.addItem(id++, profile.name);
-            m.showMenuAsync(juce::PopupMenu::Options(), [this](int r)
+            m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withMousePosition(), [this](int r)
             {
                 const auto& profiles = midi::readyProfiles();
                 if (r < 1 || r > static_cast<int>(profiles.size()))

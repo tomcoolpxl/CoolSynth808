@@ -40,6 +40,7 @@ set(COOLSYNTH808_SOURCES
     src/Processor.cpp
     src/Editor.cpp
     src/Controls.cpp
+    src/StandaloneMidiOut.cpp
     src/midi/ControllerMap.cpp
     src/midi/ControllerSetup.cpp
     src/ui/ControllerPanel.cpp

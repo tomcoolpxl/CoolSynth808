@@ -35,7 +35,8 @@ namespace cs808
     {
         KitValues kit {};
         PlaySettings play {};
-        std::vector<std::unique_ptr<SequencerBank>> banks; // at least one
+        static constexpr int maxBanks = 64;
+        std::vector<std::unique_ptr<SequencerBank>> banks; // at least one, at most maxBanks
         int bank = 0;
 
         Project();

@@ -303,6 +303,10 @@ namespace cs808
                 pressed = -1;
                 return;
             }
+            // What the press edits is fixed at the press: a controller may move the drum or pattern while it is held.
+            pressLane = editor.selectedLane;
+            pressPattern = editor.editPattern;
+            pressB = editor.editB;
             const auto& steps = editor.editB ? editor.laneShown(editor.selectedLane).b : editor.laneShown(editor.selectedLane).a;
             startChance = steps[static_cast<std::size_t>(pressed)].on ? steps[static_cast<std::size_t>(pressed)].chance : 1.0f;
         }
@@ -316,13 +320,13 @@ namespace cs808
             dragged = true;
             const float chance = juce::jlimit(0.05f, 1.0f, startChance - e.getDistanceFromDragStartY() / 50.0f);
             const int step = pressed;
-            const bool b = editor.editB;
-            editor.editLane(editor.selectedLane, [&](SequencerLane& l)
+            const bool b = pressB;
+            editor.editLane(pressLane, [&](SequencerLane& l)
             {
                 auto& s = (b ? l.b : l.a)[static_cast<std::size_t>(step)];
                 s.on = true;
                 s.chance = std::round(chance * 20.0f) / 20.0f;
-            }, false);
+            }, false, pressPattern);
             editor.selectedStep = step;
         }
 
@@ -335,9 +339,9 @@ namespace cs808
                 else
                 {
                     const int step = pressed;
-                    const bool b = editor.editB;
+                    const bool b = pressB;
                     bool nowOn = false;
-                    editor.editLane(editor.selectedLane, [&](SequencerLane& l)
+                    editor.editLane(pressLane, [&](SequencerLane& l)
                     {
                         auto& s = (b ? l.b : l.a)[static_cast<std::size_t>(step)];
                         s.on = ! s.on;
@@ -347,7 +351,7 @@ namespace cs808
                             s.hits = 1;
                         }
                         nowOn = s.on;
-                    });
+                    }, true, pressPattern);
                     editor.selectedStep = nowOn ? step : -1;
                 }
             }
@@ -358,6 +362,8 @@ namespace cs808
     private:
         Editor& editor;
         int pressed = -1;
+        int pressLane = 1, pressPattern = 0;
+        bool pressB = false;
         bool dragged = false;
         float startChance = 1.0f;
     };
@@ -491,6 +497,8 @@ namespace cs808
                 editor.refresh();
                 return;
             }
+            pressPattern = editor.editPattern;
+            pressB = editor.editB;
             const auto& steps = editor.editB ? editor.laneShown(l).b : editor.laneShown(l).a;
             startChance = steps[static_cast<std::size_t>(pressedStep)].on ? steps[static_cast<std::size_t>(pressedStep)].chance : 1.0f;
         }
@@ -504,13 +512,13 @@ namespace cs808
             dragged = true;
             const float chance = juce::jlimit(0.05f, 1.0f, startChance - e.getDistanceFromDragStartY() / 40.0f);
             const int step = pressedStep;
-            const bool b = editor.editB;
+            const bool b = pressB;
             editor.editLane(pressedLane, [&](SequencerLane& lane)
             {
                 auto& s = (b ? lane.b : lane.a)[static_cast<std::size_t>(step)];
                 s.on = true;
                 s.chance = std::round(chance * 20.0f) / 20.0f;
-            }, false);
+            }, false, pressPattern);
             editor.selectedStep = step;
         }
 
@@ -523,7 +531,7 @@ namespace cs808
                 else
                 {
                     const int step = pressedStep;
-                    const bool b = editor.editB;
+                    const bool b = pressB;
                     bool nowOn = false;
                     editor.editLane(pressedLane, [&](SequencerLane& lane)
                     {
@@ -535,7 +543,7 @@ namespace cs808
                             s.hits = 1;
                         }
                         nowOn = s.on;
-                    });
+                    }, true, pressPattern);
                     editor.selectedStep = nowOn ? step : -1;
                 }
             }
@@ -566,7 +574,8 @@ namespace cs808
         juce::OwnedArray<NumberBox> lengths;
         juce::OwnedArray<Knob> minis;
         std::vector<std::pair<int, int>> miniPlace; // lane, place in the lane
-        int pressedLane = 0, pressedStep = -1;
+        int pressedLane = 0, pressedStep = -1, pressPattern = 0;
+        bool pressB = false;
         bool dragged = false;
         float startChance = 1.0f;
     };
@@ -701,7 +710,7 @@ namespace cs808
             juce::PopupMenu m;
             m.addItem(1, "Move to the Recycle Bin");
             const auto file = entries[static_cast<std::size_t>(row)].file;
-            m.showMenuAsync(juce::PopupMenu::Options(), [this, file](int r)
+            m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withMousePosition(), [this, file](int r)
             {
                 if (r == 1 && file.moveToTrash())
                     reload();
@@ -752,6 +761,8 @@ namespace cs808
         setResizeLimits(620, 280, 2480, 2200);
         layoutForLanes();
         controls = std::make_unique<Controls>(*this);
+        // Space and the shortcuts work from the start, before any click.
+        juce::MessageManager::callAsync([safe = juce::Component::SafePointer<Editor>(this)] { if (safe != nullptr) safe->grabKeyboardFocus(); });
         startTimerHz(30);
     }
 
@@ -777,9 +788,9 @@ namespace cs808
         return panelLane <= 0 ? p.accent : p.lanes[static_cast<std::size_t>(panelLane - 1)];
     }
 
-    void Editor::editLane(int panelLane, const std::function<void(SequencerLane&)>& edit, bool undoable)
+    void Editor::editLane(int panelLane, const std::function<void(SequencerLane&)>& edit, bool undoable, int patternIndex)
     {
-        const int pattern = editPattern;
+        const int pattern = patternIndex == currentPattern ? editPattern : patternIndex;
         processor.editBank([&](SequencerBank& bank)
         {
             auto& p = pattern < 0 ? bank.fill : bank.pattern[static_cast<std::size_t>(pattern)];
@@ -797,12 +808,7 @@ namespace cs808
         return static_cast<int>(((k % length) + length) % length);
     }
 
-    void Editor::refresh()
-    {
-        content->repaint();
-        for (auto* c : parts)
-            c->repaint();
-    }
+    void Editor::refresh() { content->repaint(); } // its children with it
 
     void Editor::layoutForLanes()
     {
@@ -823,6 +829,9 @@ namespace cs808
                 if (static_cast<bool>(c->getProperties()["sound"]))
                     c->setVisible(! lidView);
             }
+        // The window keeps the panel's proportions as it is resized: the height follows the width (the review of D267).
+        if (auto* constrainer = getConstrainer())
+            constrainer->setFixedAspectRatio(baseWidth / static_cast<double>(height));
         const double scale = getWidth() > 0 ? getWidth() / static_cast<double>(baseWidth) : 1.0;
         setSize(getWidth() > 0 ? getWidth() : baseWidth, juce::roundToInt(height * (getWidth() > 0 ? scale : 1.0)));
         resized();
@@ -901,6 +910,22 @@ namespace cs808
             knob.getProperties().set("region", 0);
             knob.getProperties().set("sound", true);
         }
+        {
+            // The master volume, under the Accent as on the 808 (the review of D267: a controller's knob 8 turned
+            // it with nothing on the panel to show it).
+            auto& volume = add<Knob>(*content);
+            volume.label = "Volume";
+            volume.defaultValue = volumePosition(0.0f);
+            volume.get = [this] { return volumePosition(processor.project().kit.volumeDb); };
+            volume.set = [this](float v) { processor.editKit([v](KitValues& kit) { kit.volumeDb = volumeDbAt(v); }); };
+            volume.gestureStart = [this] { processor.beginGesture(); };
+            volume.gestureEnd = [this] { processor.endGesture(); };
+            const int y = soundTop + 34 + rows[0]++ * 66;
+            volume.setBounds(juce::roundToInt(margin + colW / 2 - 30), y, 60, 60);
+            volume.getProperties().set("baseY", y);
+            volume.getProperties().set("region", 0);
+            volume.getProperties().set("sound", true);
+        }
         for (int c = 0; c < panelLanes; ++c)
         {
             const int x = juce::roundToInt(margin + c * colW);
@@ -953,7 +978,12 @@ namespace cs808
         tempo.defaultValue = 120.0;
         tempo.text = [this](double v) { return juce::String(processor.followingClock() ? processor.tempoNow() : v, 1); };
         tempo.get = [this] { return processor.project().play.tempo; };
-        tempo.set = [this](double v) { processor.editPlay([v](PlaySettings& p) { p.tempo = v; }); };
+        // Following a MIDI clock, the clock sets the tempo: the box shows it and takes no edits.
+        tempo.set = [this](double v)
+        {
+            if (! processor.followingClock())
+                processor.editPlay([v](PlaySettings& p) { p.tempo = v; });
+        };
         tempo.gestureStart = [this] { processor.beginGesture(); };
         tempo.gestureEnd = [this] { processor.endGesture(); };
         place(tempo, 84, keysTop + 6, 70, 46);
@@ -997,7 +1027,14 @@ namespace cs808
         {
             if (e.mods.isShiftDown() || ! processor.isPlaying())
             {
-                editPattern = editPattern == -1 ? 0 : -1; // shift-click, or while stopped: edit the fill
+                // Shift-click, or while stopped: edit the fill; again, back to the pattern edited before it.
+                if (editPattern == -1)
+                    editPattern = patternBeforeFill;
+                else
+                {
+                    patternBeforeFill = editPattern;
+                    editPattern = -1;
+                }
                 patternMode = false;
                 refresh();
             }
@@ -1157,7 +1194,7 @@ namespace cs808
         m.addItem(4, "Save project as...");
         m.addSeparator();
         m.addItem(5, "Keep this pattern in the library...");
-        m.showMenuAsync(juce::PopupMenu::Options(), [this](int r)
+        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withMousePosition(), [this](int r)
         {
             if (r == 1) newProject();
             else if (r == 2) openProject();
@@ -1172,7 +1209,7 @@ namespace cs808
         juce::PopupMenu m;
         for (int i = 0; i < 4; ++i)
             m.addItem(i + 1, themes()[static_cast<std::size_t>(i)].name, true, i == themeIndex);
-        m.showMenuAsync(juce::PopupMenu::Options(), [this](int r)
+        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withMousePosition(), [this](int r)
         {
             if (r <= 0)
                 return;
@@ -1192,11 +1229,13 @@ namespace cs808
             m.addItem(i + 1, "Bank " + juce::String(i + 1), true, i == p.bank);
         m.addSeparator();
         m.addItem(1000, "New bank");
-        m.showMenuAsync(juce::PopupMenu::Options(), [this](int r)
+        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withMousePosition(), [this](int r)
         {
+            if (r <= 0)
+                return;
             if (r == 1000)
                 processor.addBank();
-            else if (r > 0)
+            else
                 processor.selectBank(r - 1);
             refresh();
         });
@@ -1204,11 +1243,10 @@ namespace cs808
 
     void Editor::newProject()
     {
-        processor.replaceProject(Project {});
+        processor.replaceProject(Project {}, false);
+        processor.forgetHistory(); // a new project starts its own history, as an opened one
         processor.setCurrentFile({});
-        editPattern = 0;
-        editB = false;
-        refresh();
+        resetSelection();
     }
 
     void Editor::openProject()
@@ -1220,30 +1258,52 @@ namespace cs808
             if (! f.existsAsFile())
                 return;
             if (const auto r = processor.loadFrom(f); r.failed())
+            {
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Cannot open the project", r.getErrorMessage());
-            editPattern = 0;
-            refresh();
+                return;
+            }
+            resetSelection();
         });
     }
 
     void Editor::saveProject(bool askName)
     {
+        const auto save = [this](const juce::File& f)
+        {
+            // A save that fails says so (the review of D267): the file read-only, its folder gone.
+            if (! processor.saveTo(f))
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Cannot save the project", f.getFullPathName());
+        };
         if (! askName && processor.currentFile() != juce::File())
         {
-            processor.saveTo(processor.currentFile());
+            save(processor.currentFile());
             return;
         }
         (void) appDataFolder().createDirectory();
-        chooser = std::make_unique<juce::FileChooser>("Save the project", appDataFolder().getChildFile("Untitled.cs808"), "*.cs808");
-        chooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting, [this](const juce::FileChooser& fc)
+        const auto current = processor.currentFile();
+        const auto proposed = current != juce::File() ? current : appDataFolder().getChildFile("Untitled.cs808");
+        chooser = std::make_unique<juce::FileChooser>("Save the project", proposed, "*.cs808");
+        chooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+                             [this, save](const juce::FileChooser& fc)
         {
             auto f = fc.getResult();
             if (f == juce::File())
                 return;
-            if (! f.hasFileExtension("cs808"))
-                f = f.withFileExtension("cs808");
-            if (! processor.saveTo(f))
-                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Cannot save", f.getFullPathName());
+            if (f.hasFileExtension("cs808"))
+            {
+                save(f);
+                return;
+            }
+            // The extension added here, after the dialog's own warning: a file of that name is asked about again.
+            f = f.withFileExtension("cs808");
+            if (! f.existsAsFile())
+            {
+                save(f);
+                return;
+            }
+            juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::QuestionIcon, "Replace the project?",
+                                               f.getFileName() + " is there already. Replace it?", "Replace", "Cancel", this,
+                                               juce::ModalCallbackFunction::create([save, f](int r) { if (r == 1) save(f); }));
         });
     }
 
@@ -1274,8 +1334,9 @@ namespace cs808
     void Editor::openLibrary()
     {
         library = std::make_unique<LibraryPanel>();
-        library->onClose = [this] { library.reset(); grabKeyboardFocus(); };
-        library->onLoad = [this](const LibraryEntry& e) { loadLibraryEntry(e); library.reset(); grabKeyboardFocus(); };
+        // An overlay is let go after its own callback has returned, never inside it (the review of D267).
+        library->onClose = [this] { closeOverlaysLater(); };
+        library->onLoad = [this](const LibraryEntry& e) { loadLibraryEntry(e); closeOverlaysLater(); };
         addAndMakeVisible(*library);
         library->setBounds(getLocalBounds());
         library->grabKeyboardFocus();
@@ -1284,7 +1345,7 @@ namespace cs808
     void Editor::openControllerSetup()
     {
         controllerPanel = std::make_unique<ControllerPanel>(controls.get());
-        controllerPanel->onClose = [this] { controllerPanel.reset(); grabKeyboardFocus(); };
+        controllerPanel->onClose = [this] { closeOverlaysLater(); };
         addAndMakeVisible(*controllerPanel);
         controllerPanel->setBounds(getLocalBounds());
         controllerPanel->grabKeyboardFocus();
@@ -1293,23 +1354,54 @@ namespace cs808
     void Editor::loadLibraryEntry(const LibraryEntry& e)
     {
         // The beat goes into the pattern being edited; a beat of several parts into the patterns after it too, and
-        // they become the chain. Its tempo, swing, variation and switches come with it.
-        const int first = editPattern < 0 ? 0 : editPattern;
-        const int partCount = std::min(1 + static_cast<int>(e.pattern.moreParts.size()), SequencerBank::patterns - first);
-        processor.editBank([&](SequencerBank& bank)
-        {
-            bank.pattern[static_cast<std::size_t>(first)] = e.pattern.pattern;
-            for (int i = 1; i < partCount; ++i)
-                bank.pattern[static_cast<std::size_t>(first + i)] = e.pattern.moreParts[static_cast<std::size_t>(i - 1)].pattern;
-        });
+        // they become the chain. Edited, the fill takes the beat's first part and the chain stays. Its tempo, swing,
+        // variation and switches come with it. One undo step takes it all back (the review of D267).
+        processor.beginGesture();
         processor.editPlay([&](PlaySettings& p) { p = e.pattern.play; });
         processor.editKit([&](KitValues& kit) { kit.alt = e.pattern.alt; });
-        std::vector<int> chain;
-        for (int i = 0; i < partCount; ++i)
-            chain.push_back(first + i);
-        processor.setChain(chain);
-        editPattern = first;
+        if (editPattern < 0)
+            processor.editBank([&](SequencerBank& bank) { bank.fill = e.pattern.pattern; });
+        else
+        {
+            const int first = editPattern;
+            const int partCount = std::min(1 + static_cast<int>(e.pattern.moreParts.size()), SequencerBank::patterns - first);
+            processor.editBank([&](SequencerBank& bank)
+            {
+                bank.pattern[static_cast<std::size_t>(first)] = e.pattern.pattern;
+                for (int i = 1; i < partCount; ++i)
+                    bank.pattern[static_cast<std::size_t>(first + i)] = e.pattern.moreParts[static_cast<std::size_t>(i - 1)].pattern;
+            });
+            std::vector<int> chain;
+            for (int i = 0; i < partCount; ++i)
+                chain.push_back(first + i);
+            processor.setChain(chain);
+        }
+        processor.endGesture();
         editB = false;
+        refresh();
+    }
+
+    void Editor::closeOverlaysLater()
+    {
+        juce::MessageManager::callAsync([safe = juce::Component::SafePointer<Editor>(this)]
+        {
+            if (safe == nullptr)
+                return;
+            safe->library.reset();
+            safe->controllerPanel.reset();
+            safe->grabKeyboardFocus();
+        });
+    }
+
+    void Editor::resetSelection()
+    {
+        // A project opened or begun anew: nothing selected from the one before.
+        editPattern = 0;
+        patternBeforeFill = 0;
+        editB = false;
+        selectedStep = -1;
+        firstChainKey = -1;
+        patternMode = false;
         refresh();
     }
 
@@ -1400,7 +1492,30 @@ namespace cs808
                     if (label->getText() != text)
                         label->setText(text, juce::dontSendNotification);
                 }
-        refresh();
+        // The panel is drawn again only when something it shows changed, or a light is lit or just went out (the
+        // review of D267: it was drawn whole 30 times a second).
+        std::uint64_t look = processor.editCount();
+        const auto fold = [&look](std::int64_t v) { look = look * 1000003u ^ static_cast<std::uint64_t>(v); };
+        fold(processor.isPlaying() ? processor.playingSixteenth() : -1);
+        fold(processor.playingPattern());
+        fold(processor.playingVariationB());
+        fold(processor.isRecording());
+        fold(processor.followingClock() ? juce::roundToInt(processor.tempoNow() * 10.0) : -1);
+        fold(static_cast<std::int64_t>(processor.chain().size()));
+        fold(processor.chain().front());
+        fold(selectedLane);
+        fold(editPattern);
+        fold(editB);
+        fold(selectedStep);
+        fold(patternMode);
+        fold(firstChainKey);
+        for (const auto until : ledUntil)
+            fold(until > now ? 1 : 0);
+        if (look != lastLook)
+        {
+            lastLook = look;
+            refresh();
+        }
     }
 
     void Editor::mouseDrag(const juce::MouseEvent& e)

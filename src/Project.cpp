@@ -242,6 +242,10 @@ namespace cs808
         if (const auto* list = root.getProperty("banks", {}).getArray())
             for (const auto& b : *list)
             {
+                // A file asking for more banks than anyone makes is cut there, not followed into gigabytes (the
+                // review of D267).
+                if (static_cast<int>(p.banks.size()) >= Project::maxBanks)
+                    break;
                 p.banks.push_back(std::make_unique<SequencerBank>());
                 bankFromVar(b, *p.banks.back());
             }

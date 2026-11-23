@@ -56,9 +56,10 @@ namespace cs808
         if (! folder.createDirectory())
             return {};
         const auto file = folder.getChildFile(juce::File::createLegalFileName(name.isEmpty() ? "Pattern" : name) + ".mid");
-        file.deleteFile();
+        // Written from its start whatever was there: a file still held open elsewhere (the last one dragged into a
+        // DAW) is not deleted, and the stream would append to it (the review of D267).
         juce::FileOutputStream out(file);
-        if (! out.openedOk())
+        if (! out.openedOk() || ! out.setPosition(0) || out.truncate().failed())
             return {};
         auto midi = patternToMidi(pattern, kit, play);
         if (! midi.writeTo(out, 1))

@@ -52,8 +52,8 @@ namespace cs808
         void timerCallback() override;
         void play(const coolsynth::midi::PlaceLink& link, const coolsynth::midi::ControllerEvent& event,
                   coolsynth::midi::Encoding encoding);
-        /** One undo step for a control moved without a pause, as a knob dragged on the panel. */
-        void touch(coolsynth::midi::Place place);
+        /** Whether a move starts an undo step: a control moved without a pause is one, as a knob dragged. */
+        [[nodiscard]] bool touch(coolsynth::midi::Place place);
         void closeGesture();
         /** Tells the audio thread which note each pad strikes now. */
         void publishPads();
@@ -61,7 +61,6 @@ namespace cs808
         Editor& editor;
         bool shift = false;
         bool stepMode = false;
-        bool gestureOpen = false;
         coolsynth::midi::Place lastPlace = coolsynth::midi::Place::count;
         double lastMoveMs = 0.0;
         int seenRevision = -1;

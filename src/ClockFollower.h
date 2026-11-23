@@ -25,7 +25,8 @@ namespace cs808
             pulseBeat = -1.0;
             beat = 0.0;
             running = false;
-            justStarted = false;
+            pulsed = false;
+            snap = false;
         }
 
         void pulse(std::int64_t at) noexcept
@@ -39,7 +40,10 @@ namespace cs808
             }
             lastPulse = at;
             if (running)
+            {
                 pulseBeat += 1.0 / pulsesPerBeat;
+                pulsed = true;
+            }
         }
 
         void start(std::int64_t at) noexcept
@@ -47,11 +51,18 @@ namespace cs808
             running = true;
             pulseBeat = -1.0 / pulsesPerBeat; // the first pulse after a start is beat 0
             beat = 0.0;
-            justStarted = true;
+            pulsed = false; // it plays from that pulse, not from the block the start came in (the review of D267)
+            snap = true;
             (void) at;
         }
 
-        void resume() noexcept { running = true; }
+        /** Continue: from where the pulses say, at once (the review of D267: it had run on while stopped). */
+        void resume() noexcept
+        {
+            running = true;
+            pulsed = true;
+            snap = true;
+        }
         void stop() noexcept { running = false; }
 
         /** Song position pointer: sixteenths from the start. */
@@ -59,7 +70,11 @@ namespace cs808
         {
             pulseBeat = static_cast<double>(sixteenths) * 0.25 - 1.0 / pulsesPerBeat;
             beat = static_cast<double>(sixteenths) * 0.25;
+            snap = true;
         }
+
+        /** Running, and the first pulse since the start has come: the transport plays. */
+        [[nodiscard]] bool isPlaying() const noexcept { return running && pulsed; }
 
         /** A clock is there: a pulse within the last half second. */
         [[nodiscard]] bool present(std::int64_t now) const noexcept
@@ -80,15 +95,22 @@ namespace cs808
         {
             const double baseBpm = bpm();
             const double beatsPerSample = baseBpm / 60.0 / sampleRate;
+            // Stopped, its beat stays where the pulses left it (the review of D267: it ran on at 95 %).
+            if (! isPlaying())
+            {
+                beatAtStart = beat;
+                blockBpm = baseBpm;
+                return;
+            }
             // Where the pulses put the block's start: the last pulse's beat plus the time since, no further than
-            // the next pulse.
+            // the next pulse. A pulse later in this block puts the start before it.
             double target = beat;
             if (lastPulse >= 0 && pulseBeat >= 0.0)
                 target = pulseBeat + std::min(static_cast<double>(now - lastPulse) * beatsPerSample, 1.0 / pulsesPerBeat);
+            if (snap || std::abs(target - beat) > 0.5)
+                beat = target; // a start, a continue, a song position, or far off: there at once
+            snap = false;
             const double error = target - beat;
-            if (std::abs(error) > 0.5 && ! justStarted)
-                beat = target; // far off (a song position, a missed start): go there at once
-            justStarted = false;
             const double bend = std::clamp(error * 2.0, -0.05, 0.05);
             blockBpm = baseBpm * (1.0 + bend);
             beatAtStart = beat;
@@ -97,7 +119,7 @@ namespace cs808
 
     private:
         static constexpr double pulsesPerBeat = 24.0;
-        static constexpr double smoothing = 0.1;
+        static constexpr double smoothing = 0.25; // a tempo change followed within a few pulses (the review of D267)
 
         double sampleRate = 48000.0;
         std::int64_t lastPulse = -1;
@@ -105,6 +127,7 @@ namespace cs808
         double pulseBeat = -1.0;
         double beat = 0.0;
         bool running = false;
-        bool justStarted = false;
+        bool pulsed = false; // a pulse since the start
+        bool snap = false;   // go where the pulses say at the next block
     };
 }

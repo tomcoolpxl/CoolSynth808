@@ -124,8 +124,9 @@ namespace cs808
 
     Controls::~Controls()
     {
-        closeGesture();
-        editor.processor.setPadNotes({});
+        Processor::PadNotes none;
+        none.fill(-1);
+        editor.processor.setPadNotes(none);
     }
 
     void Controls::timerCallback()
@@ -137,10 +138,6 @@ namespace cs808
             lastValues.clear();
             publishPads();
         }
-        // A control left still for a moment ends its undo step.
-        if (gestureOpen && juce::Time::getMillisecondCounterHiRes() - lastMoveMs > 600.0)
-            closeGesture();
-
         bool any = false;
         editor.processor.takeControllerEvents([&](const midi::ControllerEvent& event)
         {
@@ -151,25 +148,17 @@ namespace cs808
             editor.refresh();
     }
 
-    void Controls::closeGesture()
-    {
-        if (gestureOpen)
-            editor.processor.endGesture();
-        gestureOpen = false;
-        lastPlace = midi::Place::count;
-    }
+    void Controls::closeGesture() { lastPlace = midi::Place::count; }
 
-    void Controls::touch(midi::Place place)
+    bool Controls::touch(midi::Place place)
     {
+        // Its own undo steps, apart from the panel's gestures (the review of D267): a turn is one step, ended by
+        // another control or by resting 600 ms.
         const double now = juce::Time::getMillisecondCounterHiRes();
-        if (place != lastPlace || ! gestureOpen)
-        {
-            closeGesture();
-            editor.processor.beginGesture();
-            gestureOpen = true;
-        }
+        const bool fresh = place != lastPlace || now - lastMoveMs > 600.0;
         lastPlace = place;
         lastMoveMs = now;
+        return fresh;
     }
 
     void Controls::publishPads()
@@ -299,7 +288,7 @@ namespace cs808
             default: break;
         }
 
-        touch(place);
+        const bool fresh = touch(place);
         switch (place)
         {
             case midi::Place::knob1: case midi::Place::knob2: case midi::Place::knob3:
@@ -310,36 +299,34 @@ namespace cs808
                 {
                     const int k = list[i];
                     const float v = moved(p.project().kit.knob[static_cast<std::size_t>(k)], encoding, value);
-                    p.editKit([k, v](KitValues& kit) { kit.knob[static_cast<std::size_t>(k)] = v; });
+                    p.editKit([k, v](KitValues& kit) { kit.knob[static_cast<std::size_t>(k)] = v; }, fresh);
                 }
                 break;
             }
             case midi::Place::knob4:
             {
                 const int length = movedCount(editor.laneShown(editor.selectedLane).length, 1, SequencerLane::steps, encoding, value);
-                editor.editLane(editor.selectedLane, [length](SequencerLane& l) { l.length = length; });
+                editor.editLane(editor.selectedLane, [length](SequencerLane& l) { l.length = length; }, fresh);
                 break;
             }
             case midi::Place::knob6:
             {
                 const double tempo = encoding == midi::Encoding::absolute ? 40.0 + value / 127.0 * 200.0
                                                                           : p.project().play.tempo + 0.5 * midi::relativeSteps(encoding, value);
-                p.editPlay([tempo](PlaySettings& s) { s.tempo = juce::jlimit(30.0, 300.0, std::round(tempo * 2.0) / 2.0); });
+                p.editPlay([tempo](PlaySettings& s) { s.tempo = juce::jlimit(30.0, 300.0, std::round(tempo * 2.0) / 2.0); }, fresh);
                 break;
             }
             case midi::Place::knob7:
             {
                 const float swing = 0.5f + 0.25f * moved((p.project().play.swing - 0.5f) / 0.25f, encoding, value, 1.0f / 25.0f);
-                p.editPlay([swing](PlaySettings& s) { s.swing = std::round(swing * 100.0f) / 100.0f; });
+                p.editPlay([swing](PlaySettings& s) { s.swing = std::round(swing * 100.0f) / 100.0f; }, fresh);
                 break;
             }
             case midi::Place::knob8:
             {
-                // An audio taper, as CoolSynth's faders (D184): the cube of the position, the top 0 dB.
-                const float old = std::cbrt(std::pow(10.0f, p.project().kit.volumeDb / 20.0f));
-                const float position = moved(old, encoding, value);
-                const float db = position <= 0.001f ? -60.0f : std::max(-60.0f, 60.0f * std::log10(position));
-                p.editKit([db](KitValues& kit) { kit.volumeDb = db; });
+                // The panel's Volume knob's curve (Kit.h).
+                const float db = volumeDbAt(moved(volumePosition(p.project().kit.volumeDb), encoding, value));
+                p.editKit([db](KitValues& kit) { kit.volumeDb = db; }, fresh);
                 break;
             }
             case midi::Place::fader1: case midi::Place::fader2: case midi::Place::fader3: case midi::Place::fader4:
@@ -349,7 +336,7 @@ namespace cs808
                 if (k >= 0)
                 {
                     const float v = moved(p.project().kit.knob[static_cast<std::size_t>(k)], encoding, value);
-                    p.editKit([k, v](KitValues& kit) { kit.knob[static_cast<std::size_t>(k)] = v; });
+                    p.editKit([k, v](KitValues& kit) { kit.knob[static_cast<std::size_t>(k)] = v; }, fresh);
                 }
                 break;
             }

@@ -1,6 +1,7 @@
 #include "Processor.h"
 
 #include "Editor.h"
+#include "StandaloneMidiOut.h"
 
 namespace cs808
 {
@@ -33,6 +34,8 @@ namespace cs808
         for (auto& note : padNotes)
             note.store(-1, std::memory_order_relaxed);
         // The computer's controller setup (D211, D268): read once for the program. Tests (no wrapper) set their own.
+        if (wrapperType == wrapperType_Standalone)
+            midiOutKeeper = makeStandaloneMidiOutKeeper(); // MIDI clock out at its own samples (the review of D267)
         if (wrapperType != wrapperType_Undefined)
         {
             startedSetup = true;
@@ -59,8 +62,6 @@ namespace cs808
         rate = sampleRate > 0.0 ? sampleRate : 48000.0;
         engine.prepare(rate, std::max(1, samplesPerBlock), std::max(1, getTotalNumOutputChannels()));
         clock.prepare(rate);
-        panelNotes.reset(rate);
-        panelBlock.ensureSize(4096);
         keptBlock.ensureSize(8192);
         sequencer.reset();
         playing = false;
@@ -96,8 +97,13 @@ namespace cs808
 
     void Processor::pushUndo()
     {
-        if (inGesture)
+        ++edits;
+        // A gesture's undo step is taken at its first edit: a click that changes nothing leaves none, and keeps redo
+        // (the review of D267).
+        if (inGesture && gestureStepTaken)
             return;
+        if (inGesture)
+            gestureStepTaken = true;
         undoStack.push_back(std::make_unique<Project>(model));
         if (undoStack.size() > maxUndo)
             undoStack.erase(undoStack.begin());
@@ -106,23 +112,34 @@ namespace cs808
 
     void Processor::beginGesture()
     {
-        pushUndo();
         inGesture = true;
+        gestureStepTaken = false;
     }
 
     void Processor::endGesture() { inGesture = false; }
 
-    void Processor::editKit(const std::function<void(KitValues&)>& edit)
+    void Processor::forgetHistory()
     {
-        pushUndo();
+        undoStack.clear();
+        redoStack.clear();
+        ++edits;
+    }
+
+    void Processor::editKit(const std::function<void(KitValues&)>& edit, bool undoable)
+    {
+        if (undoable)
+            pushUndo();
+        ++edits;
         edit(model.kit);
         pushKit();
         pushBank(); // a switch changes the lanes' notes
     }
 
-    void Processor::editPlay(const std::function<void(PlaySettings&)>& edit)
+    void Processor::editPlay(const std::function<void(PlaySettings&)>& edit, bool undoable)
     {
-        pushUndo();
+        if (undoable)
+            pushUndo();
+        ++edits;
         edit(model.play);
         pushPlay();
     }
@@ -131,6 +148,7 @@ namespace cs808
     {
         if (undoable)
             pushUndo();
+        ++edits;
         edit(model.currentBank());
         pushBank();
     }
@@ -139,6 +157,7 @@ namespace cs808
     {
         if (undoable)
             pushUndo();
+        ++edits;
         model = p;
         pushKit();
         pushPlay();
@@ -148,9 +167,9 @@ namespace cs808
 
     bool Processor::undo()
     {
-        inGesture = false; // a step undone ends any turn still going on
         if (undoStack.empty())
             return false;
+        ++edits;
         redoStack.push_back(std::make_unique<Project>(model));
         model = *undoStack.back();
         undoStack.pop_back();
@@ -164,6 +183,7 @@ namespace cs808
     {
         if (redoStack.empty())
             return false;
+        ++edits;
         undoStack.push_back(std::make_unique<Project>(model));
         model = *redoStack.back();
         redoStack.pop_back();
@@ -176,11 +196,14 @@ namespace cs808
     void Processor::selectBank(int index)
     {
         model.bank = juce::jlimit(0, static_cast<int>(model.banks.size()) - 1, index);
+        ++edits;
         pushBank();
     }
 
     void Processor::addBank()
     {
+        if (static_cast<int>(model.banks.size()) >= Project::maxBanks)
+            return;
         pushUndo();
         model.banks.push_back(std::make_unique<SequencerBank>());
         model.bank = static_cast<int>(model.banks.size()) - 1;
@@ -200,7 +223,10 @@ namespace cs808
         Project p;
         if (const auto result = projectFromJson(f.loadFileAsString(), p); result.failed())
             return result;
-        replaceProject(p, true);
+        // A project opened starts its own history: an undo can never bring the one before back under this file's
+        // name, for a Save to write over it (the review of D267).
+        replaceProject(p, false);
+        forgetHistory();
         file = f;
         return juce::Result::ok();
     }
@@ -247,9 +273,9 @@ namespace cs808
         const int note = laneNote(lane, model.kit);
         if (note < 0)
             return;
-        const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
-        panelNotes.addMessageToQueue(juce::MidiMessage::noteOn(midiChannel, note, static_cast<juce::uint8>(accent ? 127 : 1)).withTimeStamp(now));
-        panelNotes.addMessageToQueue(juce::MidiMessage::noteOff(midiChannel, note).withTimeStamp(now + 0.05));
+        // Through a FIFO the audio thread never waits on (the review of D267: a collector's lock).
+        if (const auto scope = strikeFifo.write(1); scope.blockSize1 > 0)
+            strikes[static_cast<std::size_t>(scope.startIndex1)] = { note, accent };
     }
 
     int Processor::padIndex(const coolsynth::midi::ControlId& control) noexcept
@@ -282,7 +308,11 @@ namespace cs808
         const int ready = recordedFifo.getNumReady();
         if (ready <= 0)
             return false;
-        pushUndo();
+        // A recording pass is one undo step, however many hits it brings (the review of D267).
+        if (! recordingStepTaken)
+            pushUndo();
+        recordingStepTaken = true;
+        ++edits;
         const auto scope = recordedFifo.read(ready);
         auto& bank = model.currentBank();
         const auto apply = [&](int start, int size)
@@ -395,11 +425,22 @@ namespace cs808
             keptBlock.addEvent(m, metadata.samplePosition);
         }
         if (changed)
-            midi.swapWith(keptBlock);
+        {
+            // Copied back rather than swapped: the reserved buffer stays the audio thread's (the review of D267).
+            midi.clear();
+            midi.addEvents(keptBlock, 0, n, 0);
+        }
 
-        panelBlock.clear();
-        panelNotes.removeNextBlockOfMessages(panelBlock, n);
-        midi.addEvents(panelBlock, 0, n, 0);
+        // The drums struck on the panel, at the block's start.
+        {
+            const auto scope = strikeFifo.read(strikeFifo.getNumReady());
+            scope.forEach([&](int index)
+            {
+                const auto& s = strikes[static_cast<std::size_t>(index)];
+                midi.addEvent(juce::MidiMessage::noteOn(midiChannel, s.note, static_cast<juce::uint8>(s.accent ? 127 : 1)), 0);
+                midi.addEvent(juce::MidiMessage::noteOff(midiChannel, s.note), n - 1);
+            });
+        }
 
         // The clock's messages first: they say whether the transport is ours or the clock's.
         for (const auto metadata : midi)
@@ -422,11 +463,17 @@ namespace cs808
 
         bool started = false, stopped = false;
         const int request = playRequest.exchange(-1, std::memory_order_acq_rel);
-        const bool wantPlay = byClock ? clock.isRunning() : (request < 0 ? playing : request == 1);
+        // Following a clock, it plays while the clock plays; a clock gone while it played stops it, rather than going
+        // on from a stale place on its own (the review of D267).
+        bool wantPlay = byClock ? clock.isPlaying() : (request < 0 ? playing : request == 1);
+        if (! byClock && playing && playingByClock)
+            wantPlay = false;
+        const bool wasOwnClock = playing && ! playingByClock;
         if (wantPlay && ! playing)
         {
             playing = true;
             started = true;
+            playingByClock = byClock;
             if (! byClock)
                 beat = 0.0;
             engine.reseed(); // a defined start (D224)
@@ -518,6 +565,8 @@ namespace cs808
         midi.clear();
         if (! byClock)
             sendClock(midi, beat0, beat0 + n * beatsPerSample, n, started, stopped);
+        else if (stopped && wasOwnClock)
+            midi.addEvent(juce::MidiMessage::midiStop(), 0); // a clock came in while it led: what it led stops too
 
         if (playing && ! byClock)
             beat = beat0 + n * beatsPerSample;

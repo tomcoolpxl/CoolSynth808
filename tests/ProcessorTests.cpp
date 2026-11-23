@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Processor.h"
+#include "Project.h"
 
 /*
     The processor offline: the 808 kit sounding where the steps are, MIDI clock out at 24 a beat, an incoming clock
@@ -216,6 +217,105 @@ public:
             expect(q->project().currentBank().pattern[9].lanes[8].a[2].on);
             expectEquals(q->project().play.tempo, 87.0);
             expect(! q->canUndo(), "a restored state starts a fresh history");
+        }
+
+        // ---- The review of D267 ----------------------------------------------------------------------------------
+
+        beginTest("a_gesture_that_changes_nothing_leaves_no_undo_step");
+        {
+            auto p = prepared();
+            p->editPlay([](PlaySettings& s) { s.tempo = 90.0; });
+            expect(p->undo());
+            expect(p->canRedo());
+            p->beginGesture(); // a knob clicked and let go
+            p->endGesture();
+            expect(p->canRedo(), "redo is still there");
+            p->beginGesture(); // a knob dragged: one step however many edits
+            for (int i = 0; i < 5; ++i)
+                p->editPlay([i](PlaySettings& s) { s.tempo = 100.0 + i; });
+            p->endGesture();
+            expect(p->undo());
+            expect(! p->canUndo());
+        }
+
+        beginTest("a_recording_pass_is_one_undo_step_however_many_batches");
+        {
+            auto p = prepared();
+            p->setRecording(true);
+            p->setPlaying(true);
+            for (int beatIndex = 0; beatIndex < 4; ++beatIndex)
+            {
+                const std::int64_t at = beatIndex * 24000 + 480;
+                (void) render(*p, 24000, [&](juce::MidiBuffer& midi, std::int64_t pos, int n)
+                {
+                    if (at - beatIndex * 24000 >= pos && at - beatIndex * 24000 < pos + n)
+                        midi.addEvent(juce::MidiMessage::noteOn(10, 38, static_cast<juce::uint8>(100)), static_cast<int>(at - beatIndex * 24000 - pos));
+                });
+                expect(p->applyRecordedHits(), "a batch each beat");
+            }
+            expect(p->undo());
+            expect(! p->canUndo(), "one step for the pass");
+        }
+
+        beginTest("an_opened_project_starts_its_own_history");
+        {
+            const auto file = juce::File::createTempFile(".cs808");
+            auto p = prepared();
+            p->editPlay([](PlaySettings& s) { s.tempo = 133.0; });
+            expect(p->saveTo(file));
+            p->editPlay([](PlaySettings& s) { s.tempo = 70.0; });
+            expect(p->loadFrom(file).wasOk());
+            expect(! p->canUndo(), "no undo back into the project before");
+            expectEquals(p->project().play.tempo, 133.0);
+            (void) file.deleteFile();
+        }
+
+        beginTest("a_file_asking_for_endless_banks_is_cut");
+        {
+            juce::String json = "{\"format\":\"cs808\",\"version\":1,\"banks\":[";
+            for (int i = 0; i < 1000; ++i)
+                json << (i > 0 ? "," : "") << "{}";
+            json << "]}";
+            Project project;
+            if (projectFromJson(json, project).wasOk())
+                expectLessOrEqual(static_cast<int>(project.banks.size()), Project::maxBanks);
+        }
+
+        beginTest("a_stopped_clock_holds_its_place_and_continue_follows_the_pulses");
+        {
+            auto p = prepared();
+            const double interval = kRate * 60.0 / 120.0 / 24.0; // 120 BPM: 1000 samples a pulse
+            std::int64_t pulses = 0;
+            bool stopSent = false, continueSent = false;
+            // A beat playing, a beat stopped with the clock still running (as MPCs and Elektrons send it), then
+            // continue: the follower picks up where the pulses say, not half a beat ahead.
+            const auto run = render(*p, 3 * 24000, [&](juce::MidiBuffer& midi, std::int64_t pos, int n)
+            {
+                if (pos == 0)
+                    midi.addEvent(juce::MidiMessage::midiStart(), 0);
+                if (pos >= 24000 && ! stopSent)
+                {
+                    midi.addEvent(juce::MidiMessage::midiStop(), 0);
+                    stopSent = true;
+                }
+                if (pos >= 48000 && ! continueSent)
+                {
+                    midi.addEvent(juce::MidiMessage::midiContinue(), 0);
+                    continueSent = true;
+                }
+                for (;; ++pulses)
+                {
+                    const auto at = static_cast<std::int64_t>(std::llround(static_cast<double>(pulses) * interval));
+                    if (at >= pos + n)
+                        break;
+                    if (at >= pos)
+                        midi.addEvent(juce::MidiMessage::midiClock(), static_cast<int>(at - pos));
+                }
+            });
+            expect(p->isPlaying());
+            // 24 pulses played before the stop: after a beat more of playing it is near beat 2.
+            const auto sixteenth = p->playingSixteenth();
+            expect(sixteenth >= 6 && sixteenth <= 8, "at about beat 2 (sixteenth " + juce::String(sixteenth) + ")");
         }
     }
 };

@@ -65,13 +65,18 @@ namespace cs808
         // ---- The project, message thread ---------------------------------------------------------------------
         [[nodiscard]] const Project& project() const noexcept { return model; }
         /** Changes the project through `edit`, then hands the audio thread what changed. Undoable unless asked not. */
-        void editKit(const std::function<void(KitValues&)>& edit);
-        void editPlay(const std::function<void(PlaySettings&)>& edit);
+        void editKit(const std::function<void(KitValues&)>& edit, bool undoable = true);
+        void editPlay(const std::function<void(PlaySettings&)>& edit, bool undoable = true);
         void editBank(const std::function<void(SequencerBank&)>& edit, bool undoable = true);
         void replaceProject(const Project& p, bool undoable = true);
-        /** Begins an undo step that later edits join (a knob's drag). */
+        /** Begins an undo step that later edits join (a knob's drag); taken at the first edit, so a gesture that
+            changes nothing leaves none. */
         void beginGesture();
         void endGesture();
+        /** No undo or redo from here: a project opened or begun anew. */
+        void forgetHistory();
+        /** Grows with every change of the project, the panel's sign to draw again. */
+        [[nodiscard]] std::uint64_t editCount() const noexcept { return edits; }
         bool undo();
         bool redo();
         [[nodiscard]] bool canUndo() const noexcept { return ! undoStack.empty(); }
@@ -91,7 +96,11 @@ namespace cs808
         void requestFill() noexcept { fillRequest.store(true, std::memory_order_release); }
         void setChain(const std::vector<int>& patterns);
         [[nodiscard]] std::vector<int> chain() const { return chainOnUi; }
-        void setRecording(bool on) noexcept { recording.store(on, std::memory_order_release); }
+        void setRecording(bool on) noexcept
+        {
+            recordingStepTaken = false; // each pass its own undo step
+            recording.store(on, std::memory_order_release);
+        }
         [[nodiscard]] bool isRecording() const noexcept { return recording.load(std::memory_order_acquire); }
         /** A drum struck from the panel: played at once, and recorded when recording. */
         void strike(int lane, bool accent);
@@ -140,6 +149,9 @@ namespace cs808
         juce::File file;
         std::vector<std::unique_ptr<Project>> undoStack, redoStack;
         bool inGesture = false;
+        bool gestureStepTaken = false;
+        bool recordingStepTaken = false;
+        std::uint64_t edits = 0;
         std::vector<int> chainOnUi { 0 };
 
         // handed over
@@ -151,7 +163,13 @@ namespace cs808
         std::atomic<int> playRequest { -1 };
         std::atomic<bool> fillRequest { false };
         std::atomic<bool> recording { false };
-        juce::MidiMessageCollector panelNotes;
+        struct Strike
+        {
+            int note = 0;
+            bool accent = false;
+        };
+        juce::AbstractFifo strikeFifo { 128 };
+        std::array<Strike, 128> strikes {};
 
         // audio thread
         coolsynth::synth::v3::EngineV3 engine;
@@ -179,8 +197,9 @@ namespace cs808
         juce::AbstractFifo controllerFifo { 512 };
         std::array<coolsynth::midi::ControllerEvent, 512> controllerEvents {};
         std::array<std::atomic<std::int8_t>, padSlots> padNotes;
-        juce::MidiBuffer panelBlock, keptBlock; // the audio thread's, sized in prepareToPlay
+        juce::MidiBuffer keptBlock; // the audio thread's, sized in prepareToPlay
         bool startedSetup = false;
+        std::unique_ptr<juce::Timer> midiOutKeeper;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Processor)
     };
