@@ -25,7 +25,11 @@ juce_add_binary_data(CoolSynth808Library
         resources/lid/cowbell_currents.json # the cowbell's parts of the metal board
         resources/lid/metal_currents.json # its six oscillators and two band-passes
         resources/lid/cymbal_currents.json # the cymbal's parts
-        resources/lid/hats_currents.json) # the two hi-hats'
+        resources/lid/hats_currents.json # the two hi-hats'
+        resources/lid/board_mt.json # the whole board's: the mid tom,
+        resources/lid/board_ht.json # the high tom,
+        resources/lid/board_oh.json # the open hat alone
+        resources/lid/board_ch.json) # and the closed hat alone (D279)
 
 # A JUCE audio plugin built as a standalone app for now (D267): the plugin formats are one line away.
 juce_add_plugin(CoolSynth808

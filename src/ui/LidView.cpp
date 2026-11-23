@@ -19,8 +19,9 @@
     parts that make its sound, under the trigger line, the noise and the six oscillators they share, down to the mix.
 
     The current is drawn on the wires as dots, lit by the drums the app strikes: travelling for a pulse or a charge,
-    shaking for sound, thicker for more; a wire's tint is its voltage. As in the mockup, the currents are drawn by hand
-    from what each circuit does; the engine's own (a tap in its solver) and each drum complete are the next steps.
+    shaking for sound, thicker for more; a wire's tint is its voltage. Each wire a strike lights moves as the node of its
+    drum's circuit it stands for, as ngspice recorded it (D279); each drum is also drawn complete on a sheet of its own
+    (D278). The noise, the oscillators and the common trigger line still run as the mockup drew them.
 */
 namespace cs808
 {
@@ -73,6 +74,33 @@ namespace cs808
             double t0 = -1.0, duration = 300.0;
             float offset = 0.0f, phase = 0.0f;
             float length = 0.0f;
+            // Played from a recording (D279): which stage of its drum it is (-1 the drum's own trigger or output), and
+            // once bound, how far its node is from rest (0..1, with an afterglow) and which way, at the recording's times.
+            int stage = -1;
+            std::vector<float> ms, level01, sign;
+            float tailTau = 60.0f; // ms: how the recording's last value fades on past its end
+            double recordedRing = 0.0; // the ring length the recording was made at, for the Decay knobs
+            double stretch = 1.0;      // this strike's ring over that: the Decay knob as it is now
+            [[nodiscard]] bool bound() const noexcept { return ms.size() > 1; }
+            /** Its magnitude at el ms after the strike; the sign of the node's swing then into `s`. */
+            [[nodiscard]] float at(double el, float& s) const noexcept
+            {
+                if (el <= ms.front())
+                {
+                    s = sign.front();
+                    return level01.front();
+                }
+                if (el >= ms.back())
+                {
+                    s = sign.back();
+                    return level01.back() * static_cast<float>(std::exp(-(el - ms.back()) / tailTau));
+                }
+                const auto it = std::upper_bound(ms.begin(), ms.end(), static_cast<float>(el));
+                const auto i = static_cast<std::size_t>(std::distance(ms.begin(), it)) - 1;
+                const float fr = static_cast<float>((el - ms[i]) / std::max(1.0e-6f, ms[i + 1] - ms[i]));
+                s = sign[i];
+                return level01[i] + (level01[i + 1] - level01[i]) * fr;
+            }
         };
 
         juce::Path polyline(const Pts& p)
@@ -309,6 +337,14 @@ namespace cs808
                 std::vector<std::pair<float, float>> cuts;
                 float railTop = -1.0f;
                 float leftEnd = 30.0f;
+                int stage = -1; // each res() and gate() a stage, in the order built (D279)
+                std::size_t firstFlow = 0;
+                void beginStage() { ++stage; firstFlow = s.b.flows.size(); }
+                void endStage()
+                {
+                    for (auto i = firstFlow; i < s.b.flows.size(); ++i)
+                        s.b.flows[i].stage = stage;
+                }
 
                 void sw(const juce::String& name)
                 {
@@ -323,7 +359,7 @@ namespace cs808
                 struct Res { bool inR = false; juce::String inName, op, c1, c2, r, gnd, gndLabel, fb, fbLabel; bool gndPot = false, fbPot = false; float fd = 8; bool noJoin = false; };
                 void res(float y, const Res& o)
                 {
-                    leftEnd = std::max(leftEnd, y + 70);
+                    beginStage();
                     s.dot(10, y + 70);
                     s.w({ { 10, y + 70 }, { 14, y + 70 } });
                     if (o.inR) s.R(14, y + 70, true, 22, o.inName); else s.C(14, y + 70, true, 22, o.inName);
@@ -364,13 +400,14 @@ namespace cs808
                         railTop = railTop < 0 ? y + 64 : std::min(railTop, y + 64);
                         s.dot(94, y + 64);
                     }
+                    endStage();
                 }
 
                 enum class Feed { diode, pot, box, wire };
                 struct Gate { float tapX = -1, tapY = 0; Feed feed = Feed::diode; juce::String feedName, feedLabel, cap, r, q, decayName, decayLabel; Pt decayAt { -1, -1 }; juce::Justification decayJust = juce::Justification::centred; Kind sig = Kind::nz; float fd = 8; bool burst = false; bool noJoin = false; };
                 void gate(float y, const Gate& o)
                 {
-                    leftEnd = std::max(leftEnd, y + 14);
+                    beginStage();
                     s.dot(10, y + 14);
                     s.w({ { 10, y + 14 }, { 12, y + 14 } });
                     if (o.feed == Feed::pot) s.POT(12, y + 14, true, 12, o.feedName, o.feedLabel);
@@ -423,6 +460,7 @@ namespace cs808
                         railTop = railTop < 0 ? y + 46 : std::min(railTop, y + 46);
                         s.dot(94, y + 46);
                     }
+                    endStage();
                 }
 
                 void hp(float y, const juce::String& cName, const juce::String& rName)
@@ -527,7 +565,7 @@ namespace cs808
                     r.fb = "VR6 ~ Decay: the feedback through R164, C43 and a second op-amp"; r.fbPot = true; r.fbLabel = "DECAY";
                     v.res(40, r);
                     v.pot(150, "VR5 ~ Tone, with R171 and R172", "TONE");
-                    v.s.dot(94, 176); v.s.C(80, 176, true, 14, "C45"); v.s.G(80, 176);
+                    v.s.dot(94, 186); v.s.C(80, 186, true, 14, "C45"); v.s.G(80, 186);
                     v.pot(200, "VR4 ~ Level, then the buffer Q44", "LEVEL");
                 });
                 voice(2, 1, [](Voice& v)
@@ -618,7 +656,7 @@ namespace cs808
                 {
                     v.sw("Q7 ~ lets the trigger in");
                     Gate a; a.tapX = 78; a.tapY = HI; a.feedName = "Q24 ~ charges the envelope"; a.cap = "C62 ~ the envelope";
-                    a.decayName = "VR3 ~ Decay: sets when Q22 drains C62"; a.decayLabel = "DECAY"; a.decayAt = { 44, 74 }; a.decayJust = juce::Justification::centredLeft;
+                    a.decayName = "VR3 ~ Decay: sets when Q22 drains C62"; a.decayLabel = "DECAY"; a.decayAt = { 47, 80 };
                     a.r = "R144"; a.q = "Q27 ~ the swing VCA on the high band";
                     v.gate(34, a);
                     v.s.dot(32, 48);
@@ -691,16 +729,16 @@ namespace cs808
                         a.w({ { x, 34 }, { x, SUM } });
                     a.dot(i == 0 ? 878.0f : x, SUM);
                 }
-                a.w({ { 878, SUM }, { 1069, SUM } });
+                a.w({ { 878, SUM }, { 1073, SUM } });
                 a.tx(1060, 31, "SIX OSCILLATORS", juce::Justification::centredLeft);
-                a.BOX(1020, 62, 26, 11, "IC3 ~ a band-pass at 7.09 kHz: the high band", "7.1k");
-                a.dot(1033, SUM); a.w({ { 1033, SUM }, { 1033, 62 } }); a.w({ { 1033, 73 }, { 1033, HI } }); a.dot(1033, HI);
-                a.BOX(1056, 62, 26, 11, "IC3 ~ a band-pass at 3.43 kHz: the low band", "3.4k");
-                a.w({ { 1069, SUM }, { 1069, 62 } }); a.w({ { 1069, 73 }, { 1069, LO } });
-                a.w({ { 978, HI }, { 1178, HI } }); a.w({ { 986, LO }, { 1069, LO } });
-                { auto& f = a.f(0, Kind::ac, { { 878, SUM }, { 1069, SUM } }, 0.4f, 9); f.key = -2; f.idle = 0.07f; }
+                a.BOX(1000, 62, 26, 11, "IC3 ~ a band-pass at 7.09 kHz: the high band", "7.1k");
+                a.dot(1013, SUM); a.w({ { 1013, SUM }, { 1013, 62 } }); a.w({ { 1013, 73 }, { 1013, HI } }); a.dot(1013, HI);
+                a.BOX(1060, 62, 26, 11, "IC3 ~ a band-pass at 3.43 kHz: the low band", "3.4k");
+                a.w({ { 1073, SUM }, { 1073, 62 } }); a.w({ { 1073, 73 }, { 1073, LO } });
+                a.w({ { 978, HI }, { 1178, HI } }); a.w({ { 986, LO }, { 1073, LO } });
+                { auto& f = a.f(0, Kind::ac, { { 878, SUM }, { 1073, SUM } }, 0.4f, 9); f.key = -2; f.idle = 0.07f; }
                 { auto& f = a.f(0, Kind::ac, { { 978, HI }, { 1178, HI } }, 0.4f, 13); f.key = -2; f.idle = 0.07f; }
-                { auto& f = a.f(0, Kind::ac, { { 986, LO }, { 1069, LO } }, 0.4f, 7); f.key = -2; f.idle = 0.07f; }
+                { auto& f = a.f(0, Kind::ac, { { 986, LO }, { 1073, LO } }, 0.4f, 7); f.key = -2; f.idle = 0.07f; }
 
                 a.w({ { 194, MIX }, { 1188, MIX } });
                 {
@@ -744,9 +782,10 @@ namespace cs808
         /** The lane each drum drawn complete plays in. */
         constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5, 6, 7, 8, 8, 9 }; // the hi-hats: the open one, and the closed (10) too
 
+        Recording parseRecording(const juce::var& root, int which);
+
         Recording loadRecording(int which)
         {
-            Recording r;
             const auto root = which == snareDrum ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::snare_currents_json, LibraryData::snare_currents_jsonSize))
                               : which == lowTom  ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::tom_currents_json, LibraryData::tom_currents_jsonSize))
                               : which == rimShot ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::rimshot_currents_json, LibraryData::rimshot_currents_jsonSize))
@@ -756,6 +795,12 @@ namespace cs808
                               : which == cymbal ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::cymbal_currents_json, LibraryData::cymbal_currents_jsonSize))
                               : which == hiHats ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::hats_currents_json, LibraryData::hats_currents_jsonSize))
                                                  : juce::JSON::parse(juce::String::fromUTF8(LibraryData::bassdrum_currents_json, LibraryData::bassdrum_currents_jsonSize));
+            return parseRecording(root, which);
+        }
+
+        Recording parseRecording(const juce::var& root, int which)
+        {
+            Recording r;
             const auto* times = root.getProperty("t", {}).getArray();
             const auto* names = root.getProperty("names", {}).getArray();
             const auto* scales = root.getProperty("scales", {}).getArray();
@@ -826,6 +871,119 @@ namespace cs808
                           << static_cast<double>(set.getProperty("decay", 0.0)) << ", Tone " << static_cast<double>(set.getProperty("tone", 0.0))
                           << ", Level " << static_cast<double>(set.getProperty("level", 0.0));
             return r;
+        }
+
+        // ---- The whole board, played from the recordings (D279) -------------------------------------------------
+        /*
+            Each wire of the whole board that a strike lights takes its life from the node of its drum's circuit that
+            it stands for, as ngspice recorded it for the complete sheet: how far that node swings from rest, and which
+            way. An afterglow of 60 ms lets a 1 ms trigger and an audio-rate ring be seen at the screen's rate; past the
+            recording's end the last value fades as the recording was fading. The mid and high toms and each hi-hat alone
+            have small recordings of their own. The noise, the oscillators and the common trigger line run as before.
+        */
+        struct BoardSource { int lane, stage, part; const char* rec; const char* node; };
+        constexpr BoardSource boardSources[] {
+            { 0, -1, 0, "bd", "trig" }, { 0, 0, 0, "bd", "npulse" }, { 0, 0, 1, "bd", "nout" }, { 0, -1, 4, "bd", "vout" },
+            { 1, -1, 0, "sd", "vt" }, { 1, 0, 2, "sd", "ne47" }, { 1, 0, 3, "sd", "nc48" }, { 1, 1, 0, "sd", "np1" }, { 1, 1, 1, "sd", "no1" },
+            { 1, 2, 0, "sd", "np2" }, { 1, 2, 1, "sd", "no2" }, { 1, -1, 4, "sd", "vout" },
+            { 2, -1, 0, "lt", "vt" }, { 2, 0, 2, "lt", "nev" }, { 2, 0, 3, "lt", "nc52" }, { 2, 1, 0, "lt", "np" }, { 2, 1, 1, "lt", "no1" }, { 2, -1, 4, "lt", "vout" },
+            { 3, -1, 0, "mt", "vt" }, { 3, 0, 2, "mt", "nev" }, { 3, 0, 3, "mt", "nc52" }, { 3, 1, 0, "mt", "np" }, { 3, 1, 1, "mt", "no1" }, { 3, -1, 4, "mt", "vout" },
+            { 4, -1, 0, "ht", "vt" }, { 4, 0, 2, "ht", "nev" }, { 4, 0, 3, "ht", "nc52" }, { 4, 1, 0, "ht", "np" }, { 4, 1, 1, "ht", "no1" }, { 4, -1, 4, "ht", "vout" },
+            { 5, -1, 0, "rs", "vt" }, { 5, 0, 0, "rs", "np21" }, { 5, 0, 1, "rs", "no21" }, { 5, 1, 0, "rs", "np20" }, { 5, 1, 1, "rs", "no20a" },
+            { 5, -1, 1, "rs", "ns" }, { 5, 2, 2, "rs", "nenv" }, { 5, 2, 3, "rs", "nf" }, { 5, -1, 4, "rs", "vout" },
+            { 6, -1, 0, "cp", "vt" }, { 6, 0, 2, "cp", "n144" }, { 6, 0, 3, "cp", "np8" }, { 6, 1, 2, "cp", "n139" }, { 6, 1, 3, "cp", "nc70" }, { 6, -1, 4, "cp", "vout" },
+            { 7, -1, 0, "cb", "ncb5" }, { 7, 0, 2, "cb", "ncbe" }, { 7, 0, 3, "cb", "nc15" }, { 7, 1, 2, "cb", "ncbe" }, { 7, 1, 3, "cb", "nc14" }, { 7, -1, 4, "cb", "n6ap" },
+            { 8, -1, 0, "cy", "ncy6" }, { 8, 0, 2, "cy", "nj" }, { 8, 0, 3, "cy", "nc16" }, { 8, 1, 2, "cy", "nl" }, { 8, 1, 3, "cy", "nc17" },
+            { 8, 2, 2, "cy", "nv" }, { 8, 2, 3, "cy", "nc18" }, { 8, -1, 4, "cy", "vcy" },
+            { 9, -1, 0, "oh", "noh7" }, { 9, 0, 2, "oh", "ne1" }, { 9, 0, 3, "oh", "nc27" }, { 9, -1, 4, "oh", "voh" },
+            { 10, -1, 0, "ch", "nch8" }, { 10, 0, 2, "ch", "nce" }, { 10, 0, 3, "ch", "nc30" }, { 10, -1, 5, "ch", "nce" }, { 10, -1, 4, "ch", "vch" },
+        };
+
+        Recording boardRecording(const std::string& id)
+        {
+            const auto blob = [](const char* data, int size) { return juce::JSON::parse(juce::String::fromUTF8(data, size)); };
+            const auto root = id == "bd" ? blob(LibraryData::bassdrum_currents_json, LibraryData::bassdrum_currents_jsonSize)
+                            : id == "sd" ? blob(LibraryData::snare_currents_json, LibraryData::snare_currents_jsonSize)
+                            : id == "lt" ? blob(LibraryData::tom_currents_json, LibraryData::tom_currents_jsonSize)
+                            : id == "mt" ? blob(LibraryData::board_mt_json, LibraryData::board_mt_jsonSize)
+                            : id == "ht" ? blob(LibraryData::board_ht_json, LibraryData::board_ht_jsonSize)
+                            : id == "rs" ? blob(LibraryData::rimshot_currents_json, LibraryData::rimshot_currents_jsonSize)
+                            : id == "cp" ? blob(LibraryData::clap_currents_json, LibraryData::clap_currents_jsonSize)
+                            : id == "cb" ? blob(LibraryData::cowbell_currents_json, LibraryData::cowbell_currents_jsonSize)
+                            : id == "cy" ? blob(LibraryData::cymbal_currents_json, LibraryData::cymbal_currents_jsonSize)
+                            : id == "oh" ? blob(LibraryData::board_oh_json, LibraryData::board_oh_jsonSize)
+                                         : blob(LibraryData::board_ch_json, LibraryData::board_ch_jsonSize);
+            return parseRecording(root, -1);
+        }
+
+        /** Binds every flow of the board a strike lights to its node; returns the flows left unbound (for the tests). */
+        int bindBoard(Board& b)
+        {
+            std::map<std::string, Recording> recordings;
+            int unbound = 0;
+            for (auto& f : b.flows)
+            {
+                if (f.key < 0)
+                    continue;
+                const BoardSource* src = nullptr;
+                for (const auto& s : boardSources)
+                    if (s.lane == f.key && s.stage == f.stage && s.part == f.part)
+                        src = &s;
+                if (src == nullptr)
+                {
+                    ++unbound;
+                    continue;
+                }
+                auto it = recordings.find(src->rec);
+                if (it == recordings.end())
+                    it = recordings.emplace(src->rec, boardRecording(src->rec)).first;
+                const auto& rec = it->second;
+                const auto series = rec.series.find(src->node);
+                if (series == rec.series.end() || rec.samples < 2)
+                {
+                    ++unbound;
+                    continue;
+                }
+                const auto& x = series->second;
+                const auto n = x.size();
+                float peak = 0.0f;
+                for (const float v : x)
+                    peak = std::max(peak, std::abs(v - x[0]));
+                if (peak < 1.0e-4f)
+                {
+                    ++unbound;
+                    continue;
+                }
+                f.ms.resize(n);
+                f.level01.resize(n);
+                f.sign.resize(n);
+                float level = 0.0f, sign = 1.0f;
+                for (std::size_t i = 0; i < n; ++i)
+                {
+                    const float d = x[i] - x[0];
+                    const float target = std::abs(d) / peak;
+                    const float glow = i == 0 ? 0.0f : level * std::exp(-static_cast<float>(rec.ms[i] - rec.ms[i - 1]) / 60.0f);
+                    if (target >= glow)
+                    {
+                        level = target;
+                        sign = d >= 0.0f ? 1.0f : -1.0f;
+                    }
+                    else
+                        level = glow;
+                    f.ms[i] = static_cast<float>(rec.ms[i]);
+                    f.level01[i] = level;
+                    f.sign[i] = sign;
+                }
+                // The fade past the end: as the last 100 ms of the recording were fading, or the afterglow's.
+                const float end = f.ms.back();
+                std::size_t k = n - 1;
+                while (k > 0 && f.ms[k] > end - 100.0f)
+                    --k;
+                const float earlier = f.level01[k], last = f.level01.back();
+                f.tailTau = earlier > last && last > 1.0e-4f ? juce::jlimit(20.0f, 3000.0f, (end - f.ms[k]) / std::log(earlier / last)) : 60.0f;
+                f.recordedRing = f.key == 0 ? 980.0 : f.key == 8 ? 1100.0 : f.key == 9 ? 600.0 : 0.0; // Decay 0.6, 0.5, 0.5
+            }
+            return unbound;
         }
 
         struct FullDrum
@@ -2266,6 +2424,7 @@ namespace cs808
     struct LidView::Impl
     {
         Board board;
+        int boardUnbound = 0; // the board's struck flows no recording drives (D279; the tests want none)
         std::array<std::unique_ptr<FullDrum>, drumsDrawn> drums; // each made the first time it is shown
         FullDrum* full = nullptr;                                // the one shown
         bool showFull = false;
@@ -2295,6 +2454,7 @@ namespace cs808
     LidView::LidView(Processor& p) : impl(std::make_unique<Impl>()), processor(p)
     {
         auto& i = *impl;
+        i.boardUnbound = bindBoard(i.board);
         i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete", "Hand clap, complete", "Cowbell, complete", "Metal oscillators", "Cymbal, complete", "Hi-hats, complete" };
         i.sheet.chip.fontHeight = 10.5f;
         i.sheet.chip.text = "Sheet: Whole board";
@@ -2350,6 +2510,7 @@ namespace cs808
     }
 
     void LidView::showSheet(int sheet) { impl->sheet.set(sheet); }
+    int LidView::boardFlowsUnbound() const { return impl->boardUnbound; }
 
     juce::StringArray LidView::completeDrumProblems()
     {
@@ -2429,6 +2590,7 @@ namespace cs808
                 {
                     f.t0 = impl->now;
                     f.duration = d;
+                    f.stretch = f.recordedRing > 0.0 ? std::max(0.1, ringFor(l, kit) / f.recordedRing) : 1.0;
                 }
                 else if (l == 10 && f.key == 9 && f.part != 0)
                     f.t0 = -1.0; // the closed hat cuts the open one
@@ -2653,14 +2815,23 @@ namespace cs808
             g.fillEllipse(p.x - 1.7f * scale, p.y - 1.7f * scale, 3.4f * scale, 3.4f * scale);
         }
 
-        // The voltage tints and the current, as the mockup animates them.
+        // The voltage tints and the current: from the recordings where a wire stands for a node of its drum (D279),
+        // otherwise as the mockup animates them (the noise, the oscillators, the common trigger).
         for (const auto& f : b.flows)
         {
             const double el = f.t0 >= 0.0 ? now - f.t0 : -1.0;
+            const double elData = el < 10.0 ? el : 10.0 + (el - 10.0) / f.stretch; // the Decay knob stretches the ring
+            float sign = 1.0f;
             if (f.kind == Kind::volt)
             {
                 double v = f.idle;
-                if (el >= 0.0)
+                if (el >= 0.0 && f.bound())
+                {
+                    const double m = f.at(elData, sign);
+                    v = f.mode == Mode::ac ? m * 0.9 * std::sin(now / 1000.0 * juce::MathConstants<double>::twoPi * f.frequency + f.phase)
+                                           : sign * m * 0.9;
+                }
+                else if (el >= 0.0)
                 {
                     const double tau = f.duration / 2.0;
                     switch (f.mode)
@@ -2679,7 +2850,12 @@ namespace cs808
                 continue;
             }
             double a = f.idle;
-            if (el >= 0.0)
+            if (el >= 0.0 && f.bound())
+            {
+                const double peak = f.kind == Kind::pulse ? 1.0 : f.kind == Kind::env ? 0.6 : f.kind == Kind::burst || f.burstEnvelope ? 0.7 : 1.4 * f.level;
+                a = std::max(a, peak * f.at(elData, sign));
+            }
+            else if (el >= 0.0)
             {
                 const double tau = f.duration / 3.0;
                 double e;
