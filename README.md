@@ -52,6 +52,8 @@ To come.
 - The library holds starter beats for 22 modern genres, classic 808 beats and your own patterns.
 - File saves projects (`.cs808`): the kit, every bank and the tempo. The app reopens where you left off; Ctrl+Z and
   Ctrl+Y undo and redo any edit.
+- It is also a VST3 for a DAW: the pattern plays with the host's transport and tempo, and the host's notes play the
+  drums. Options has "Follow the host's Play": off, the pattern waits for its own Play key, at the host's tempo.
 
 ## Building from source
 
@@ -61,6 +63,9 @@ cmake -S CoolSynth808 -B CoolSynth808/build -G "Visual Studio 17 2022" -A x64
 cmake --build CoolSynth808/build --config Debug --parallel
 ctest --test-dir CoolSynth808/build -C Debug --output-on-failure
 ```
+
+The VST3 is built to `build/CoolSynth808_artefacts/Debug/VST3/CoolSynth 808.vst3`; DAWs look for it in
+`C:\Program Files\Common Files\VST3`.
 
 ASIO comes in when Steinberg's ASIO SDK is found: set `ASIO_SDK_DIR` to its `ASIOSDK` folder, or unpack it to
 `SDKs/asio/sdk/ASIOSDK` beside the repository's parent folder. Without it the app offers the Windows drivers only.
