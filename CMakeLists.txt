@@ -5,6 +5,11 @@ project(CoolSynth808 VERSION 0.1.0 LANGUAGES C CXX) # C as well: JUCE 9 builds z
 # The settings every CoolSynth program shares (the C++ runtime, a Debug build compiled optimised), from the engine.
 include(external/coolsynth-engine/cmake/CoolSynthFlags.cmake)
 
+# A Release build optimised across all its code at link time (whole-program optimisation: /GL with /LTCG on MSVC), the
+# engine's and JUCE's too: the same sound, a little faster (D327). Not AVX2: CoolSynth's own test found it no faster and
+# bit for bit the same, and it would shut out every PC from before 2013. The everyday Debug build is not touched.
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+
 add_subdirectory(external/JUCE)
 include(CTest)
 # The engine's own tests run in its repository's CI; here only this app's.
