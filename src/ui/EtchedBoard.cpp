@@ -87,7 +87,8 @@ namespace cs808
         }
         juce::Graphics::ScopedSaveState state(g);
         g.reduceClipRegion(copperClip);
-        glowing = circuit.paintLit(g, now, [this](int owner) { return energyOf(owner); }, circuitFade());
+        glowing = circuit.paintLit(g, now, [this](int owner) { return energyOf(owner); }, circuitFade(),
+                                   lifted ? EtchedCircuit::Tint([this](int owner, int role) { return tintOf(owner, role); }) : EtchedCircuit::Tint());
         if (lifted)
         {
             juce::Graphics::ScopedSaveState cpuState(g);
@@ -96,6 +97,30 @@ namespace cs808
         }
         if (lifted)
             paintOpenFrames(g);
+    }
+
+    float EtchedBoard::tintOf(int owner, int role) const
+    {
+        if (role < 0 || role >= PanelSwings::roleCount)
+            return 0.0f;
+        const auto of = [&](int column)
+        {
+            const double el = now - hitAt[static_cast<std::size_t>(column)];
+            if (el < 0.0 || el > 5000.0)
+                return 0.0f;
+            float s = 1.0f;
+            const float m = swings.lanes[static_cast<std::size_t>(column - 1)][static_cast<std::size_t>(role)].at(el, s);
+            return s * m;
+        };
+        if (owner >= 1 && owner <= 11)
+            return of(owner);
+        if (owner != 0 && owner != EtchedCircuit::triggerBus && owner != EtchedCircuit::mixBus)
+            return 0.0f;
+        float v = 0.0f; // the master and the buses: the drum that moves it most now
+        for (int c = 1; c < 12; ++c)
+            if (const float x = of(c); std::abs(x) > std::abs(v))
+                v = x;
+        return v;
     }
 
     juce::Rectangle<float> EtchedBoard::openArea(int column) const

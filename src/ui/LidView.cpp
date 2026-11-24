@@ -11,6 +11,7 @@
 #include "../Kit.h"
 #include "../Processor.h"
 #include "LibraryData.h"
+#include "NodeSwing.h"
 #include "Text.h"
 #include "Theme.h"
 #include "Widgets.h"
@@ -997,43 +998,16 @@ namespace cs808
                     ++unbound;
                     continue;
                 }
-                const auto& x = series->second;
-                const auto n = x.size();
-                float peak = 0.0f;
-                for (const float v : x)
-                    peak = std::max(peak, std::abs(v - x[0]));
-                if (peak < 1.0e-4f)
+                auto swing = NodeSwing::of(rec.ms, series->second);
+                if (! swing.bound())
                 {
                     ++unbound;
                     continue;
                 }
-                f.ms.resize(n);
-                f.level01.resize(n);
-                f.sign.resize(n);
-                float level = 0.0f, sign = 1.0f;
-                for (std::size_t i = 0; i < n; ++i)
-                {
-                    const float d = x[i] - x[0];
-                    const float target = std::abs(d) / peak;
-                    const float glow = i == 0 ? 0.0f : level * std::exp(-static_cast<float>(rec.ms[i] - rec.ms[i - 1]) / 60.0f);
-                    if (target >= glow)
-                    {
-                        level = target;
-                        sign = d >= 0.0f ? 1.0f : -1.0f;
-                    }
-                    else
-                        level = glow;
-                    f.ms[i] = static_cast<float>(rec.ms[i]);
-                    f.level01[i] = level;
-                    f.sign[i] = sign;
-                }
-                // The fade past the end: as the last 100 ms of the recording were fading, or the afterglow's.
-                const float end = f.ms.back();
-                std::size_t k = n - 1;
-                while (k > 0 && f.ms[k] > end - 100.0f)
-                    --k;
-                const float earlier = f.level01[k], last = f.level01.back();
-                f.tailTau = earlier > last && last > 1.0e-4f ? juce::jlimit(20.0f, 3000.0f, (end - f.ms[k]) / std::log(earlier / last)) : 60.0f;
+                f.ms = std::move(swing.ms);
+                f.level01 = std::move(swing.level01);
+                f.sign = std::move(swing.sign);
+                f.tailTau = swing.tailTau;
                 f.recordedRing = f.key == 0 ? 980.0 : f.key == 8 ? 1100.0 : f.key == 9 ? 600.0 : 0.0; // Decay 0.6, 0.5, 0.5
             }
             return unbound;
@@ -3254,5 +3228,26 @@ namespace cs808
         }
         impl->selected = found;
         repaint();
+    }
+    PanelSwings panelSwings()
+    {
+        // Each drum's trigger, envelope, core and output, as the whole board's sheet binds them (D280, D319).
+        static constexpr std::array<std::array<const char*, 5>, 11> nodes { {
+            { "bd", "trig", "npulse", "nout", "vout" }, { "sd", "vt", "ne47", "no1", "vout" },
+            { "lt", "vt", "nev", "no1", "vout" }, { "mt", "vt", "nev", "no1", "vout" }, { "ht", "vt", "nev", "no1", "vout" },
+            { "rs", "vt", "nenv", "no21", "vout" }, { "cp", "vt", "n144", "nc70", "vout" }, { "cb", "ncb5", "ncbe", "nc15", "n6ap" },
+            { "cy", "ncy6", "nj", "nc16", "vcy" }, { "oh", "noh7", "ne1", "nc27", "voh" }, { "ch", "nch8", "nce", "nc30", "vch" } } };
+        PanelSwings out;
+        std::map<std::string, Recording> recordings;
+        for (std::size_t lane = 0; lane < nodes.size(); ++lane)
+        {
+            auto it = recordings.find(nodes[lane][0]);
+            if (it == recordings.end())
+                it = recordings.emplace(nodes[lane][0], boardRecording(nodes[lane][0])).first;
+            for (std::size_t role = 0; role < PanelSwings::roleCount; ++role)
+                if (const auto s = it->second.series.find(nodes[lane][role + 1]); s != it->second.series.end())
+                    out.lanes[lane][role] = NodeSwing::of(it->second.ms, s->second);
+        }
+        return out;
     }
 }

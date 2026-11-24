@@ -91,9 +91,9 @@ namespace cs808
 
     // ---- Building -------------------------------------------------------------------------------------------------
 
-    void EtchedCircuit::addWire(std::vector<juce::Point<float>> pts, int owner, bool inCell)
+    void EtchedCircuit::addWire(std::vector<juce::Point<float>> pts, int owner, bool inCell, int role)
     {
-        Wire w { std::move(pts), owner, inCell, 0.0f };
+        Wire w { std::move(pts), owner, inCell, 0.0f, false, role };
         for (std::size_t i = 1; i < w.pts.size(); ++i)
             w.length += w.pts[i - 1].getDistanceFrom(w.pts[i]);
         wires.push_back(std::move(w));
@@ -114,12 +114,15 @@ namespace cs808
             std::vector<GenPart> gp;
             const int owner = static_cast<int>(l);
             generate(kindOf[l], static_cast<std::uint32_t>(((l == 0 ? -1 : owner) + 7) * 97 + 13), gw, gp);
-            for (const auto& wire : gw)
+            for (std::size_t i = 0; i < gw.size(); ++i)
             {
                 std::vector<juce::Point<float>> pts;
-                for (const auto& uv : wire.pts)
+                for (const auto& uv : gw[i].pts)
                     pts.push_back(map(uv));
-                addWire(std::move(pts), owner, true);
+                // what the wire stands for (D319): the master's all trigger; a drum's the trigger in, the envelope's
+                // feed, the core (its spine, branches and ring, noise or square), and the output with its feedback
+                const int role = l == 0 || i == 0 ? 0 : i == 1 ? 1 : i + 2 >= gw.size() ? 3 : 2;
+                addWire(std::move(pts), owner, true, role);
             }
             const float k = juce::jlimit(5.0f, 15.0f, std::min(w, h * 0.55f) / 7.0f);
             for (const auto& gpart : gp)
@@ -137,8 +140,8 @@ namespace cs808
         if (! columns.empty())
         {
             const float x0 = columns.front().x, x1 = columns.back().x + columns.back().w;
-            addWire({ { x0, bottom }, { x1, bottom } }, triggerBus, false);
-            addWire({ { x0 + 20.0f, top }, { x1, top } }, mixBus, false);
+            addWire({ { x0, bottom }, { x1, bottom } }, triggerBus, false, 0);
+            addWire({ { x0 + 20.0f, top }, { x1, top } }, mixBus, false, 3);
             // (the CPU board's instrument lines come up to the trigger bus from under the glass: D315)
         }
         finish();
@@ -222,7 +225,7 @@ namespace cs808
         paintNames(g);
     }
 
-    bool EtchedCircuit::paintLit(juce::Graphics& g, double nowMs, const Energy& energy, float fade)
+    bool EtchedCircuit::paintLit(juce::Graphics& g, double nowMs, const Energy& energy, float fade, const Tint& tint)
     {
         litFade = fade;
         const float dt = static_cast<float>(juce::jlimit(0.0, 100.0, nowMs - lastNow));
@@ -238,12 +241,30 @@ namespace cs808
         }
         // the afterglow of the last bar; the light in the theme's colours (D307: yellow on Silver)
         const auto& look = boardLook();
-        for (std::size_t i = 0; i < wires.size(); ++i)
-            if (const float h = heat[static_cast<std::size_t>(wires[i].owner)]; h > 0.02f)
+        if (tint)
+        {
+            // the lid lifted (D319): each wire as its node swings, green rising and red falling, as the sheets show
+            const auto& th = theme();
+            for (std::size_t i = 0; i < wires.size(); ++i)
             {
-                g.setColour(faded(look.heat.withAlpha(0.14f * h)));
+                if (wires[i].role < 0)
+                    continue;
+                const float v = tint(wires[i].owner, wires[i].role), m = std::abs(v);
+                if (m < 0.03f)
+                    continue;
+                g.setColour(faded((v > 0.0f ? th.vpos : th.vneg).withAlpha(0.14f * std::min(1.0f, m))));
                 g.strokePath(paths[i], stroke(widthOf(wires[i]) + 4.0f));
+                g.setColour(faded((v > 0.0f ? th.vpos : th.vneg).withAlpha(std::min(0.9f, m))));
+                g.strokePath(paths[i], stroke(widthOf(wires[i]) + 0.8f));
             }
+        }
+        else
+            for (std::size_t i = 0; i < wires.size(); ++i)
+                if (const float h = heat[static_cast<std::size_t>(wires[i].owner)]; h > 0.02f)
+                {
+                    g.setColour(faded(look.heat.withAlpha(0.14f * h)));
+                    g.strokePath(paths[i], stroke(widthOf(wires[i]) + 4.0f));
+                }
         // lit copper, and current: dots running along it, faster for more
         for (std::size_t i = 0; i < wires.size(); ++i)
         {
@@ -251,10 +272,13 @@ namespace cs808
             const float e = lit[static_cast<std::size_t>(w.owner)];
             if (e < 0.03f)
                 continue;
-            g.setColour(faded(look.flowWire.withAlpha(0.06f * e)));
-            g.strokePath(paths[i], stroke(widthOf(w) + 4.0f));
-            g.setColour(faded(look.flowWire.withAlpha(0.42f * e)));
-            g.strokePath(paths[i], stroke(widthOf(w) + 0.5f));
+            if (! tint || w.role < 0)
+            {
+                g.setColour(faded(look.flowWire.withAlpha(0.06f * e)));
+                g.strokePath(paths[i], stroke(widthOf(w) + 4.0f));
+                g.setColour(faded(look.flowWire.withAlpha(0.42f * e)));
+                g.strokePath(paths[i], stroke(widthOf(w) + 0.5f));
+            }
             if (e < 0.05f)
                 continue;
             // Each dot a little bigger, with a soft halo of its own light, so it shows on light metal and dark

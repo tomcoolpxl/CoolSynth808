@@ -6,6 +6,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "EtchedCircuit.h"
+#include "NodeSwing.h"
 
 /*
     The fifth layout's board (D292): the panel is a circuit board seen through its metal, the knobs and switches
@@ -112,6 +113,8 @@ namespace cs808
         [[nodiscard]] juce::Rectangle<float> openArea(int column) const;
         /** For the snapshot tests: the mouse over a column (-1 none). */
         void hoverForTesting(int column) { hovered = column; repaint(); }
+        /** The drums' nodes as their recordings move them, for the lifted lid's colours (D319). */
+        void setSwings(PanelSwings s) { swings = std::move(s); }
         [[nodiscard]] bool isLifted() const noexcept { return lifted; }
 
     private:
@@ -144,6 +147,10 @@ namespace cs808
         void buildCpu(const std::vector<float>& columnCentres);
         std::vector<juce::Range<float>> columnSpans; // each column's x, for a click with the lid lifted
         int hovered = -1; // the column under the mouse with the lid lifted (D319)
+        PanelSwings swings;
+        /** A wire's node, signed -1..1, with the lid lifted (D319): its drum's, the buses' and the master's from the
+            drum that moves that role most now. */
+        [[nodiscard]] float tintOf(int owner, int role) const;
         [[nodiscard]] int columnAt(juce::Point<float> p) const;
         void paintOpenFrames(juce::Graphics& g) const;
         [[nodiscard]] float energyOf(int owner) const noexcept;

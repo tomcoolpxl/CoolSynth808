@@ -184,6 +184,7 @@ namespace cs808
         p.setSendClock(settings->getBoolValue("sendClock", true));
 
         board = std::make_unique<EtchedBoard>();
+        board->setSwings(panelSwings()); // the lifted lid's colours, from the recordings (D319)
         addAndMakeVisible(*board);
         board->setBounds(0, 0, baseWidth, baseHeight);
         auto& plate = add<NamePlate>(*board);

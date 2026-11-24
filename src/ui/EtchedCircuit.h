@@ -60,10 +60,15 @@ namespace cs808
         /** Over the still board, each frame: the afterglow, the lit copper, the current running along it, the lit
             parts and the transistors' lights. Returns whether anything is lit or glowing, so the caller knows to keep
             drawing. */
-        bool paintLit(juce::Graphics& g, double nowMs, const Energy& energy, float fade = 1.0f);
+        /** With the lid lifted (D319): a wire's node, signed, -1..1 from its swing (0 none), by its owner and its role
+            (0 the trigger, 1 the envelope, 2 the core, 3 the output). */
+        using Tint = std::function<float(int owner, int role)>;
+        /** With a tint, the copper is coloured as the sheets colour it, green rising and red falling, under the
+            current's dots, in place of the theme's glow. */
+        bool paintLit(juce::Graphics& g, double nowMs, const Energy& energy, float fade = 1.0f, const Tint& tint = {});
 
     private:
-        struct Wire { std::vector<juce::Point<float>> pts; int owner = 0; bool inCell = true; float length = 0.0f; bool bus = false; };
+        struct Wire { std::vector<juce::Point<float>> pts; int owner = 0; bool inCell = true; float length = 0.0f; bool bus = false; int role = -1; };
         struct Part { char type = 'R'; juce::Point<float> at; bool vertical = false; float k = 8.0f; int owner = 0; juce::String name;
                       int pins = 0; juce::String marking; };
         std::vector<Wire> wires;
@@ -76,7 +81,7 @@ namespace cs808
         mutable float litFade = 1.0f; // paintLit's fade, for its parts
         [[nodiscard]] juce::Colour faded(juce::Colour c) const { return c.withMultipliedAlpha(litFade); }
 
-        void addWire(std::vector<juce::Point<float>> pts, int owner, bool inCell);
+        void addWire(std::vector<juce::Point<float>> pts, int owner, bool inCell, int role = -1);
         juce::Point<float> pointAlong(const Wire& w, float d) const;
         void paintPart(juce::Graphics& g, const Part& p, float lit) const;
         void paintNames(juce::Graphics& g) const;
