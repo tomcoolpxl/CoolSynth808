@@ -150,6 +150,7 @@ if(BUILD_TESTING)
             tests/HostingTests.cpp
             tests/McpTests.cpp
             tests/ExportTests.cpp
+            tests/CpuTests.cpp
             ${COOLSYNTH808_SOURCES})
     target_include_directories(CoolSynth808Tests PRIVATE src tests)
     target_compile_features(CoolSynth808Tests PUBLIC cxx_std_20)

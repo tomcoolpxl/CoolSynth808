@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "Kit.h"
+#include "ui/Text.h"
 #include "ui/Theme.h"
 #include "ui/WindowLook.h"
 
@@ -15,11 +16,11 @@ namespace cs808
         constexpr int rowHeight = 40;
         constexpr float chipHeight = 26.0f;
 
-        float textWidth(const juce::String& text, float height)
+        /** A key's word as Chip::paint draws it: the label's tracked capitals, and a toggle's lens beside it. */
+        float keyWidth(const Chip& chip)
         {
-            juce::GlyphArrangement glyphs;
-            glyphs.addLineOfText(uiFont(height), text, 0.0f, 0.0f);
-            return glyphs.getBoundingBox(0, -1, true).getWidth();
+            const bool toggle = chip.isOn != nullptr && ! chip.filledWhenOn;
+            return shapedWidth(labelFont(chip.fontHeight), chip.text.toUpperCase()) + (toggle ? 12.0f : 0.0f);
         }
 
         void styleChip(Chip& chip, const juce::String& text)
@@ -397,7 +398,7 @@ namespace cs808
         float x = area.getX(), y = area.getY() + 92.0f;
         for (auto* chip : actions)
         {
-            const float w = textWidth(chip->text, chip->fontHeight) + 26.0f;
+            const float w = keyWidth(*chip) + 26.0f;
             if (x + w > area.getRight() && x > area.getX())
             {
                 x = area.getX();
@@ -420,7 +421,7 @@ namespace cs808
             chip->filledWhenOn = false;
             chip->isOn = std::move(on);
             chip->onClick = [act = std::move(act)](const juce::MouseEvent&) { act(); };
-            const float w = textWidth(text, 11.0f) + 20.0f;
+            const float w = keyWidth(*chip) + 20.0f;
             chip->setBounds(juce::Rectangle<float>(x, y, w, 22.0f).toNearestInt());
             x += w + 5.0f;
             addAndMakeVisible(*chip);
