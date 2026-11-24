@@ -4,6 +4,8 @@
 
 #include <juce_graphics/juce_graphics.h>
 
+#include "LibraryData.h"
+
 /*
     The panel's colours as named roles (the mockup's, docs/design/mockups/coolsynth-808.html in CoolSynth's
     repository): every theme is only this list. Own colours, not Roland's (D263): the four beat groups of step keys
@@ -56,8 +58,45 @@ namespace cs808
     inline const Theme& theme() { return *currentThemePointer(); }
     inline void setTheme(int index) { currentThemePointer() = &themes()[static_cast<std::size_t>(juce::jlimit(0, 3, index))]; }
 
+    // The panel's type (D292): one family, Archivo, condensed for labels as an instrument's printing is, and IBM Plex
+    // Mono for numbers, so digits keep their width. Embedded, so it looks the same on every computer. Sizes are point
+    // sizes, as the mockup's CSS pixels.
+    enum class Face { label, head, headBold, logo, logoBold, mono, monoBold };
+
+    inline juce::Typeface::Ptr typefaceOf(Face face)
+    {
+        static const std::array<juce::Typeface::Ptr, 7> faces = []
+        {
+            const auto make = [](const char* data, int size) { return juce::Typeface::createSystemTypefaceFor(data, static_cast<size_t>(size)); };
+            return std::array<juce::Typeface::Ptr, 7> {
+                make(LibraryData::ArchivoCondensedSemiBold_ttf, LibraryData::ArchivoCondensedSemiBold_ttfSize),
+                make(LibraryData::ArchivoSemiCondensedSemiBold_ttf, LibraryData::ArchivoSemiCondensedSemiBold_ttfSize),
+                make(LibraryData::ArchivoSemiCondensedBold_ttf, LibraryData::ArchivoSemiCondensedBold_ttfSize),
+                make(LibraryData::ArchivoMedium_ttf, LibraryData::ArchivoMedium_ttfSize),
+                make(LibraryData::ArchivoExtraBold_ttf, LibraryData::ArchivoExtraBold_ttfSize),
+                make(LibraryData::IBMPlexMonoMedium_ttf, LibraryData::IBMPlexMonoMedium_ttfSize),
+                make(LibraryData::IBMPlexMonoSemiBold_ttf, LibraryData::IBMPlexMonoSemiBold_ttfSize) };
+        }();
+        return faces[static_cast<std::size_t>(face)];
+    }
+
+    inline juce::Font fontOf(Face face, float pointHeight, float tracking = 0.0f)
+    {
+        return juce::Font(juce::FontOptions().withTypeface(typefaceOf(face)).withPointHeight(pointHeight).withKerningFactor(tracking));
+    }
+
+    /** Small capitals printed on the panel: condensed, spaced. */
+    inline juce::Font labelFont(float pointHeight = 10.0f) { return fontOf(Face::label, pointHeight, 0.09f); }
+    /** A drum's name or a heading. */
+    inline juce::Font headFont(float pointHeight = 13.0f) { return fontOf(Face::headBold, pointHeight, 0.05f); }
+    /** Numbers: tempo, values, pattern numbers. */
+    inline juce::Font monoFont(float pointHeight = 13.0f, bool strong = false) { return fontOf(strong ? Face::monoBold : Face::mono, pointHeight); }
+    /** The name plate: CoolSynth in medium, 808 in extra bold. */
+    inline juce::Font logoFont(float pointHeight, bool strong) { return fontOf(strong ? Face::logoBold : Face::logo, pointHeight, 0.01f); }
+
+    /** Everything written before D292 asked for this; it now takes Archivo too. */
     inline juce::Font uiFont(float height, bool bold = false)
     {
-        return juce::Font(juce::FontOptions("Segoe UI", height, bold ? juce::Font::bold : juce::Font::plain));
+        return fontOf(bold ? Face::headBold : Face::head, height, 0.02f);
     }
 }

@@ -29,7 +29,16 @@ juce_add_binary_data(CoolSynth808Library
         resources/lid/board_mt.json # the whole board's: the mid tom,
         resources/lid/board_ht.json # the high tom,
         resources/lid/board_oh.json # the open hat alone
-        resources/lid/board_ch.json) # and the closed hat alone (D280)
+        resources/lid/board_ch.json # and the closed hat alone (D280)
+        # The panel's typefaces (D292): Archivo for every label, IBM Plex Mono for numbers; both SIL OFL, their
+        # licences beside them in resources/fonts.
+        resources/fonts/ArchivoCondensed-SemiBold.ttf
+        resources/fonts/ArchivoSemiCondensed-SemiBold.ttf
+        resources/fonts/ArchivoSemiCondensed-Bold.ttf
+        resources/fonts/Archivo-Medium.ttf
+        resources/fonts/Archivo-ExtraBold.ttf
+        resources/fonts/IBMPlexMono-Medium.ttf
+        resources/fonts/IBMPlexMono-SemiBold.ttf)
 
 # A JUCE audio plugin built as a standalone app for now (D267): the plugin formats are one line away.
 juce_add_plugin(CoolSynth808
@@ -59,6 +68,7 @@ set(COOLSYNTH808_SOURCES
     src/ui/ControllerPanel.cpp
     src/ui/LibraryShelf.cpp
     src/ui/Widgets.cpp
+    src/ui/Hardware.cpp
     src/ui/LidView.cpp)
 
 target_sources(CoolSynth808 PRIVATE ${COOLSYNTH808_SOURCES})

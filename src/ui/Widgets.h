@@ -5,6 +5,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Hardware.h"
 #include "Theme.h"
 
 /*
@@ -23,6 +24,7 @@ namespace cs808
         juce::String label;
         bool small = false;
         bool locked = false; // drawn in the lit colour
+        bool accent = false; // an orange cap, as the Accent knob's (D292)
 
         void paint(juce::Graphics& g) override;
         void mouseDown(const juce::MouseEvent&) override;

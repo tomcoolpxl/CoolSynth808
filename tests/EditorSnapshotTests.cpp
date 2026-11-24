@@ -75,7 +75,8 @@ public:
             const auto shoot = [&](const juce::String& name)
             {
                 editor->layoutForLanes();
-                const auto image = editor->createComponentSnapshot(editor->getLocalBounds(), true, 1.0f);
+                // twice the density, to judge the drawing as a screen shows it (D292)
+                const auto image = editor->createComponentSnapshot(editor->getLocalBounds(), true, 2.0f);
                 juce::FileOutputStream out(folder.getChildFile(name + ".png"));
                 out.setPosition(0);
                 out.truncate();

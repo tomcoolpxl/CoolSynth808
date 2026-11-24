@@ -38,17 +38,16 @@ namespace cs808
 
     void Knob::paint(juce::Graphics& g)
     {
-        const auto& th = theme();
+        // A hardware knob (D292): a solid cap, its pointer and printed ticks; its name in near-white below.
         auto area = getLocalBounds().toFloat();
-        const float labelHeight = (small || label.isEmpty()) ? 0.0f : 13.0f;
+        const float labelHeight = (small || label.isEmpty()) ? 0.0f : 14.0f;
         auto knobArea = area.removeFromTop(area.getHeight() - labelHeight);
-        const float size = std::min(knobArea.getWidth(), knobArea.getHeight());
-        const auto valueColour = locked ? th.lit : (isMouseOverOrDragging() ? th.ink : th.ink.withAlpha(0.92f));
-        drawArcKnob(g, knobArea.withSizeKeepingCentre(size, size), get ? get() : 0.0f, th.line, valueColour, ! small);
+        const float size = std::min(knobArea.getWidth(), knobArea.getHeight()) - (small ? 8.0f : 16.0f);
+        drawHardwareKnob(g, knobArea.withSizeKeepingCentre(size, size), get ? get() : 0.0f, accent || locked);
         if (labelHeight > 0.0f)
         {
-            g.setColour(dragging || isMouseOver() ? th.ink : th.dim);
-            g.setFont(uiFont(9.5f));
+            g.setColour(dragging || isMouseOver() ? juce::Colours::white : juce::Colour(0xfff4efe4));
+            g.setFont(labelFont(10.0f));
             const auto shown = dragging && get ? juce::String(get() * 10.0f, 1) : label.toUpperCase();
             g.drawFittedText(shown, area.toNearestInt(), juce::Justification::centred, 1);
         }
@@ -156,55 +155,49 @@ namespace cs808
 
     void Chip::paint(juce::Graphics& g)
     {
-        const auto& th = theme();
-        const auto area = getLocalBounds().toFloat().reduced(0.5f);
+        // A key (D292): a raised plastic cap. One that only acts has no light; a toggle carries a lens beside its
+        // word that lights when on; one that is "hot" when on (Play) turns orange.
         const bool on = isOn && isOn();
-        if (on)
+        const bool toggle = isOn != nullptr && ! filledWhenOn;
+        const Cap cap = on && filledWhenOn ? Cap::hot : (on ? Cap::selected : Cap::plain);
+        const auto area = getLocalBounds().toFloat();
+        drawKeyCap(g, area, cap, isMouseOver(), isMouseButtonDown());
+        const auto font = labelFont(fontHeight);
+        auto textArea = area.reduced(4.0f, 0.0f);
+        if (isMouseButtonDown())
+            textArea = textArea.translated(0.0f, 1.0f);
+        if (toggle)
         {
-            g.setColour(filledWhenOn ? th.on : th.ink);
-            g.fillRoundedRectangle(area, 5.0f);
+            const float w = juce::GlyphArrangement::getStringWidth(font, text.toUpperCase());
+            const float x = area.getCentreX() - (w + 12.0f) * 0.5f;
+            drawLens(g, { x + 3.0f, textArea.getCentreY() }, 6.0f, on ? Lens::orange : Lens::off);
+            textArea = textArea.withTrimmedLeft(12.0f);
         }
-        g.setColour(on ? (filledWhenOn ? th.on : th.ink) : (isMouseOver() ? th.dim : th.line));
-        if (dashed && ! on)
-        {
-            juce::Path p;
-            p.addRoundedRectangle(area, 5.0f);
-            juce::Path dashedPath;
-            const float lengths[] { 4.0f, 3.0f };
-            juce::PathStrokeType(1.0f).createDashedStroke(dashedPath, p, lengths, 2);
-            g.fillPath(dashedPath);
-        }
-        else
-            g.drawRoundedRectangle(area, 5.0f, 1.0f);
-        g.setColour(on ? (filledWhenOn ? th.onInk : th.panel) : (isMouseOver() ? th.ink : th.dim));
-        g.setFont(uiFont(fontHeight, true));
-        g.drawFittedText(text, getLocalBounds().reduced(4, 0), juce::Justification::centred, 1);
+        drawKeyText(g, text.toUpperCase(), textArea, cap, font);
     }
 
     // ---- Choices ----------------------------------------------------------------------------------------------
 
     void Choices::paint(juce::Graphics& g)
     {
-        const auto& th = theme();
-        auto area = getLocalBounds().toFloat().reduced(0.5f);
-        g.setColour(th.line);
-        g.drawRoundedRectangle(area, 5.0f, 1.0f);
+        // A row of keys (D292), each with its lens; the chosen one lit.
+        auto area = getLocalBounds().toFloat();
         const int count = static_cast<int>(options.size());
         if (count == 0)
             return;
-        const float w = area.getWidth() / count;
+        const float gap = 4.0f, w = (area.getWidth() - gap * static_cast<float>(count - 1)) / static_cast<float>(count);
         const int chosen = get ? get() : -1;
+        const auto font = labelFont(fontHeight);
         for (int i = 0; i < count; ++i)
         {
-            const auto cell = juce::Rectangle<float>(area.getX() + w * i, area.getY(), w, area.getHeight());
-            if (i == chosen)
-            {
-                g.setColour(th.ink);
-                g.fillRoundedRectangle(cell.reduced(1.0f), 4.0f);
-            }
-            g.setColour(i == chosen ? th.panel : th.dim);
-            g.setFont(uiFont(fontHeight, true));
-            g.drawFittedText(options[static_cast<std::size_t>(i)], cell.toNearestInt(), juce::Justification::centred, 1);
+            const auto cell = juce::Rectangle<float>(area.getX() + (w + gap) * static_cast<float>(i), area.getY(), w, area.getHeight());
+            const bool on = i == chosen;
+            drawKeyCap(g, cell, on ? Cap::selected : Cap::plain, false, false);
+            const auto& word = options[static_cast<std::size_t>(i)];
+            const float tw = juce::GlyphArrangement::getStringWidth(font, word.toUpperCase());
+            const float x = cell.getCentreX() - (tw + 12.0f) * 0.5f;
+            drawLens(g, { x + 3.0f, cell.getCentreY() }, 6.0f, on ? Lens::orange : Lens::off);
+            drawKeyText(g, word.toUpperCase(), cell.withTrimmedLeft(12.0f).reduced(2.0f, 0.0f), on ? Cap::selected : Cap::plain, font);
         }
     }
 
