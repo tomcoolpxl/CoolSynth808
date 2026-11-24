@@ -217,6 +217,19 @@ public:
             }
             editor->lidForTesting().showSheet(1);
             shoot("lid-bass-drum");
+            // The bass drum's sheet live (D317): shown, it has the engine capture the next bass drum's circuit as the
+            // pattern plays; at 3 ms into that hit, the moment the resonator is struck.
+            {
+                auto& lid = editor->lidForTesting();
+                editor->layOut();
+                lid.tick(100000.0);
+                auto& watch = p->circuitWatch();
+                runUntil([&] { return watch.captureCount() > 0 && watch.framesCaptured() > 8 && watch.capturedTime(watch.framesCaptured() - 1) >= 299.0f; });
+                lid.tick(100040.0);
+                expect(lid.showMomentForTesting(3.0), "the sheet took the engine's capture");
+                shoot("lid-bass-drum-live");
+                lid.showMomentForTesting(0.0);
+            }
             editor->lidForTesting().showSheet(2);
             shoot("lid-snare");
             editor->lidForTesting().showSheet(3);

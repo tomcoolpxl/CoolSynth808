@@ -24,6 +24,8 @@ namespace cs808
         [[nodiscard]] juce::StringArray completeDrumProblems();
         /** The whole board's struck wires that no recording drives (D280): none, unless a node went missing. */
         [[nodiscard]] int boardFlowsUnbound() const;
+        /** For the snapshot tests: the complete drum's sheet at this many ms into its hit, and whether it is live. */
+        bool showMomentForTesting(double ms);
 
     private:
         [[nodiscard]] juce::AffineTransform sheetTransform() const;

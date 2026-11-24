@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <map>
 #include <set>
 #include <vector>
@@ -1046,7 +1047,7 @@ namespace cs808
             struct Node { Pt p; std::vector<int> edges; std::vector<int> terms; int net = -1; };
             struct Edge { int a = 0, b = 0; int net = -1; };
             struct Net { std::vector<int> nodes, edges; std::string name; };
-            struct Wire { Pt a, b; std::vector<float> current; float offset = 0.0f; };
+            struct Wire { Pt a, b; std::vector<float> current; float offset = 0.0f; Coef coef; };
 
             int which = bassDrum;
             float width = 690.0f, height = 282.0f; // the sheet, in drawing units
@@ -2492,13 +2493,97 @@ namespace cs808
                 juce::Random random(808);
                 for (const auto& [seg, coef] : flows)
                 {
-                    Wire w { seg.first, seg.second, std::vector<float>(n, 0.0f), random.nextFloat() * 6.5f };
+                    Wire w { seg.first, seg.second, std::vector<float>(n, 0.0f), random.nextFloat() * 6.5f, coef };
                     for (const auto& [s, c] : coef)
                         if (const auto it = rec.series.find(s); it != rec.series.end() && c != 0.0f)
                             for (std::size_t i = 0; i < n; ++i)
                                 w.current[i] += c * it->second[i];
                     wires.push_back(std::move(w));
                 }
+            }
+
+            /** The ngspice recording the sheet was made with, kept while a live capture stands in for it (D317). */
+            Recording recorded;
+            bool live = false;
+            unsigned int liveHits = 0;
+
+            /** The data the sheet shows from now on: each wire's current made again from its parts' (D317). */
+            void show(Recording r, bool isLive)
+            {
+                if (! live && isLive)
+                    recorded = rec;
+                rec = std::move(r);
+                live = isLive;
+                const auto n = static_cast<std::size_t>(rec.samples);
+                for (auto& w : wires)
+                {
+                    w.current.assign(n, 0.0f);
+                    for (const auto& [s, c] : w.coef)
+                        if (const auto it = rec.series.find(s); it != rec.series.end() && c != 0.0f)
+                            for (std::size_t i = 0; i < n && i < it->second.size(); ++i)
+                                w.current[i] += c * it->second[i];
+                }
+                pos = std::min(pos, std::max(0.0, static_cast<double>(rec.samples) - 2.0));
+            }
+
+            /**
+                A hit captured from the engine's circuit as it played (D317), as a recording: each series the capture has,
+                set on the ngspice recording's standing value (the recording at rest plus how far the engine moved from
+                its own rest), as the engine draws some stages from ideal sources and some returns to ground, not to the
+                supply; each it has not (the parts the engine leaves out) from the recording, on the capture's times.
+            */
+            Recording fromCapture(const coolsynth::synth::v3::CircuitWatch& watch, int frames) const
+            {
+                const auto& ref = live ? recorded : rec;
+                Recording out;
+                out.parts = ref.parts;
+                out.samples = frames;
+                out.setting = "your settings, the last hit";
+                out.ms.resize(static_cast<std::size_t>(frames));
+                for (int f = 0; f < frames; ++f)
+                    out.ms[static_cast<std::size_t>(f)] = watch.capturedTime(f);
+                std::map<std::string, int> index;
+                for (int s = 0; s < watch.capturedSeries(); ++s)
+                    index[watch.capturedName(s)] = s;
+                for (const auto& [name, values] : ref.series)
+                {
+                    auto& v = out.series[name];
+                    v.resize(static_cast<std::size_t>(frames));
+                    const auto it = index.find(name);
+                    const float rest = values.empty() ? 0.0f : values.front();
+                    float engineRest = 0.0f;
+                    bool haveRest = false;
+                    std::size_t k = 0;
+                    for (int f = 0; f < frames; ++f)
+                    {
+                        float value = std::numeric_limits<float>::quiet_NaN();
+                        if (it != index.end())
+                            value = watch.captured(f, it->second);
+                        if (std::isfinite(value))
+                        {
+                            if (! haveRest)
+                            {
+                                engineRest = value;
+                                haveRest = true;
+                            }
+                            v[static_cast<std::size_t>(f)] = rest + (value - engineRest);
+                            continue;
+                        }
+                        // the recording at this frame's time
+                        const double ms = out.ms[static_cast<std::size_t>(f)];
+                        while (k + 2 < ref.ms.size() && ref.ms[k + 1] < ms)
+                            ++k;
+                        if (values.size() < 2 || ref.ms.size() < 2)
+                            v[static_cast<std::size_t>(f)] = rest;
+                        else
+                        {
+                            const double a = ref.ms[k], b = ref.ms[k + 1];
+                            const double fr = b > a ? std::clamp((ms - a) / (b - a), 0.0, 1.0) : 0.0;
+                            v[static_cast<std::size_t>(f)] = values[k] + static_cast<float>(fr) * (values[k + 1] - values[k]);
+                        }
+                    }
+                }
+                return out;
             }
 
             [[nodiscard]] double msAt(double p) const
@@ -2693,10 +2778,43 @@ namespace cs808
         }
     }
 
+    bool LidView::showMomentForTesting(double ms)
+    {
+        if (! (impl->showFull && impl->full && impl->full->rec.samples > 1))
+            return false;
+        auto& f = *impl->full;
+        double p = 0.0;
+        while (p < f.rec.samples - 2 && f.msAt(p) < ms)
+            p += 1.0;
+        f.pos = p;
+        f.playing = false;
+        return f.live;
+    }
+
     void LidView::tick(double nowMs)
     {
         const double dt = std::min(50.0, nowMs - impl->now) / 1000.0;
         impl->now = nowMs;
+        // The engine captures the shown drum's circuit at each of its hits (D317): only the bass drum's, so far.
+        auto& watch = processor.circuitWatch();
+        const bool liveSheet = isVisible() && impl->showFull && impl->full && impl->full->which == bassDrum;
+        watch.watchCircuit(liveSheet ? coolsynth::synth::v3::CircuitWatch::bassDrum : -1);
+        if (liveSheet)
+        {
+            auto& f = *impl->full;
+            const unsigned int hits = watch.captureCount();
+            const int frames = watch.framesCaptured();
+            // a hit's capture is taken once it is whole (300 ms of it) and a hit newer than the sheet's
+            if (hits != f.liveHits && frames > 8 && watch.capturedTime(frames - 1) >= 299.0f)
+            {
+                watch.holdCapture(true);
+                auto captured = f.fromCapture(watch, watch.framesCaptured());
+                watch.holdCapture(false);
+                f.liveHits = hits;
+                f.show(std::move(captured), true);
+                resized(); // the time slider's range
+            }
+        }
         if (! isVisible())
             return;
         if (impl->showFull && impl->full && impl->full->rec.samples > 1)
@@ -2925,7 +3043,8 @@ namespace cs808
             auto caption = getLocalBounds().removeFromBottom(24).toFloat().withTrimmedRight(260.0f);
             g.setColour(look.dim);
             g.setFont(uiFont(10.5f));
-            g.drawFittedText("Recorded from ngspice, the reference the engine is checked against: " + f.rec.setting + ". "
+            g.drawFittedText((f.live ? juce::String("Live from the engine's circuit at ") + f.rec.setting + "; the parts it leaves out from ngspice. "
+                                     : juce::String("Recorded from ngspice, the reference the engine is checked against: ") + f.rec.setting + ". ")
                                  + (f.errors.isEmpty() ? "Checked against the netlist: " + juce::String(static_cast<int>(f.nets.size())) + " nets and "
                                                              + juce::String(static_cast<int>(f.rec.parts.size())) + " parts, all matching."
                                                        : "THE DRAWING DOES NOT MATCH THE NETLIST: " + f.errors.joinIntoString("; ") + "."),

@@ -126,6 +126,8 @@ namespace cs808
         void takeLights(std::array<float, 12>& byLane) noexcept;
         /** How many blocks the 808's generators have reported: still the same, and the engine is not playing. */
         [[nodiscard]] unsigned int lightReports() const noexcept { return watch.reportCount(); }
+        /** The engine's watch on the circuits: a sheet of Under the Lid captures its drum's circuit there (D317). */
+        [[nodiscard]] coolsynth::synth::v3::CircuitWatch& circuitWatch() noexcept { return watch; }
         /** Writes the hits recorded while playing into the project; returns whether any came. */
         bool applyRecordedHits();
 

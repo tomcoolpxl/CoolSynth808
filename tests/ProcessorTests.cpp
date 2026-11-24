@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -140,6 +141,89 @@ public:
             const int shortly = heldFor(0.1f), long_ = heldFor(0.9f);
             logMessage("blocks the bass drum's light holds above a tenth: Decay 0.1 " + juce::String(shortly) + ", 0.9 " + juce::String(long_));
             expectGreaterThan(long_, shortly + 5, "a longer Decay keeps the light longer");
+        }
+
+        beginTest("the_bass_drum_sheet_lives_from_the_engine_as_its_recording_does");
+        {
+            // D317: the bass drum's sheet shows the engine's circuit as it plays. Struck at the recording's own settings
+            // (Decay 0.6, Tone 0.5, Level 0.8), each captured series follows its ngspice recording: a part mapped to the
+            // wrong port or with its sign turned round would not.
+            using W = coolsynth::synth::v3::CircuitWatch;
+            auto p = prepared();
+            p->editKit([](KitValues& kit) { kit.knob[1] = 0.8f; kit.knob[2] = 0.5f; kit.knob[3] = 0.6f; });
+            p->editBank([](SequencerBank& b) { b.pattern[0].lanes[0].a[0].on = true; }, false);
+            p->circuitWatch().watchCircuit(W::bassDrum);
+            p->setPlaying(true);
+            (void) render(*p, 24000); // half a second: the hit and its 300 ms
+            auto& watch = p->circuitWatch();
+            const int frames = watch.framesCaptured();
+            expectGreaterThan(frames, 400, "the hit is captured");
+
+            const auto json = juce::JSON::parse(juce::File(COOLSYNTH808_SOURCE_DIR).getChildFile("resources/lid/bassdrum_currents.json"));
+            std::vector<double> ms;
+            for (const auto& v : *json["t"].getArray())
+                ms.push_back(static_cast<double>(v));
+            juce::MemoryOutputStream raw;
+            juce::Base64::convertFromBase64(raw, json["data"].toString());
+            const auto* data = static_cast<const std::int16_t*>(raw.getData());
+            const auto names = *json["names"].getArray();
+            const auto scales = *json["scales"].getArray();
+            const auto recorded = [&](const juce::String& name, double at)
+            {
+                const int s = names.indexOf(name);
+                if (s < 0)
+                    return std::numeric_limits<double>::quiet_NaN();
+                std::size_t k = 0;
+                while (k + 2 < ms.size() && ms[k + 1] < at)
+                    ++k;
+                const double scale = static_cast<double>(scales[s]);
+                const double a = data[static_cast<std::size_t>(s) * ms.size() + k] * scale, b = data[static_cast<std::size_t>(s) * ms.size() + k + 1] * scale;
+                const double fr = ms[k + 1] > ms[k] ? juce::jlimit(0.0, 1.0, (at - ms[k]) / (ms[k + 1] - ms[k])) : 0.0;
+                return a + fr * (b - a);
+            };
+            int checked = 0, good = 0, turned = 0;
+            juce::String poor;
+            for (int s = 0; s < watch.capturedSeries(); ++s)
+            {
+                const juce::String name(watch.capturedName(s));
+                std::vector<double> x, y;
+                for (int f = 0; f < frames; ++f)
+                {
+                    const double e = watch.captured(f, s), r = recorded(name, watch.capturedTime(f));
+                    if (std::isfinite(e) && std::isfinite(r))
+                    {
+                        x.push_back(e);
+                        y.push_back(r);
+                    }
+                }
+                if (x.size() < 100)
+                    continue;
+                const auto mean = [](const std::vector<double>& v) { double m = 0.0; for (const double a : v) m += a; return m / static_cast<double>(v.size()); };
+                const double mx = mean(x), my = mean(y);
+                double sxy = 0.0, sxx = 0.0, syy = 0.0;
+                for (std::size_t i = 0; i < x.size(); ++i)
+                {
+                    sxy += (x[i] - mx) * (y[i] - my);
+                    sxx += (x[i] - mx) * (x[i] - mx);
+                    syy += (y[i] - my) * (y[i] - my);
+                }
+                const double spread = std::sqrt(syy / static_cast<double>(y.size()));
+                if (sxx <= 0.0 || syy <= 0.0 || spread < (name.contains(".") ? 1.0e-6 : 1.0e-3))
+                    continue; // still in the recording: nothing to follow
+                const double r = sxy / std::sqrt(sxx * syy);
+                ++checked;
+                if (r < -0.5)
+                    ++turned;
+                if (r > 0.6)
+                    ++good;
+                else
+                    poor << name << " " << juce::String(r, 2) << "  ";
+            }
+            logMessage("series that move, " + juce::String(checked) + "; following their recording (r > 0.6), " + juce::String(good)
+                       + "; the rest: " + poor);
+            expectGreaterThan(checked, 40, "most of the circuit moves");
+            expectGreaterThan(good, checked * 9 / 10, "nine in ten follow their recording");
+            expectEquals(turned, 0, "none turned round (a sign or a port wrong): " + poor);
         }
 
         beginTest("a_switch_strikes_the_other_instrument");
