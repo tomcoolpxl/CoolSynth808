@@ -335,7 +335,7 @@ namespace cs808
             y += sectionGap - rowGap;
             heads.push_back({ "CONTROLLER", y });
             y += headHeight + 12;
-            row(controller, "Controller", 190);
+            row(controller, "Setup", 190);
             contentHeight = y + pad - rowGap;
         }
 
