@@ -38,6 +38,8 @@ namespace cs808
         std::array<juce::Colour, 3> hotHover { juce::Colour(0xfff8aa72), juce::Colour(0xffec7c33), juce::Colour(0xffc95e20) };
         std::array<juce::Colour, 4> backlit { juce::Colour(0xffffc58a), juce::Colour(0xfff08a3c), juce::Colour(0xffc95b1d), juce::Colour(0xffff8228) }; // centre, middle, edge, glow
         std::array<juce::Colour, 2> accentKnob { juce::Colour(0xfff3a066), juce::Colour(0xffb9541a) };
+        // The name plate (D330, after CoolSynth 303's title): a dark shade of the metal, its edge darker still.
+        juce::Colour nameStrip { 0xff1c1c1d }, nameEdge { 0xff0d0d0e };
     };
 
     struct Theme
@@ -105,6 +107,8 @@ namespace cs808
                 { c(0x3b3833), c(0x343129), c(0x2c2a26) } };
             const StepOn orange { c(0xf5a066), c(0xe8742a), c(0xc3581b), c(0xfff0dc), c(0xffb067), c(0xffa046) };
             silver.stepOn = { orange, orange, orange, orange };
+            silver.board.nameStrip = c(0x26292d);
+            silver.board.nameEdge = c(0x121416);
 
             // The 808's own colours (D307, the mockups' 5.1): a charcoal panel printed in white and orange, dark
             // knobs with an orange line, the steps in red, orange, yellow and white, dim when off, full when on.
@@ -140,6 +144,8 @@ namespace cs808
             detail::keys(steel.board, c(0x626c77), c(0x4b545e), c(0x3e4650));
             detail::signal(steel.board, c(0xf5a066), c(0xe8742a), c(0xc3581b), c(0xf3a066), c(0xb9541a));
             steel.stepOn = silver.stepOn;
+            steel.board.nameStrip = c(0x2a3037);
+            steel.board.nameEdge = c(0x15191d);
 
             // The mockups' 5.3 Olive (D307): olive drab, brass traces, signal red.
             Theme olive { "olive", "Olive",
@@ -157,6 +163,8 @@ namespace cs808
             detail::signal(olive.board, c(0xf68866), c(0xe2512b), c(0xb33a1a), c(0xf68866), c(0xb33a1a));
             const auto red = detail::stepOnFrom(c(0xe2512b));
             olive.stepOn = { red, red, red, red };
+            olive.board.nameStrip = c(0x2a2b20);
+            olive.board.nameEdge = c(0x141510);
 
             return std::array<Theme, 4> { roland, silver, steel, olive }; // Roland first: the default (D307, the user)
         }();

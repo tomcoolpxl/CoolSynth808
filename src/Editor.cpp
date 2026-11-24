@@ -80,7 +80,9 @@ namespace cs808
     };
 
     // =============================================================================================================
-    // The name plate: printed on the board in its faded outline
+    // The name plate (D330, option C, after CoolSynth 303's title): the whole plate a dark strip with a darker edge
+    // line, COOLSYNTH 808 in extra-bold capitals spaced as the 303's, the name light grey and 808 the theme's orange,
+    // BEAT COMPOSER beside it. Not rotated: it stays where it was.
 
     class NamePlate final : public juce::Component
     {
@@ -89,18 +91,28 @@ namespace cs808
 
         void paint(juce::Graphics& g) override
         {
-            const auto light = logoFont(17.0f, false), bold = logoFont(17.0f, true);
-            const juce::String first = "CoolSynth ";
-            const float w1 = shapedWidth(light, first), w2 = shapedWidth(bold, "808");
-            const juce::Rectangle<float> line(14.0f, 5.0f, 300.0f, 20.0f);
-            g.setColour(boardLook().ink);
-            g.setFont(light);
+            const auto& look = boardLook();
+            const auto box = getLocalBounds().toFloat();
+            // the strip, a shade inset at its top as the 303's, and its edge
+            g.setColour(look.nameStrip);
+            g.fillRoundedRectangle(box, 2.0f);
+            g.setColour(juce::Colours::black.withAlpha(0.35f));
+            g.fillRect(box.reduced(1.0f, 0.0f).withTop(1.0f).withHeight(1.0f));
+            g.setColour(look.nameEdge);
+            g.drawRoundedRectangle(box.reduced(0.5f), 2.0f, 1.0f);
+            // the name: extra-bold capitals spaced 0.08, as the 303's
+            const auto caps = fontOf(Face::logoBold, 20.0f, 0.08f);
+            const juce::String first = "COOLSYNTH ";
+            const float w1 = shapedWidth(caps, first), w2 = shapedWidth(caps, "808");
+            const auto line = box.withTrimmedLeft(13.0f);
+            g.setFont(caps);
+            g.setColour(juce::Colour(0xffd9d9d6));
             shapedText(g, first, line, juce::Justification::centredLeft, false);
-            g.setFont(bold);
+            g.setColour(look.accent);
             shapedText(g, "808", line.withTrimmedLeft(w1), juce::Justification::centredLeft, false);
-            g.setColour(boardLook().label);
+            g.setColour(juce::Colour(0xffa9a8a3));
             g.setFont(labelFont(10.0f));
-            shapedText(g, "BEAT COMPOSER", line.withTrimmedLeft(w1 + w2 + 4.0f + 10.0f).translated(0.0f, 1.0f), juce::Justification::centredLeft, false);
+            shapedText(g, "BEAT COMPOSER", line.withTrimmedLeft(w1 + w2 + 12.0f).translated(0.0f, 0.5f), juce::Justification::centredLeft, false);
         }
     };
 
@@ -563,7 +575,7 @@ namespace cs808
     void Editor::updateKeepOuts()
     {
         auto list = columnKeepOuts;
-        list.push_back({ { 26.0f, 6.0f, 344.0f, 34.0f }, false, true }); // the name plate keeps its outline
+        list.push_back({ { 26.0f, 6.0f, 344.0f, 34.0f }, false, false }); // the name plate: its strip draws its own edge (D330)
         list.push_back({ transport->getBounds().toFloat().expanded(2.0f) });
         board->setKeepOuts(std::move(list));
     }
