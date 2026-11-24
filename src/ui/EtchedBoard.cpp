@@ -88,10 +88,10 @@ namespace cs808
         const juce::Rectangle<float> schmitt { 1196.0f, 708.0f, 40.0f, 14.0f };
         constexpr float ramY = 752.0f, ramW = 44.0f, ramH = 15.0f;
         constexpr std::array<float, 4> ramX { 1016.0f, 1074.0f, 1132.0f, 1190.0f };
-        constexpr std::array<float, 3> trunkX { 988.0f, 992.0f, 996.0f };
+        constexpr std::array<float, 3> trunkX { 1241.0f, 1244.0f, 1247.0f };
         constexpr std::array<float, 4> lampY { 775.0f, 778.0f, 781.0f, 784.0f };
         const juce::Rectangle<int> cpuArea { 980, 690, 290, 100 };
-        const juce::Rectangle<int> trunkArea { 982, 350, 20, 350 };
+        const juce::Rectangle<int> trunkArea { 1030, 350, 228, 352 };
         const juce::Rectangle<int> lampArea { 230, 772, 810, 16 };
 
         void chip(juce::Graphics& g, juce::Rectangle<float> body, int pinsPerSide, const juce::String& name, const BoardLook& look)
@@ -224,18 +224,20 @@ namespace cs808
                 g.fillEllipse(juce::Rectangle<float>(size, size).withCentre({ x, body.getBottom() + 2.5f }));
             }
         };
+        // A faint hint of activity, a soft glow as the top panel's electricity has (the user): wide and faint, a thin
+        // core only a little brighter.
         const auto glowLine = [&g](const juce::Path& path, juce::Colour c, float amount)
         {
-            g.setColour(c.withAlpha(0.12f * amount));
-            g.strokePath(path, juce::PathStrokeType(6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setColour(c.withAlpha(0.05f * amount));
+            g.strokePath(path, juce::PathStrokeType(9.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setColour(c.withAlpha(0.09f * amount));
+            g.strokePath(path, juce::PathStrokeType(4.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             g.setColour(c.withAlpha(0.22f * amount));
-            g.strokePath(path, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            g.setColour(c.withAlpha(0.9f * amount));
-            g.strokePath(path, juce::PathStrokeType(1.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.strokePath(path, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         };
 
         // the board beneath, faint through the smoke
-        const auto faint = look.copper.withAlpha(1.0f).brighter(0.5f).withAlpha(0.16f);
+        const auto faint = look.copper.withAlpha(1.0f).brighter(0.5f).withAlpha(0.06f); // much fainter (the user)
         g.setColour(faint);
         const auto thin = juce::PathStrokeType(1.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
         for (int i = 0; i < 3; ++i)
@@ -249,7 +251,7 @@ namespace cs808
         pins(schmitt, 7, 2.6f);
         for (const float x : ramX)
             pins({ x, ramY, ramW, ramH }, 9, 2.6f);
-        g.setColour(look.silkText.withAlpha(1.0f).brighter(0.6f).withAlpha(0.14f));
+        g.setColour(look.silkText.withAlpha(1.0f).brighter(0.6f).withAlpha(0.09f));
         for (const auto& body : { cpuChip, schmitt })
             g.drawRoundedRectangle(body.expanded(1.5f), 2.0f, 0.8f);
         for (const float x : ramX)
@@ -269,7 +271,7 @@ namespace cs808
             glowLine(lamp(static_cast<int>((sixteenthNow % 16) / 4)), look.flowWire, 0.7f);
         if (tick > 0.03f)
         {
-            g.setColour(look.flowDot.withAlpha(0.9f * tick));
+            g.setColour(look.flowDot.withAlpha(0.3f * tick));
             pins(cpuChip, 20, 2.8f);
             g.drawRoundedRectangle(cpuChip.expanded(1.5f), 2.0f, 1.0f);
             juce::Path clock;
@@ -283,7 +285,7 @@ namespace cs808
         {
             for (int b = 0; b < 4; ++b)
                 glowLine(bus(b), look.flowDot, mem);
-            g.setColour(look.flowDot.withAlpha(0.9f * mem));
+            g.setColour(look.flowDot.withAlpha(0.3f * mem));
             for (const float x : ramX)
             {
                 pins({ x, ramY, ramW, ramH }, 9, 2.8f);
