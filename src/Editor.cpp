@@ -9,6 +9,8 @@
 #include "ui/Sequencer.h"
 #include "ui/Transport.h"
 #include "ui/Text.h"
+#include "ui/OptionsWindow.h"
+#include "StandaloneDevices.h"
 
 namespace cs808
 {
@@ -151,11 +153,14 @@ namespace cs808
         options.osxLibrarySubFolder = "Application Support";
         settings = std::make_unique<juce::PropertiesFile>(options);
         // The theme kept by its name (D307): the older setting counted the themes of the old layouts.
-        const auto keptTheme = settings->getValue("boardTheme", themes()[0].id);
+        const auto keptTheme = settings->getValue("panelTheme", themes()[0].id);
         for (int i = 0; i < static_cast<int>(themes().size()); ++i)
             if (keptTheme == themes()[static_cast<std::size_t>(i)].id)
                 themeIndex = i;
         setTheme(themeIndex);
+        // The clock switches as last chosen in the options (D311): on, as before, until switched off.
+        p.setFollowClock(settings->getBoolValue("followClock", true));
+        p.setSendClock(settings->getBoolValue("sendClock", true));
 
         board = std::make_unique<EtchedBoard>();
         addAndMakeVisible(*board);
@@ -176,7 +181,8 @@ namespace cs808
         setWantsKeyboardFocus(true);
         setResizable(true, true);
         setResizeLimits(620, 300, 3840, 2400);
-        setSize(baseWidth, baseHeight);
+        zoomPercent = juce::jlimit(75, 200, settings->getIntValue("zoom", 100));
+        setSize(baseWidth * zoomPercent / 100, baseHeight * zoomPercent / 100);
         controls = std::make_unique<Controls>(*this);
         // Space and the shortcuts work from the start, before any click.
         juce::MessageManager::callAsync([safe = juce::Component::SafePointer<Editor>(this)] { if (safe != nullptr) safe->grabKeyboardFocus(); });
@@ -187,7 +193,10 @@ namespace cs808
     {
         stopAudition(); // the project as it was, before the state is kept
         controls.reset(); // its gesture closes while the panel is whole
-        settings->setValue("boardTheme", themes()[static_cast<std::size_t>(themeIndex)].id);
+        settings->setValue("panelTheme", themes()[static_cast<std::size_t>(themeIndex)].id);
+        optionsWindow.reset(); // its settings are saved below
+        if (watchedWindow != nullptr)
+            watchedWindow->removeComponentListener(this);
         settings->saveIfNeeded();
         lidOverlay.reset(); // before the lid it shows
     }
@@ -268,10 +277,85 @@ namespace cs808
 
     void Editor::paint(juce::Graphics& g) { g.fillAll(theme().desk); }
 
+
     void Editor::showLid(bool show)
     {
         lidView = show;
         layOut();
+    }
+
+    // ---- The options (D311) -----------------------------------------------------------------------------------
+
+    bool Editor::optionsOpen() const noexcept { return optionsWindow != nullptr && optionsWindow->isVisible(); }
+
+    void Editor::toggleOptions()
+    {
+        if (optionsOpen())
+        {
+            optionsWindow.reset();
+            settings->saveIfNeeded();
+            transport->repaint();
+            return;
+        }
+        OptionsHooks hooks;
+        hooks.theme = [this] { return themeIndex; };
+        hooks.chooseTheme = [this](int i) { chooseTheme(i); };
+        hooks.zoom = [this] { return zoomPercent; };
+        hooks.chooseZoom = [this](int z) { chooseZoom(z); };
+        hooks.followClock = [this] { return processor.followsClock(); };
+        hooks.sendClock = [this] { return processor.sendsClock(); };
+        hooks.chooseFollowClock = [this](bool on) { processor.setFollowClock(on); settings->setValue("followClock", on); };
+        hooks.chooseSendClock = [this](bool on) { processor.setSendClock(on); settings->setValue("sendClock", on); };
+        hooks.controllerSetup = [this] { openControllerSetup(); };
+        optionsWindow = std::make_unique<OptionsWindow>(std::move(hooks), standaloneDeviceManager(), settings.get());
+        optionsWindow->onClose = [this]
+        {
+            // after the click that asked has returned
+            juce::MessageManager::callAsync([safe = juce::Component::SafePointer<Editor>(this)]
+            {
+                if (safe != nullptr && safe->optionsOpen())
+                    safe->toggleOptions();
+            });
+        };
+        optionsWindow->keepAbove(*this);
+        optionsWindow->setVisible(true);
+        optionsWindow->toFront(true);
+        // It stays above the 808's window: brought to the front whenever that window is (not above other apps).
+        if (auto* top = getTopLevelComponent(); top != nullptr && top != this && top != watchedWindow)
+        {
+            if (watchedWindow != nullptr)
+                watchedWindow->removeComponentListener(this);
+            watchedWindow = top;
+            watchedWindow->addComponentListener(this);
+        }
+        transport->repaint();
+    }
+
+    void Editor::componentBroughtToFront(juce::Component&)
+    {
+        if (optionsOpen())
+            optionsWindow->toFront(false);
+    }
+
+    void Editor::chooseTheme(int index)
+    {
+        themeIndex = juce::jlimit(0, static_cast<int>(themes().size()) - 1, index);
+        setTheme(themeIndex);
+        settings->setValue("panelTheme", themes()[static_cast<std::size_t>(themeIndex)].id);
+        board->themeChanged();
+        if (auto* top = getTopLevelComponent())
+            top->repaint();
+        if (optionsWindow != nullptr)
+            optionsWindow->themeChanged();
+        repaint();
+        refresh();
+    }
+
+    void Editor::chooseZoom(int percent)
+    {
+        zoomPercent = juce::jlimit(75, 200, percent);
+        settings->setValue("zoom", zoomPercent);
+        setSize(baseWidth * zoomPercent / 100, baseHeight * zoomPercent / 100);
     }
 
     void Editor::resized()
@@ -562,11 +646,6 @@ namespace cs808
         banks.addSeparator();
         banks.addItem(99, "New bank", static_cast<int>(p.banks.size()) < Project::maxBanks);
         m.addSubMenu("Bank", banks);
-        juce::PopupMenu themeMenu;
-        for (int i = 0; i < static_cast<int>(themes().size()); ++i)
-            themeMenu.addItem(200 + i, themes()[static_cast<std::size_t>(i)].name, true, i == themeIndex);
-        m.addSubMenu("Theme", themeMenu);
-        m.addItem(6, "Controller setup...", true, ! coolsynth::midi::ControllerSetup::instance().map().empty());
         m.addSeparator();
         m.addItem(7, "Undo", processor.canUndo());
         m.addItem(8, "Redo", processor.canRedo());
@@ -581,20 +660,10 @@ namespace cs808
             else if (r == 3) e.saveProject(false);
             else if (r == 4) e.saveProject(true);
             else if (r == 5) e.savePatternToLibrary(e.editPattern);
-            else if (r == 6) e.openControllerSetup();
             else if (r == 7) { e.processor.undo(); e.refresh(); }
             else if (r == 8) { e.processor.redo(); e.refresh(); }
             else if (r == 99) { e.processor.addBank(); e.refresh(); }
             else if (r >= 100 && r < 200) { e.processor.selectBank(r - 100); e.refresh(); }
-            else if (r >= 200 && r < 200 + static_cast<int>(themes().size()))
-            {
-                e.themeIndex = r - 200;
-                setTheme(e.themeIndex);
-                e.settings->setValue("boardTheme", themes()[static_cast<std::size_t>(e.themeIndex)].id);
-                e.board->themeChanged();
-                e.repaint();
-                e.refresh();
-            }
         });
     }
 

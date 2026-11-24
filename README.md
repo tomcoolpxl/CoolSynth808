@@ -27,13 +27,19 @@ The sequencer sits on smoked glass below it, held over the board by four pins.
 - On the right, the picked lane's length, Every 4, Every 2, Clear and a shift, and the pattern's tools.
 - The strip at the top right: Play, Rec (writes the drums you play onto the nearest step), the tempo (drag it), Tap,
   Swing (delays every second sixteenth, as Roger Linn's drum machines do), Lid (Under the Lid: the circuits with
-  their measured currents, green above zero and red below), Library and File. Space starts and stops.
-- File also holds the banks, the themes (Roland, the 808's own charcoal and colours; Silver; Steel; Olive),
-  Controller (a MIDI controller: the main knob chooses the drum, knobs follow it, pads play the drums or, after a press of the main knob, enter its steps), Undo and Redo.
+  their measured currents, green above zero and red below), Library, File and Options. Space starts and stops.
+- File also holds the banks, Undo and Redo.
+- Options opens a window of its own, kept above the panel:
+  - the audio driver (Windows Audio, its Low Latency mode, or ASIO when built with Steinberg's ASIO SDK), output,
+    sample rate and buffer, with the latency and a test tone
+  - the MIDI inputs and output, and whether to follow an incoming clock and send one
+  - the theme (Roland, the 808's own charcoal and colours, the default; Silver; Steel; Olive) and the window's size
+  - Controller setup (a MIDI controller: the main knob chooses the drum, knobs follow it, pads play the drums or,
+    after a press of the main knob, enter its steps)
 - Drag MIDI drags the pattern into your music software as a MIDI file.
 
-It follows a MIDI clock when one comes in (its start, stop and tempo), and sends its own when none does. The audio
-and MIDI settings are in the Options menu of the window.
+It follows a MIDI clock when one comes in (its start, stop and tempo), and sends its own when none does; both can be
+switched off in Options.
 
 ## Patterns and projects
 
@@ -53,6 +59,9 @@ cmake -S CoolSynth808 -B CoolSynth808/build -G "Visual Studio 17 2022" -A x64
 cmake --build CoolSynth808/build --config Debug --parallel
 ctest --test-dir CoolSynth808/build -C Debug --output-on-failure
 ```
+
+ASIO comes in when Steinberg's ASIO SDK is found: set `ASIO_SDK_DIR` to its `ASIOSDK` folder, or unpack it to
+`SDKs/asio/sdk/ASIOSDK` beside the repository's parent folder. Without it the app offers the Windows drivers only.
 
 The sound engine is its own repository, [coolsynth-engine](https://github.com/tomcoolpxl/coolsynth-engine), a
 submodule here. The design and its decisions are in CoolSynth's repository: `docs/design/COOLSYNTH_808.md` and

@@ -566,7 +566,7 @@ namespace cs808
             else if (m.isSongPositionPointer())
                 clock.songPosition(m.getSongPositionPointerMidiBeat());
         }
-        const bool byClock = clock.present(samplesSoFar);
+        const bool byClock = followClockOn.load(std::memory_order_relaxed) && clock.present(samplesSoFar);
         clockFollowed.store(byClock, std::memory_order_release);
 
         bool started = false, stopped = false;
@@ -732,7 +732,7 @@ namespace cs808
         const double beatEnd = beatAt(n);
 
         midi.clear();
-        if (! byClock)
+        if (! byClock && sendClockOn.load(std::memory_order_relaxed))
         {
             sendClock(midi, beat0, beatAtSplit, split, started, stopped);
             if (split < n)

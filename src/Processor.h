@@ -140,6 +140,12 @@ namespace cs808
             the controller's, and the controller's linked controls come by takeControllerMessage. False (a DAW, the
             tests, Any input): every message may be the controller's, as before. Any thread. */
         void setInputsRouted(bool routed) noexcept { inputsRouted.store(routed, std::memory_order_relaxed); }
+        /** The options window's clock switches (D311): follow a MIDI clock that comes in, and send our own while we
+            lead. Both on by default, as before. */
+        void setFollowClock(bool on) noexcept { followClockOn.store(on, std::memory_order_relaxed); }
+        void setSendClock(bool on) noexcept { sendClockOn.store(on, std::memory_order_relaxed); }
+        [[nodiscard]] bool followsClock() const noexcept { return followClockOn.load(std::memory_order_relaxed); }
+        [[nodiscard]] bool sendsClock() const noexcept { return sendClockOn.load(std::memory_order_relaxed); }
         [[nodiscard]] bool inputsRoutedForTesting() const noexcept { return inputsRouted.load(std::memory_order_relaxed); }
         /** MIDI threads: a linked control's message from the controller's input, for the next block. A note or a
             controller; anything else is not taken. */
@@ -240,6 +246,7 @@ namespace cs808
             double milliseconds = 0.0; // when it came, on the hi-res millisecond counter
         };
         std::atomic<bool> inputsRouted { false };
+        std::atomic<bool> followClockOn { true }, sendClockOn { true };
         juce::SpinLock routedWriters; // one writer at a time: each input may have its own thread
         juce::AbstractFifo routedFifo { 256 };
         std::array<RoutedMessage, 256> routedMessages {};

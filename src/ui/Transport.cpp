@@ -126,6 +126,10 @@ namespace cs808
         key("Lid", [this] { editor.showLid(true); }); // Under the Lid (D308)
         key("Library", [this] { editor.openLibrary(); });
         key("File", [this] { editor.showFileMenu(); });
+        // The options window (D311): its lens lit while it is open.
+        auto* options = key("Options", [this] { editor.toggleOptions(); }, juce::roundToInt(wordWidth("Options") + 32.0f));
+        options->filledWhenOn = false;
+        options->isOn = [this] { return editor.optionsOpen(); };
     }
 
     TransportStrip::~TransportStrip() = default;

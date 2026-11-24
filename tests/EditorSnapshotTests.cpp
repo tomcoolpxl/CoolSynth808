@@ -5,6 +5,7 @@
 #include "Editor.h"
 #include "ui/LibraryShelf.h"
 #include "ui/LidView.h"
+#include "ui/OptionsWindow.h"
 #include "ui/Text.h"
 #include "ui/Theme.h"
 #include "Library.h"
@@ -147,6 +148,25 @@ public:
                 editor->boardForTesting().themeChanged();
                 editor->lidView = false;
                 shoot(juce::String("panel-") + themes()[static_cast<std::size_t>(t)].id);
+                // The options window's inside in the theme (D311), with a device manager so its audio part shows.
+                {
+                    juce::AudioDeviceManager devices;
+                    OptionsHooks hooks;
+                    hooks.theme = [t] { return t; };
+                    hooks.chooseTheme = [](int) {};
+                    hooks.zoom = [] { return 100; };
+                    hooks.chooseZoom = [](int) {};
+                    hooks.followClock = [] { return true; };
+                    hooks.sendClock = [] { return false; };
+                    hooks.chooseFollowClock = hooks.chooseSendClock = [](bool) {};
+                    hooks.controllerSetup = [] {};
+                    auto options = makeOptionsPanelForTesting(std::move(hooks), &devices);
+                    const auto image = options->createComponentSnapshot(options->getLocalBounds(), true, 2.0f);
+                    juce::FileOutputStream out(folder.getChildFile(juce::String("options-") + themes()[static_cast<std::size_t>(t)].id + ".png"));
+                    out.setPosition(0);
+                    out.truncate();
+                    juce::PNGImageFormat().writeImageToStream(image, out);
+                }
             }
             setTheme(0);
             editor->boardForTesting().themeChanged();

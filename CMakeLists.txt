@@ -64,6 +64,7 @@ set(COOLSYNTH808_SOURCES
     src/Controls.cpp
     src/StandaloneMidiIn.cpp
     src/StandaloneMidiOut.cpp
+    src/StandaloneDevices.cpp
     src/midi/ControllerMap.cpp
     src/midi/ControllerSetup.cpp
     src/ui/ControllerPanel.cpp
@@ -74,9 +75,11 @@ set(COOLSYNTH808_SOURCES
     src/ui/EtchedCircuit.cpp
     src/ui/Transport.cpp
     src/ui/Sequencer.cpp
-    src/ui/LidView.cpp)
+    src/ui/LidView.cpp
+    src/ui/WindowLook.cpp
+    src/ui/OptionsWindow.cpp)
 
-target_sources(CoolSynth808 PRIVATE ${COOLSYNTH808_SOURCES})
+target_sources(CoolSynth808 PRIVATE ${COOLSYNTH808_SOURCES} src/StandaloneApp.cpp)
 target_include_directories(CoolSynth808 PRIVATE src)
 target_compile_features(CoolSynth808 PUBLIC cxx_std_20)
 target_compile_definitions(CoolSynth808
@@ -84,7 +87,22 @@ target_compile_definitions(CoolSynth808
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
-        JUCE_DISPLAY_SPLASH_SCREEN=0)
+        JUCE_DISPLAY_SPLASH_SCREEN=0
+    PRIVATE
+        # Our own app around the standalone (D311): JUCE's window without its Options button, in the theme.
+        JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
+# ASIO for audio interfaces (D311), when Steinberg's ASIO SDK is on this computer: ASIO_SDK_DIR, or E:/SDKs beside
+# the repositories. Without it the app offers the Windows drivers only.
+set(COOLSYNTH808_ASIO_SDK "$ENV{ASIO_SDK_DIR}" CACHE PATH "Steinberg's ASIO SDK (the folder holding common/iasiodrv.h)")
+if(NOT COOLSYNTH808_ASIO_SDK)
+    get_filename_component(COOLSYNTH808_ASIO_SDK "${CMAKE_CURRENT_SOURCE_DIR}/../../SDKs/asio/sdk/ASIOSDK" ABSOLUTE)
+endif()
+if(WIN32 AND EXISTS "${COOLSYNTH808_ASIO_SDK}/common/iasiodrv.h")
+    message(STATUS "CoolSynth 808: ASIO from ${COOLSYNTH808_ASIO_SDK}")
+    target_compile_definitions(CoolSynth808 PUBLIC JUCE_ASIO=1)
+    target_include_directories(CoolSynth808 PUBLIC "${COOLSYNTH808_ASIO_SDK}/common")
+endif()
+
 target_link_libraries(CoolSynth808
     PRIVATE
         coolsynth_engine

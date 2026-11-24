@@ -30,10 +30,12 @@ namespace cs808
     class EtchedBoard;
     class SequencerGlass;
     class TransportStrip;
+    class OptionsWindow;
 
     class Editor final : public juce::AudioProcessorEditor,
                          public juce::DragAndDropContainer,
-                         private juce::Timer
+                         private juce::Timer,
+                         private juce::ComponentListener
     {
     public:
         explicit Editor(Processor& p);
@@ -82,6 +84,14 @@ namespace cs808
         void openLibrary();
         /** Opens or closes Under the Lid, the circuit with its measured currents, over the whole window (D308). */
         void showLid(bool show);
+        /** Opens or closes the options window (D311), the Options key's work. */
+        void toggleOptions();
+        [[nodiscard]] bool optionsOpen() const noexcept;
+        [[nodiscard]] OptionsWindow* optionsForTesting() noexcept { return optionsWindow.get(); }
+        /** A theme chosen in the options (D307, D311): the board, the glass and the windows' bars drawn again in it. */
+        void chooseTheme(int index);
+        /** The window's size in percent of the panel's 1280 by 800 (D311), kept between runs. */
+        void chooseZoom(int percent);
         [[nodiscard]] LibraryShelf* libraryForTesting() noexcept { return library.get(); }
         /** A library beat played in place of the pattern being edited, nothing written to undo (D273); stopAudition
             gives the project back as it was. Playing starts if it was stopped, and stops again with the audition. While
@@ -153,6 +163,10 @@ namespace cs808
         std::unique_ptr<juce::FileChooser> chooser;
         std::unique_ptr<juce::PropertiesFile> settings;
         int themeIndex = 0;
+        int zoomPercent = 100;
+        std::unique_ptr<OptionsWindow> optionsWindow;
+        juce::Component* watchedWindow = nullptr; // the window the options stay above
+        void componentBroughtToFront(juce::Component& c) override;
         bool midiDragging = false;
         std::uint64_t lastLook = 0; // what the panel showed when last drawn (timerCallback)
         std::uint64_t lastBeat = 0; // and what moves with the beat
