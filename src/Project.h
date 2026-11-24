@@ -29,6 +29,9 @@ namespace cs808
         double tempo = 120.0;
         float swing = 0.5f; // 0.5 straight .. 0.75
         SequencerVariation variation = SequencerVariation::a;
+        bool loop = true;        // the chain round and round; off, once through and then the transport stops (D297)
+        bool changeAtBar = true; // a pattern picked while playing comes in at the next bar line; off, at the end of the
+                                 // pattern that plays (D297)
     };
 
     struct Project

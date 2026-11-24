@@ -25,6 +25,11 @@ namespace cs808
         bool small = false;
         bool locked = false; // drawn in the lit colour
         bool accent = false; // an orange cap, as the Accent knob's (D292)
+        // Laid out as the fifth layout's knobs (D292): a cap of this diameter at the top, 8 px below the top for its
+        // ticks, its name 5 px under it and its value under that. 0 keeps the knob fitted to the box.
+        float diameter = 0.0f;
+        juce::Colour labelColour { 0xfff4efe4 };
+        std::function<juce::String()> valueText; // drawn in orange under the name, as the Length knob's steps
 
         void paint(juce::Graphics& g) override;
         void mouseDown(const juce::MouseEvent&) override;
@@ -62,12 +67,16 @@ namespace cs808
     class Chip final : public juce::Component
     {
     public:
+        Chip() { setRepaintsOnMouseActivity(true); }
         juce::String text;
+        std::function<juce::String()> textOf; // a word that changes, as Play's and Stop's
         std::function<bool()> isOn;
         std::function<void(const juce::MouseEvent&)> onClick;
         bool filledWhenOn = true;  // on: the "on" colour; otherwise the ink
         bool dashed = false;
         float fontHeight = 11.0f;
+        Lens onLens = Lens::orange; // a toggle's light: red for mute, green for solo (D292)
+        bool flat = false;          // an item in a pop-up: no cap, its word on the left, a shade under the mouse
 
         void paint(juce::Graphics& g) override;
         void mouseUp(const juce::MouseEvent& e) override
@@ -85,6 +94,22 @@ namespace cs808
         std::function<int()> get;
         std::function<void(int)> set;
         float fontHeight = 11.0f;
+
+        void paint(juce::Graphics& g) override;
+        void mouseUp(const juce::MouseEvent& e) override;
+    };
+
+    /** A two-way slide switch with its two words above and below, the one it is set to lit (D292): the 808's voice
+        selectors, tom or conga and the others. A click throws it. */
+    class SlideSwitch final : public juce::Component
+    {
+    public:
+        SlideSwitch() { setRepaintsOnMouseActivity(true); }
+        juce::String first, second;
+        std::function<bool()> get; // true: the second
+        std::function<void(bool)> set;
+        static constexpr int wordHeight = 10, gap = 3, switchWidth = 28, switchHeight = 46;
+        static constexpr int height = 2 * wordHeight + 2 * gap + switchHeight;
 
         void paint(juce::Graphics& g) override;
         void mouseUp(const juce::MouseEvent& e) override;

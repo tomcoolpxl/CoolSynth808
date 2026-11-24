@@ -103,9 +103,10 @@ namespace cs808
         {
             case Lens::orange: glow(g, centre, diameter * 1.6f, rgb(0xff963c, 0.55f)); break;
             case Lens::orangeBright:
-                glow(g, centre, diameter * 4.0f, rgb(0xff781e, 0.22f));
-                glow(g, centre, diameter * 2.4f, rgb(0xff8c28, 0.55f));
-                glow(g, centre, diameter * 1.3f, rgb(0xff9a3a, 0.9f));
+                // the red step light's glow, in orange, a quarter less bright (D291, the user)
+                glow(g, centre, diameter * 4.0f, rgb(0xff6414, 0.25f).withMultipliedBrightness(0.75f));
+                glow(g, centre, diameter * 2.4f, rgb(0xff6e1e, 0.6f).withMultipliedBrightness(0.75f));
+                glow(g, centre, diameter * 1.3f, rgb(0xff7a2a, 0.95f).withMultipliedBrightness(0.75f));
                 break;
             case Lens::red: glow(g, centre, diameter * 1.6f, rgb(0xff3c28, 0.55f)); break;
             case Lens::redBright:
@@ -125,9 +126,11 @@ namespace cs808
                 grad.addColour(0.42, rgb(0xffb45c));
                 break;
             case Lens::orangeBright:
-                grad = juce::ColourGradient(juce::Colours::white, hot.x, hot.y, rgb(0xe8742a), r.getRight(), r.getBottom(), true);
-                grad.addColour(0.22, rgb(0xffe2b8));
-                grad.addColour(0.52, rgb(0xffa040));
+                // the red step light's stops and saturation, in orange, a quarter less bright (D291, the user)
+                grad = juce::ColourGradient(juce::Colours::white.withMultipliedBrightness(0.75f), hot.x, hot.y,
+                                            rgb(0xe2560f).withMultipliedBrightness(0.75f), r.getRight(), r.getBottom(), true);
+                grad.addColour(0.22, rgb(0xffd6b4).withMultipliedBrightness(0.75f));
+                grad.addColour(0.52, rgb(0xff7a28).withMultipliedBrightness(0.75f));
                 break;
             case Lens::red:
                 grad = juce::ColourGradient(rgb(0xffe0d6), hot.x, hot.y, rgb(0xc8241a), r.getRight(), r.getBottom(), true);
@@ -145,7 +148,7 @@ namespace cs808
         }
         g.setGradientFill(grad);
         g.fillEllipse(r);
-        g.setColour(juce::Colours::black.withAlpha(lens == Lens::off ? 0.7f : 0.45f));
+        g.setColour(juce::Colours::black.withAlpha(lens == Lens::off ? 0.7f : 0.5f));
         g.drawEllipse(r.expanded(0.5f), 1.0f);
     }
 
@@ -225,5 +228,95 @@ namespace cs808
             g.setColour(juce::Colours::white.withAlpha(0.45f));
             g.drawLine(o.x + 9.0f * k, o.y + (y + 1.0f) * k, o.x + 19.0f * k, o.y + (y + 1.0f) * k, 0.7f);
         }
+    }
+
+    // ---- Glass and the sequencer's keys (D292) --------------------------------------------------------------
+
+    void drawSmokedGlass(juce::Graphics& g, juce::Rectangle<float> area, float radius, bool strip)
+    {
+        juce::Path shape;
+        shape.addRoundedRectangle(area, radius);
+        // its shadow on the board
+        if (strip)
+            juce::DropShadow(juce::Colours::black.withAlpha(0.5f), 6, { 0, 2 }).drawForPath(g, shape);
+        else
+            juce::DropShadow(juce::Colours::black.withAlpha(0.6f), 12, { 0, 3 }).drawForPath(g, shape);
+        // the smoke: the board shows through it a little
+        g.setGradientFill(juce::ColourGradient(rgb(0x100f0d, strip ? 0.85f : 0.80f), area.getX(), area.getY(),
+                                               rgb(0x0c0b0a, strip ? 0.90f : 0.86f), area.getX(), area.getBottom(), false));
+        g.fillPath(shape);
+        if (! strip)
+        {
+            // a sheen from the top, falling a little to the right (the mockup's 170 degrees), gone by 30 %
+            const auto c = area.getCentre();
+            const juce::Point<float> dir(0.1736f, 0.9848f);
+            const float length = std::abs(area.getWidth() * dir.x) + std::abs(area.getHeight() * dir.y);
+            const auto from = c - dir * (length * 0.5f);
+            const auto to = from + dir * (length * 0.3f);
+            g.setGradientFill(juce::ColourGradient(juce::Colours::white.withAlpha(0.05f), from, juce::Colours::white.withAlpha(0.0f), to, false));
+            g.fillPath(shape);
+        }
+        // its edges catch the light: a ring, and the top edge brighter
+        g.setColour(juce::Colours::white.withAlpha(0.05f));
+        g.drawRoundedRectangle(area.reduced(0.5f), radius, 1.0f);
+        g.setColour(juce::Colours::white.withAlpha(strip ? 0.08f : 0.09f));
+        g.fillRect(area.getX() + radius, area.getY(), area.getWidth() - 2.0f * radius, 1.0f);
+    }
+
+    void drawSlotKey(juce::Graphics& g, juce::Rectangle<float> area, bool has, float radius)
+    {
+        juce::Path shape;
+        shape.addRoundedRectangle(area, radius);
+        juce::DropShadow(juce::Colours::black.withAlpha(0.5f), 3, { 0, 2 }).drawForPath(g, shape);
+        g.setColour(rgb(0x0b0a09));
+        g.fillRoundedRectangle(area.expanded(1.0f), radius + 1.0f);
+        g.setGradientFill(has ? vertical(area, rgb(0x4a4640), rgb(0x3f3b36), 0.5f, rgb(0x34312d))
+                              : vertical(area, rgb(0x3b3833), rgb(0x343129), 0.5f, rgb(0x2c2a26)));
+        g.fillPath(shape);
+        g.setColour(juce::Colours::white.withAlpha(0.12f));
+        g.fillRect(area.getX() + radius * 0.6f, area.getY(), area.getWidth() - radius * 1.2f, 1.0f);
+        g.setColour(juce::Colours::black.withAlpha(0.35f));
+        g.fillRect(area.getX() + radius * 0.6f, area.getBottom() - 2.0f, area.getWidth() - radius * 1.2f, 2.0f);
+    }
+
+    void drawStepKey(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour group, float opacity)
+    {
+        // A face in the group's colour with its edges: lit above, shaded below, a dark line under it.
+        g.setColour(juce::Colours::black.withAlpha(0.6f * opacity));
+        g.fillRoundedRectangle(area.translated(0.0f, 1.0f), 3.0f);
+        g.setColour(group.withAlpha(0.88f * opacity));
+        g.fillRoundedRectangle(area, 3.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.13f * opacity));
+        g.fillRect(area.getX() + 2.0f, area.getY(), area.getWidth() - 4.0f, 1.0f);
+        g.setColour(juce::Colours::black.withAlpha(0.25f * opacity));
+        g.fillRect(area.getX() + 2.0f, area.getBottom() - 2.0f, area.getWidth() - 4.0f, 2.0f);
+    }
+
+    void drawStepKeyOn(juce::Graphics& g, juce::Rectangle<float> area, bool sounding, float opacity)
+    {
+        juce::Path shape;
+        shape.addRoundedRectangle(area, 3.0f);
+        // the dark line under the key, and over it the glow of one that sounds
+        g.setColour(juce::Colours::black.withAlpha(0.6f * opacity));
+        g.fillRoundedRectangle(area.translated(0.0f, 1.0f), 3.0f);
+        if (sounding)
+            juce::DropShadow(rgb(0xffa046, 0.95f * opacity), 18, {}).drawForPath(g, shape);
+        juce::ColourGradient face;
+        if (sounding)
+        {
+            // lit from inside, brightest a little above the middle
+            const juce::Point<float> c(area.getCentreX(), area.getY() + area.getHeight() * 0.35f);
+            face = juce::ColourGradient(rgb(0xfff0dc), c, rgb(0xe8742a), { area.getRight(), area.getBottom() }, true);
+            face.addColour(0.55, rgb(0xffb067));
+        }
+        else
+            face = vertical(area, rgb(0xf5a066), rgb(0xe8742a), 0.5f, rgb(0xc3581b));
+        face.multiplyOpacity(opacity);
+        g.setGradientFill(face);
+        g.fillPath(shape);
+        g.setColour(juce::Colours::white.withAlpha((sounding ? 1.0f : 0.35f) * opacity));
+        g.fillRect(area.getX() + 2.0f, area.getY(), area.getWidth() - 4.0f, 1.0f);
+        g.setColour((sounding ? rgb(0x782800, 0.4f) : rgb(0x5a1e00, 0.45f)).withMultipliedAlpha(opacity));
+        g.fillRect(area.getX() + 2.0f, area.getBottom() - 2.0f, area.getWidth() - 4.0f, 2.0f);
     }
 }

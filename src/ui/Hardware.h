@@ -34,4 +34,15 @@ namespace cs808
     void drawHardwareKnob(juce::Graphics& g, juce::Rectangle<float> area, float value, bool accent);
     /** A vertical slide switch, its thumb up (first) or down (second), in a 28 by 46 box scaled to the area. */
     void drawSlideSwitch(juce::Graphics& g, juce::Rectangle<float> area, bool second);
+
+    /** Smoked glass mounted on the board (D292): the sequencer's pane, or the thinner strip the transport sits on.
+        Translucent, so the board shows faintly through it. */
+    void drawSmokedGlass(juce::Graphics& g, juce::Rectangle<float> area, float radius, bool strip);
+    /** A pattern slot or a chain block: a darker key than a button, lighter when it holds something. */
+    void drawSlotKey(juce::Graphics& g, juce::Rectangle<float> area, bool has, float radius = 3.0f);
+    /** A step key that is off, in its beat group's colour; `opacity` dims it past its lane's length. */
+    void drawStepKey(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour group, float opacity);
+    /** A step key that is on: an orange plastic cap as the Accent knob's, lit bright from inside while it sounds.
+        No dark surround, so it keeps the size of the keys beside it (the mockup's .ksteps .key.on and .ph.on). */
+    void drawStepKeyOn(juce::Graphics& g, juce::Rectangle<float> area, bool sounding, float opacity);
 }

@@ -39,6 +39,28 @@ namespace cs808
     void Knob::paint(juce::Graphics& g)
     {
         // A hardware knob (D292): a solid cap, its pointer and printed ticks; its name in near-white below.
+        if (diameter > 0.0f)
+        {
+            const float w = static_cast<float>(getWidth());
+            constexpr float top = 8.0f; // room for the ticks
+            drawHardwareKnob(g, juce::Rectangle<float>(diameter, diameter).withCentre({ w * 0.5f, top + diameter * 0.5f }), get ? get() : 0.0f, accent || locked);
+            float y = top + diameter + 5.0f;
+            if (label.isNotEmpty())
+            {
+                g.setColour(dragging || isMouseOver() ? juce::Colours::white : labelColour);
+                g.setFont(labelFont(10.0f));
+                const auto shown = dragging && get && ! valueText ? juce::String(get() * 10.0f, 1) : label.toUpperCase();
+                g.drawText(shown, juce::Rectangle<float>(-20.0f, y, w + 40.0f, 10.0f), juce::Justification::centred, false);
+                y += 10.0f + 3.0f;
+            }
+            if (valueText)
+            {
+                g.setColour(theme().lit);
+                g.setFont(monoFont(11.0f));
+                g.drawText(valueText(), juce::Rectangle<float>(0.0f, y, w, 13.0f), juce::Justification::centred, false);
+            }
+            return;
+        }
         auto area = getLocalBounds().toFloat();
         const float labelHeight = (small || label.isEmpty()) ? 0.0f : 14.0f;
         auto knobArea = area.removeFromTop(area.getHeight() - labelHeight);
@@ -159,21 +181,35 @@ namespace cs808
         // word that lights when on; one that is "hot" when on (Play) turns orange.
         const bool on = isOn && isOn();
         const bool toggle = isOn != nullptr && ! filledWhenOn;
-        const Cap cap = on && filledWhenOn ? Cap::hot : (on ? Cap::selected : Cap::plain);
+        const auto word = (textOf ? textOf() : text).toUpperCase();
         const auto area = getLocalBounds().toFloat();
-        drawKeyCap(g, area, cap, isMouseOver(), isMouseButtonDown());
         const auto font = labelFont(fontHeight);
+        if (flat)
+        {
+            if (isMouseOver())
+            {
+                g.setColour(juce::Colour(0xff3a3733));
+                g.fillRoundedRectangle(area, 4.0f);
+            }
+            g.setColour(juce::Colour(0xfff1ebde));
+            g.setFont(font);
+            g.drawText(word, area.reduced(10.0f, 0.0f), juce::Justification::centredLeft, false);
+            return;
+        }
+        const Cap cap = on && filledWhenOn ? Cap::hot : (on ? Cap::selected : Cap::plain);
+        drawKeyCap(g, area, cap, isMouseOver(), isMouseButtonDown());
         auto textArea = area.reduced(4.0f, 0.0f);
         if (isMouseButtonDown())
             textArea = textArea.translated(0.0f, 1.0f);
         if (toggle)
         {
-            const float w = juce::GlyphArrangement::getStringWidth(font, text.toUpperCase());
+            // the lens and the word centred together, 6 px apart, as the mockup's keys
+            const float w = juce::GlyphArrangement::getStringWidth(font, word);
             const float x = area.getCentreX() - (w + 12.0f) * 0.5f;
-            drawLens(g, { x + 3.0f, textArea.getCentreY() }, 6.0f, on ? Lens::orange : Lens::off);
-            textArea = textArea.withTrimmedLeft(12.0f);
+            drawLens(g, { x + 3.0f, textArea.getCentreY() }, 6.0f, on ? onLens : Lens::off);
+            textArea = juce::Rectangle<float>(x + 12.0f, textArea.getY(), w + 2.0f, textArea.getHeight());
         }
-        drawKeyText(g, text.toUpperCase(), textArea, cap, font);
+        drawKeyText(g, word, textArea, cap, font);
     }
 
     // ---- Choices ----------------------------------------------------------------------------------------------
@@ -197,7 +233,35 @@ namespace cs808
             const float tw = juce::GlyphArrangement::getStringWidth(font, word.toUpperCase());
             const float x = cell.getCentreX() - (tw + 12.0f) * 0.5f;
             drawLens(g, { x + 3.0f, cell.getCentreY() }, 6.0f, on ? Lens::orange : Lens::off);
-            drawKeyText(g, word.toUpperCase(), cell.withTrimmedLeft(12.0f).reduced(2.0f, 0.0f), on ? Cap::selected : Cap::plain, font);
+            drawKeyText(g, word.toUpperCase(), juce::Rectangle<float>(x + 12.0f, cell.getY(), tw + 2.0f, cell.getHeight()), on ? Cap::selected : Cap::plain, font);
+        }
+    }
+
+    // ---- SlideSwitch ------------------------------------------------------------------------------------------
+
+    void SlideSwitch::paint(juce::Graphics& g)
+    {
+        const bool down = get && get();
+        const float w = static_cast<float>(getWidth());
+        const auto font = labelFont(10.0f);
+        g.setFont(font);
+        const auto word = [&](const juce::String& text, float y, bool lit)
+        {
+            g.setColour(lit ? juce::Colour(0xfff4efe4) : juce::Colour(0xff8f8877));
+            g.drawText(text.toUpperCase(), juce::Rectangle<float>(-20.0f, y, w + 40.0f, static_cast<float>(wordHeight)), juce::Justification::centred, false);
+        };
+        word(first, 0.0f, ! down);
+        drawSlideSwitch(g, juce::Rectangle<float>(static_cast<float>(switchWidth), static_cast<float>(switchHeight))
+                               .withCentre({ w * 0.5f, wordHeight + gap + switchHeight * 0.5f }), down);
+        word(second, static_cast<float>(wordHeight + 2 * gap + switchHeight), down);
+    }
+
+    void SlideSwitch::mouseUp(const juce::MouseEvent& e)
+    {
+        if (set && e.mouseWasClicked())
+        {
+            set(! (get && get()));
+            repaint();
         }
     }
 

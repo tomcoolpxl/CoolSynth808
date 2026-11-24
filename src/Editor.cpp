@@ -6,579 +6,131 @@
 
 #include "MidiExport.h"
 #include "ui/LidView.h"
+#include "ui/Sequencer.h"
+#include "ui/Transport.h"
 
 namespace cs808
 {
     namespace
     {
-        // The panel's base layout (scaled to the window).
-        constexpr int margin = 16;
-        constexpr int headerHeight = 64;
-        constexpr int soundTop = 64;
-        constexpr int soundHeight = 296;
-        constexpr int stripY = 364;
-        constexpr int transportTop = 378;
-        constexpr int keysLeft = 316;
-        constexpr int keysRight = 1050;
-        constexpr int keysTop = 394;
-        constexpr int keysHeight = 56;
-        constexpr int handleTop = 458;
-        constexpr int lanesTop = 482;
-        constexpr int laneHeight = 31;
-        constexpr int panelLanes = laneCount + 1;
-        constexpr int inspectorHeight = 70;
-        constexpr int lidHeight = 470;
+        // The board's columns (D292, the mockup's build5): twelve across x 34 to 1246, the Master's 0.85 as wide; a
+        // knob 34 px across every 58 px from y 84.
+        constexpr float columnsLeft = 34.0f, columnsRight = 1246.0f;
+        constexpr int knobTop = 84, knobPitch = 58, knobSize = 34;
 
-        int baseHeight(bool lanesOpen) noexcept
-        {
-            return lanesTop + (lanesOpen ? panelLanes * laneHeight + 8 : 0) + inspectorHeight + margin;
-        }
+        float columnUnit() { return (columnsRight - columnsLeft) / (0.85f + laneCount); }
+        float columnX(int c) { return c == 0 ? columnsLeft : columnsLeft + columnUnit() * (0.85f + static_cast<float>(c - 1)); }
+        float columnWidth(int c) { return columnUnit() * (c == 0 ? 0.85f : 1.0f); }
+        float columnCentre(int c) { return columnX(c) + columnWidth(c) * 0.5f; }
 
-        /** Where step i of sixteen sits between two x positions, with a gap after every fourth. */
-        juce::Rectangle<float> stepCell(int i, float left, float right, float top, float height)
-        {
-            constexpr float gap = 6.0f, groupGap = 8.0f;
-            const float width = (right - left - 15.0f * gap - 3.0f * groupGap) / 16.0f;
-            const float x = left + i * (width + gap) + (i / 4) * groupGap;
-            return { x, top, width, height };
-        }
+        // The words printed on the board.
+        const juce::Colour idInk(0xfff7f2e8);
+        const juce::Colour nameInk(0xffe3dccb);
 
-        int stepAt(float x, float left, float right)
+        /** A word's box on the board, 5 px of clearance each side, for the copper to keep off. */
+        KeepOut wordKeepOut(const juce::String& text, const juce::Font& font, float centreX, float top, float height)
         {
-            for (int i = 0; i < 16; ++i)
-                if (const auto c = stepCell(i, left, right, 0.0f, 1.0f); x >= c.getX() - 3.0f && x < c.getRight() + 3.0f)
-                    return i;
-            return -1;
-        }
-
-        juce::String laneCode(int panelLane, const KitValues& kit)
-        {
-            if (panelLane == 0)
-                return "AC";
-            const auto& inst = instruments[static_cast<std::size_t>(panelLane - 1)];
-            return kit.alt[static_cast<std::size_t>(panelLane - 1)] && inst.altCode != nullptr ? inst.altCode : inst.code;
-        }
-
-        juce::String laneName(int panelLane, const KitValues& kit)
-        {
-            if (panelLane == 0)
-                return "Accent";
-            const auto& inst = instruments[static_cast<std::size_t>(panelLane - 1)];
-            return kit.alt[static_cast<std::size_t>(panelLane - 1)] && inst.altName != nullptr ? inst.altName : inst.name;
-        }
-
-        /** Paints one step key: its beat group's shade, a fill as tall as its chance, a roll as split bars. */
-        void paintStep(juce::Graphics& g, juce::Rectangle<float> r, int index, const coolsynth::synth::SequencerStep& step,
-                       bool inLength, bool playhead, bool selected, float radius)
-        {
-            const auto& th = theme();
-            g.setColour(th.group[static_cast<std::size_t>(index / 4)].withAlpha(inLength ? 1.0f : 0.3f));
-            g.fillRoundedRectangle(r, radius);
-            if (step.on && inLength)
-            {
-                const float h = r.getHeight() * juce::jlimit(0.12f, 1.0f, step.chance);
-                const int hits = juce::jlimit(1, 3, static_cast<int>(step.hits));
-                const float w = (r.getWidth() - 2.0f * (hits - 1)) / hits;
-                g.setColour(th.on);
-                for (int k = 0; k < hits; ++k)
-                    g.fillRoundedRectangle(juce::Rectangle<float>(r.getX() + k * (w + 2.0f), r.getBottom() - h, w, h), radius);
-            }
-            if (selected || playhead)
-            {
-                g.setColour(playhead ? th.lit : th.ink);
-                g.drawRoundedRectangle(r.expanded(2.0f), radius + 1.0f, 2.0f);
-            }
+            const float w = juce::GlyphArrangement::getStringWidth(font, text) + 10.0f;
+            return { { centreX - w * 0.5f, top, w, height } };
         }
     }
 
     // =============================================================================================================
-    // The content, drawn at the base size
+    // A column's name on the board: the drum's two letters and its name (MASTER over the first); a click selects it
 
-    class Editor::Content final : public juce::Component
+    class ColumnLabel final : public juce::Component
     {
     public:
-        explicit Content(Editor& e) : editor(e) {}
+        Editor* editor = nullptr;
+        int column = 0;
 
         void paint(juce::Graphics& g) override
         {
-            const auto& th = theme();
-            const auto& kit = editor.processor.project().kit;
-            g.fillAll(th.panel);
-            if (th.grid)
+            const auto& kit = editor->processor.project().kit;
+            const bool sel = editor->selectedLane == column;
+            const auto w = static_cast<float>(getWidth());
+            const auto id = column == 0 ? juce::String("MASTER") : laneCode(column, kit);
+            // the selected drum's letters lit, glowing a little
+            const auto idArea = juce::Rectangle<float>(0.0f, column == 0 ? 9.0f : 2.0f, w, 13.0f);
+            g.setFont(headFont(13.0f));
+            if (sel)
             {
-                g.setColour(th.ink.withAlpha(0.06f));
-                for (int x = 0; x < getWidth(); x += 20)
-                    g.drawVerticalLine(x, 0.0f, static_cast<float>(getHeight()));
-                for (int y = 0; y < getHeight(); y += 20)
-                    g.drawHorizontalLine(y, 0.0f, static_cast<float>(getWidth()));
+                g.setColour(juce::Colour(0xffffa04a).withAlpha(0.18f));
+                for (const auto d : { juce::Point<float>(-1.0f, 0.0f), { 1.0f, 0.0f }, { 0.0f, -1.0f }, { 0.0f, 1.0f } })
+                    g.drawText(id, idArea.translated(d.x, d.y), juce::Justification::centred, false);
             }
-            // The name.
-            g.setColour(th.ink);
-            g.setFont(uiFont(27.0f));
-            g.drawText("CoolSynth", 24, 14, 140, 32, juce::Justification::centredLeft);
-            const int nameWidth = juce::GlyphArrangement::getStringWidthInt(uiFont(27.0f), "CoolSynth ");
-            g.setFont(uiFont(27.0f, true));
-            g.drawText("808", 24 + nameWidth, 14, 80, 32, juce::Justification::centredLeft);
-            g.setColour(th.dim);
-            g.setFont(uiFont(10.0f));
-            g.drawText("BEAT COMPOSER", 25, 44, 200, 14, juce::Justification::centredLeft);
-
-            if (! editor.lidView)
+            g.setColour(sel ? theme().lit : idInk);
+            g.drawText(id, idArea, juce::Justification::centred, false);
+            if (column > 0)
             {
-                // The knob columns: a line between each, the selected one shaded, each code on top.
-                const float colW = static_cast<float>(getWidth() - 2 * margin) / panelLanes;
-                for (int c = 0; c < panelLanes; ++c)
-                {
-                    const float x = margin + c * colW;
-                    if (c == editor.selectedLane)
-                    {
-                        g.setColour(th.ink.withAlpha(0.07f));
-                        g.fillRect(juce::Rectangle<float>(x, static_cast<float>(soundTop), colW, static_cast<float>(soundHeight)));
-                    }
-                    if (c > 0)
-                    {
-                        g.setColour(th.line);
-                        g.drawVerticalLine(juce::roundToInt(x), static_cast<float>(soundTop), static_cast<float>(soundTop + soundHeight));
-                    }
-                    g.setColour(th.ink);
-                    g.setFont(uiFont(15.0f, true));
-                    g.drawText(laneCode(c, kit), juce::Rectangle<float>(x, soundTop + 6.0f, colW, 20.0f), juce::Justification::centred);
-                }
+                g.setColour(nameInk);
+                g.setFont(labelFont(10.0f));
+                g.drawText(laneName(column, kit).toUpperCase(), juce::Rectangle<float>(0.0f, 18.0f, w, 10.0f), juce::Justification::centred, false);
             }
-            // The strip.
-            g.setColour(th.strip);
-            g.fillRoundedRectangle(24.0f, static_cast<float>(editor.lidView ? lidTop() + lidHeight - 4 : stripY), getWidth() - 48.0f, 3.0f, 1.5f);
-
-            // The lane the step keys show.
-            const int t = transportY();
-            g.setColour(th.ink);
-            g.setFont(uiFont(13.0f, true));
-            g.drawText(laneCode(editor.selectedLane, kit) + "  " + laneName(editor.selectedLane, kit), 222, t + 10, 100, 18, juce::Justification::centredLeft);
-            g.setColour(th.dim);
-            g.setFont(uiFont(9.5f));
-            g.drawText(editor.patternMode ? "PATTERNS SHOWN" : "STEPS SHOWN", 222, t + 28, 100, 12, juce::Justification::centredLeft);
-
-            // The step numbers.
-            g.setFont(uiFont(10.0f));
-            for (int i = 0; i < 16; ++i)
-            {
-                const auto c = stepCell(i, keysLeft, keysRight, static_cast<float>(t), 14.0f);
-                g.drawText(juce::String(i + 1), c, juce::Justification::centred);
-            }
-
-            // The handle.
-            const int h = handleY();
-            g.setColour(th.line);
-            g.drawHorizontalLine(h + 10, 24.0f, getWidth() / 2.0f - 70.0f);
-            g.drawHorizontalLine(h + 10, getWidth() / 2.0f + 70.0f, getWidth() - 24.0f);
-            g.setColour(th.dim);
-            g.setFont(uiFont(10.0f));
-            g.drawText(editor.lanesOpen ? "CLOSE THE LANES" : "OPEN THE LANES", getWidth() / 2 - 70, h, 140, 20, juce::Justification::centred);
-
-            // The inspector's line.
-            g.setColour(th.line);
-            g.drawHorizontalLine(inspectorY() - 6, static_cast<float>(margin), static_cast<float>(getWidth() - margin));
         }
 
         void mouseUp(const juce::MouseEvent& e) override
         {
-            const int h = handleY();
-            if (e.mouseWasClicked() && e.y >= h && e.y < h + 22 && std::abs(e.x - getWidth() / 2) < 120)
-            {
-                editor.lanesOpen = ! editor.lanesOpen;
-                editor.layoutForLanes();
-            }
-        }
-
-        [[nodiscard]] int lidTop() const noexcept { return soundTop; }
-        [[nodiscard]] int shift() const noexcept { return editor.lidView ? lidHeight - soundHeight : 0; }
-        [[nodiscard]] int transportY() const noexcept { return transportTop + shift(); }
-        [[nodiscard]] int handleY() const noexcept { return handleTop + shift(); }
-        [[nodiscard]] int lanesY() const noexcept { return lanesTop + shift(); }
-        [[nodiscard]] int inspectorY() const noexcept { return lanesY() + (editor.lanesOpen ? panelLanes * laneHeight + 8 : 0) + 6; }
-
-    private:
-        Editor& editor;
-    };
-
-    // =============================================================================================================
-    // A drum's name key: strikes it and selects its lane; its light shows each hit
-
-    class NameKey final : public juce::Component
-    {
-    public:
-        Editor* editor = nullptr;
-        int panelLane = 0;
-
-        void paint(juce::Graphics& g) override
-        {
-            const auto& th = theme();
-            const bool sel = editor->selectedLane == panelLane;
-            const auto r = getLocalBounds().toFloat().reduced(0.5f);
-            g.setColour(sel ? th.ink : th.line);
-            g.drawRoundedRectangle(r, 6.0f, 1.0f);
-            const bool lit = juce::Time::getMillisecondCounterHiRes() < editor->ledUntil[static_cast<std::size_t>(panelLane)];
-            const auto led = juce::Rectangle<float>(r.getCentreX() - 3.0f, r.getY() + 7.0f, 6.0f, 6.0f);
-            if (lit)
-            {
-                g.setColour(th.lit.withAlpha(0.35f));
-                g.fillEllipse(led.expanded(3.0f));
-            }
-            g.setColour(lit ? th.lit : th.line);
-            g.fillEllipse(led);
-            g.setColour(sel ? th.ink : th.dim);
-            g.setFont(uiFont(10.5f));
-            g.drawFittedText(laneName(panelLane, editor->processor.project().kit), getLocalBounds().withTrimmedTop(16), juce::Justification::centred, 1);
-        }
-
-        void mouseDown(const juce::MouseEvent& e) override
-        {
-            editor->selectedLane = panelLane;
-            if (panelLane > 0)
-                editor->processor.strike(panelLane - 1, e.mods.isShiftDown());
+            if (! e.mouseWasClicked())
+                return;
+            editor->selectedLane = column;
             editor->refresh();
         }
     };
 
     // =============================================================================================================
-    // The sixteen step keys: the selected lane's steps, or the bank's patterns
+    // The name plate: printed on the board in its faded outline
 
-    class Editor::StepKeys final : public juce::Component
+    class NamePlate final : public juce::Component
     {
     public:
-        explicit StepKeys(Editor& e) : editor(e) {}
+        NamePlate() { setInterceptsMouseClicks(false, false); }
+
+        void paint(juce::Graphics& g) override
+        {
+            const auto light = logoFont(17.0f, false), bold = logoFont(17.0f, true);
+            const juce::String first = "CoolSynth ";
+            const float w1 = juce::GlyphArrangement::getStringWidth(light, first), w2 = juce::GlyphArrangement::getStringWidth(bold, "808");
+            const juce::Rectangle<float> line(14.0f, 5.0f, 300.0f, 20.0f);
+            g.setColour(juce::Colour(0xffece4d2));
+            g.setFont(light);
+            g.drawText(first, line, juce::Justification::centredLeft, false);
+            g.setFont(bold);
+            g.drawText("808", line.withTrimmedLeft(w1), juce::Justification::centredLeft, false);
+            g.setColour(juce::Colour(0xffddd5c3));
+            g.setFont(labelFont(10.0f));
+            g.drawText("BEAT COMPOSER", line.withTrimmedLeft(w1 + w2 + 4.0f + 10.0f).translated(0.0f, 1.0f), juce::Justification::centredLeft, false);
+        }
+    };
+
+    // =============================================================================================================
+    // Under the Lid over the whole window. No key on the panel opens it (D292); the snapshot tests do.
+
+    class Editor::LidOverlay final : public juce::Component
+    {
+    public:
+        explicit LidOverlay(LidView& lidView) : lid(lidView)
+        {
+            setOpaque(true);
+            addAndMakeVisible(lid);
+        }
 
         void paint(juce::Graphics& g) override
         {
             const auto& th = theme();
-            const float w = static_cast<float>(getWidth());
-            if (editor.patternMode)
-            {
-                const auto chain = editor.processor.chain();
-                const int playingPattern = editor.processor.isPlaying() ? editor.processor.playingPattern() : -2;
-                for (int i = 0; i < 16; ++i)
-                {
-                    const auto r = stepCell(i, 0.0f, w, 0.0f, static_cast<float>(getHeight()));
-                    g.setColour(th.group[static_cast<std::size_t>(i / 4)]);
-                    g.fillRoundedRectangle(r, 6.0f);
-                    const bool inChain = std::find(chain.begin(), chain.end(), i) != chain.end();
-                    if (inChain)
-                    {
-                        g.setColour(th.on);
-                        g.fillRoundedRectangle(r.reduced(0.0f, r.getHeight() * 0.62f).withY(r.getBottom() - r.getHeight() * 0.38f), 6.0f);
-                    }
-                    if (i == playingPattern || i == editor.editPattern)
-                    {
-                        g.setColour(i == playingPattern ? th.lit : th.ink);
-                        g.drawRoundedRectangle(r.expanded(2.0f), 7.0f, 2.0f);
-                    }
-                    g.setColour(inChain ? th.onInk : th.ink);
-                    g.setFont(uiFont(12.0f, true));
-                    g.drawText(juce::String(i + 1).paddedLeft('0', 2), r.withTrimmedBottom(r.getHeight() * 0.45f), juce::Justification::centred);
-                }
-                return;
-            }
-            const auto& lane = editor.laneShown(editor.selectedLane);
-            const auto& steps = editor.editB ? lane.b : lane.a;
-            const int head = editor.playheadStep(editor.selectedLane);
-            for (int i = 0; i < 16; ++i)
-                paintStep(g, stepCell(i, 0.0f, w, 0.0f, static_cast<float>(getHeight())), i, steps[static_cast<std::size_t>(i)],
-                          i < lane.length, i == head, i == editor.selectedStep, 6.0f);
-        }
-
-        void mouseDown(const juce::MouseEvent& e) override
-        {
-            pressed = stepAt(static_cast<float>(e.x), 0.0f, static_cast<float>(getWidth()));
-            dragged = false;
-            if (pressed < 0)
-                return;
-            if (editor.patternMode)
-            {
-                editor.selectPatternKey(pressed, e.mods.isShiftDown());
-                return;
-            }
-            if (e.mods.isPopupMenu())
-            {
-                editor.selectedStep = pressed;
-                editor.refresh();
-                pressed = -1;
-                return;
-            }
-            // What the press edits is fixed at the press: a controller may move the drum or pattern while it is held.
-            pressLane = editor.selectedLane;
-            pressPattern = editor.editPattern;
-            pressB = editor.editB;
-            const auto& steps = editor.editB ? editor.laneShown(editor.selectedLane).b : editor.laneShown(editor.selectedLane).a;
-            startChance = steps[static_cast<std::size_t>(pressed)].on ? steps[static_cast<std::size_t>(pressed)].chance : 1.0f;
-        }
-
-        void mouseDrag(const juce::MouseEvent& e) override
-        {
-            if (pressed < 0 || editor.patternMode || std::abs(e.getDistanceFromDragStartY()) < 4)
-                return;
-            if (! dragged)
-                editor.processor.beginGesture();
-            dragged = true;
-            const float chance = juce::jlimit(0.05f, 1.0f, startChance - e.getDistanceFromDragStartY() / 50.0f);
-            const int step = pressed;
-            const bool b = pressB;
-            editor.editLane(pressLane, [&](SequencerLane& l)
-            {
-                auto& s = (b ? l.b : l.a)[static_cast<std::size_t>(step)];
-                s.on = true;
-                s.chance = std::round(chance * 20.0f) / 20.0f;
-            }, false, pressPattern);
-            editor.selectedStep = step;
-        }
-
-        void mouseUp(const juce::MouseEvent&) override
-        {
-            if (pressed >= 0 && ! editor.patternMode)
-            {
-                if (dragged)
-                    editor.processor.endGesture();
-                else
-                {
-                    const int step = pressed;
-                    const bool b = pressB;
-                    bool nowOn = false;
-                    editor.editLane(pressLane, [&](SequencerLane& l)
-                    {
-                        auto& s = (b ? l.b : l.a)[static_cast<std::size_t>(step)];
-                        s.on = ! s.on;
-                        if (s.on)
-                        {
-                            s.chance = 1.0f;
-                            s.hits = 1;
-                        }
-                        nowOn = s.on;
-                    }, true, pressPattern);
-                    editor.selectedStep = nowOn ? step : -1;
-                }
-            }
-            pressed = -1;
-            editor.refresh();
-        }
-
-    private:
-        Editor& editor;
-        int pressed = -1;
-        int pressLane = 1, pressPattern = 0;
-        bool pressB = false;
-        bool dragged = false;
-        float startChance = 1.0f;
-    };
-
-    // =============================================================================================================
-    // The lanes: one row per drum, its steps, mute, solo and length
-
-    class Editor::LaneRows final : public juce::Component
-    {
-    public:
-        explicit LaneRows(Editor& e) : editor(e)
-        {
-            // Each lane's knobs, small, as the mockup has them: the same knobs as the columns above.
-            std::array<int, panelLanes> count {};
-            for (int k = 0; k < knobCount; ++k)
-            {
-                const int l = knobs[static_cast<std::size_t>(k)].lane + 1;
-                auto* knob = new Knob();
-                minis.add(knob);
-                addAndMakeVisible(knob);
-                knob->small = true;
-                knob->label = knobs[static_cast<std::size_t>(k)].label;
-                knob->defaultValue = knobDefault(k);
-                knob->get = [this, k] { return editor.processor.project().kit.knob[static_cast<std::size_t>(k)]; };
-                knob->set = [this, k](float v) { editor.processor.editKit([k, v](KitValues& kit) { kit.knob[static_cast<std::size_t>(k)] = v; }); };
-                knob->gestureStart = [this] { editor.processor.beginGesture(); };
-                knob->gestureEnd = [this] { editor.processor.endGesture(); editor.refresh(); };
-                miniPlace.push_back({ l, count[static_cast<std::size_t>(l)]++ });
-            }
-            for (int l = 0; l < panelLanes; ++l)
-            {
-                auto* box = new NumberBox();
-                lengths.add(box);
-                addAndMakeVisible(box);
-                box->label = "Length";
-                box->labelBelow = false;
-                box->valueHeight = 12.0f;
-                box->minimum = 1;
-                box->maximum = 16;
-                box->defaultValue = 16;
-                box->pixelsPerStep = 8.0;
-                box->get = [this, l] { return static_cast<double>(editor.laneShown(l).length); };
-                box->set = [this, l](double v) { editor.editLane(l, [v](SequencerLane& lane) { lane.length = static_cast<int>(v); }, false); };
-                box->gestureStart = [this] { editor.processor.beginGesture(); };
-                box->gestureEnd = [this] { editor.processor.endGesture(); };
-            }
+            g.fillAll(th.panel);
+            g.setColour(th.ink);
+            g.setFont(headFont(13.0f));
+            g.drawText("UNDER THE LID", juce::Rectangle<int>(16, 0, 300, 44), juce::Justification::centredLeft, false);
         }
 
         void resized() override
         {
-            for (int l = 0; l < panelLanes; ++l)
-                lengths[l]->setBounds(keysRight - margin + 22, l * laneHeight + 6, 90, laneHeight - 12);
-            for (int i = 0; i < minis.size(); ++i)
-                minis[i]->setBounds(222 + miniPlace[static_cast<std::size_t>(i)].second * 23, miniPlace[static_cast<std::size_t>(i)].first * laneHeight + 5, 21, 21);
-        }
-
-        void paint(juce::Graphics& g) override
-        {
-            const auto& th = theme();
-            const auto& kit = editor.processor.project().kit;
-            bool anySolo = false;
-            for (int l = 1; l < panelLanes; ++l)
-                anySolo = anySolo || editor.laneShown(l).solo;
-            for (int l = 0; l < panelLanes; ++l)
-            {
-                const float y = static_cast<float>(l * laneHeight);
-                const auto& lane = editor.laneShown(l);
-                if (l == editor.selectedLane)
-                {
-                    g.setColour(th.ink.withAlpha(0.07f));
-                    g.fillRect(0.0f, y, static_cast<float>(getWidth()), static_cast<float>(laneHeight));
-                }
-                const bool lit = juce::Time::getMillisecondCounterHiRes() < editor.ledUntil[static_cast<std::size_t>(l)];
-                g.setColour(lit ? th.lit : th.line);
-                g.fillEllipse(8.0f, y + 12.5f, 6.0f, 6.0f);
-                g.setColour(th.ink);
-                g.setFont(uiFont(12.0f, true));
-                g.drawText(laneCode(l, kit), juce::Rectangle<float>(20.0f, y, 34.0f, static_cast<float>(laneHeight)), juce::Justification::centredLeft);
-                g.setColour(th.dim);
-                g.setFont(uiFont(10.5f));
-                g.drawText(laneName(l, kit), juce::Rectangle<float>(54.0f, y, 110.0f, static_cast<float>(laneHeight)), juce::Justification::centredLeft);
-                if (l > 0)
-                {
-                    paintToggle(g, muteBox(l), "M", lane.mute);
-                    paintToggle(g, soloBox(l), "S", lane.solo);
-                }
-                const bool silent = l > 0 && (lane.mute || (anySolo && ! lane.solo));
-                const auto& steps = editor.editB ? lane.b : lane.a;
-                const int head = editor.playheadStep(l);
-                juce::Graphics::ScopedSaveState state(g);
-                if (silent)
-                    g.setOpacity(0.35f);
-                for (int i = 0; i < 16; ++i)
-                    paintStep(g, stepCell(i, keysLeft - margin, keysRight - margin, y + 4.5f, laneHeight - 9.0f), i, steps[static_cast<std::size_t>(i)],
-                              i < lane.length, i == head, l == editor.selectedLane && i == editor.selectedStep, 4.0f);
-            }
-        }
-
-        void mouseDown(const juce::MouseEvent& e) override
-        {
-            const int l = juce::jlimit(0, panelLanes - 1, e.y / laneHeight);
-            pressedLane = l;
-            pressedStep = -1;
-            dragged = false;
-            if (e.x < 170)
-            {
-                editor.selectedLane = l;
-                if (l > 0)
-                    editor.processor.strike(l - 1, e.mods.isShiftDown());
-                editor.refresh();
-                return;
-            }
-            if (l > 0 && muteBox(l).contains(e.position))
-            {
-                editor.editLane(l, [](SequencerLane& lane) { lane.mute = ! lane.mute; });
-                return;
-            }
-            if (l > 0 && soloBox(l).contains(e.position))
-            {
-                editor.editLane(l, [](SequencerLane& lane) { lane.solo = ! lane.solo; });
-                return;
-            }
-            pressedStep = stepAt(static_cast<float>(e.x), keysLeft - margin, keysRight - margin);
-            if (pressedStep < 0)
-                return;
-            editor.selectedLane = l;
-            if (e.mods.isPopupMenu())
-            {
-                editor.selectedStep = pressedStep;
-                pressedStep = -1;
-                editor.refresh();
-                return;
-            }
-            pressPattern = editor.editPattern;
-            pressB = editor.editB;
-            const auto& steps = editor.editB ? editor.laneShown(l).b : editor.laneShown(l).a;
-            startChance = steps[static_cast<std::size_t>(pressedStep)].on ? steps[static_cast<std::size_t>(pressedStep)].chance : 1.0f;
-        }
-
-        void mouseDrag(const juce::MouseEvent& e) override
-        {
-            if (pressedStep < 0 || std::abs(e.getDistanceFromDragStartY()) < 4)
-                return;
-            if (! dragged)
-                editor.processor.beginGesture();
-            dragged = true;
-            const float chance = juce::jlimit(0.05f, 1.0f, startChance - e.getDistanceFromDragStartY() / 40.0f);
-            const int step = pressedStep;
-            const bool b = pressB;
-            editor.editLane(pressedLane, [&](SequencerLane& lane)
-            {
-                auto& s = (b ? lane.b : lane.a)[static_cast<std::size_t>(step)];
-                s.on = true;
-                s.chance = std::round(chance * 20.0f) / 20.0f;
-            }, false, pressPattern);
-            editor.selectedStep = step;
-        }
-
-        void mouseUp(const juce::MouseEvent&) override
-        {
-            if (pressedStep >= 0)
-            {
-                if (dragged)
-                    editor.processor.endGesture();
-                else
-                {
-                    const int step = pressedStep;
-                    const bool b = pressB;
-                    bool nowOn = false;
-                    editor.editLane(pressedLane, [&](SequencerLane& lane)
-                    {
-                        auto& s = (b ? lane.b : lane.a)[static_cast<std::size_t>(step)];
-                        s.on = ! s.on;
-                        if (s.on)
-                        {
-                            s.chance = 1.0f;
-                            s.hits = 1;
-                        }
-                        nowOn = s.on;
-                    }, true, pressPattern);
-                    editor.selectedStep = nowOn ? step : -1;
-                }
-            }
-            pressedStep = -1;
-            editor.refresh();
+            lid.setBounds(getLocalBounds().withTrimmedTop(44).reduced(16, 0).withTrimmedBottom(12));
         }
 
     private:
-        [[nodiscard]] juce::Rectangle<float> muteBox(int l) const { return { 172.0f, l * laneHeight + 6.5f, 20.0f, 18.0f }; }
-        [[nodiscard]] juce::Rectangle<float> soloBox(int l) const { return { 196.0f, l * laneHeight + 6.5f, 20.0f, 18.0f }; }
-
-        static void paintToggle(juce::Graphics& g, juce::Rectangle<float> r, const juce::String& text, bool on)
-        {
-            const auto& th = theme();
-            if (on)
-            {
-                g.setColour(th.ink);
-                g.fillRoundedRectangle(r, 4.0f);
-            }
-            g.setColour(on ? th.ink : th.line);
-            g.drawRoundedRectangle(r, 4.0f, 1.0f);
-            g.setColour(on ? th.panel : th.dim);
-            g.setFont(uiFont(9.5f, true));
-            g.drawText(text, r, juce::Justification::centred);
-        }
-
-        Editor& editor;
-        juce::OwnedArray<NumberBox> lengths;
-        juce::OwnedArray<Knob> minis;
-        std::vector<std::pair<int, int>> miniPlace; // lane, place in the lane
-        int pressedLane = 0, pressedStep = -1, pressPattern = 0;
-        bool pressB = false;
-        bool dragged = false;
-        float startChance = 1.0f;
+        LidView& lid;
     };
 
     // =============================================================================================================
@@ -593,27 +145,28 @@ namespace cs808
         options.osxLibrarySubFolder = "Application Support";
         settings = std::make_unique<juce::PropertiesFile>(options);
         themeIndex = juce::jlimit(0, 3, settings->getIntValue("theme", 0));
-        lanesOpen = settings->getBoolValue("lanesOpen", true);
         setTheme(themeIndex);
 
-        content = std::make_unique<Content>(*this);
-        addAndMakeVisible(*content);
-        stepKeys = std::make_unique<StepKeys>(*this);
-        content->addAndMakeVisible(*stepKeys);
-        laneRows = std::make_unique<LaneRows>(*this);
-        content->addAndMakeVisible(*laneRows);
-        lid = std::make_unique<LidView>(p);
-        content->addChildComponent(*lid);
-
-        buildHeader();
-        buildSound();
+        board = std::make_unique<EtchedBoard>();
+        addAndMakeVisible(*board);
+        board->setBounds(0, 0, baseWidth, baseHeight);
+        auto& plate = add<NamePlate>(*board);
+        plate.setBounds(26, 6, 344, 34);
+        buildColumns();
         buildTransport();
-        buildInspector();
+        sequencer = std::make_unique<SequencerGlass>(*this);
+        board->addAndMakeVisible(*sequencer);
+        sequencer->setBounds(SequencerGlass::boardArea());
+        updateKeepOuts();
+
+        lid = std::make_unique<LidView>(p);
+        lidOverlay = std::make_unique<LidOverlay>(*lid);
+        addChildComponent(*lidOverlay);
 
         setWantsKeyboardFocus(true);
         setResizable(true, true);
-        setResizeLimits(620, 280, 2480, 2200);
-        layoutForLanes();
+        setResizeLimits(620, 300, 3840, 2400);
+        setSize(baseWidth, baseHeight);
         controls = std::make_unique<Controls>(*this);
         // Space and the shortcuts work from the start, before any click.
         juce::MessageManager::callAsync([safe = juce::Component::SafePointer<Editor>(this)] { if (safe != nullptr) safe->grabKeyboardFocus(); });
@@ -625,8 +178,8 @@ namespace cs808
         stopAudition(); // the project as it was, before the state is kept
         controls.reset(); // its gesture closes while the panel is whole
         settings->setValue("theme", themeIndex);
-        settings->setValue("lanesOpen", lanesOpen);
         settings->saveIfNeeded();
+        lidOverlay.reset(); // before the lid it shows
     }
 
     // ---- What the panel edits ---------------------------------------------------------------------------------
@@ -663,32 +216,32 @@ namespace cs808
         return static_cast<int>(((k % length) + length) % length);
     }
 
-    void Editor::refresh() { content->repaint(); } // its children with it
-
-    void Editor::layoutForLanes()
+    int Editor::stepInBar() const
     {
-        const int height = baseHeight(lanesOpen) + content->shift();
-        content->setSize(baseWidth, height);
-        laneRows->setVisible(lanesOpen);
-        laneRows->setBounds(margin, content->lanesY(), baseWidth - 2 * margin, panelLanes * laneHeight);
-        stepKeys->setBounds(keysLeft, content->transportY() + keysTop - transportTop, keysRight - keysLeft, keysHeight);
-        lid->setVisible(lidView);
-        lid->setBounds(margin, soundTop, baseWidth - 2 * margin, lidHeight - 14);
-        // The widgets below the knobs move with the view and the lanes.
-        for (auto* c : parts)
-            if (const auto y = c->getProperties()["baseY"]; ! y.isVoid())
-            {
-                const int region = c->getProperties()["region"];
-                const int offset = region == 0 ? 0 : region == 1 ? content->shift() : content->inspectorY() - (lanesTop + panelLanes * laneHeight + 8 + 6);
-                c->setTopLeftPosition(c->getX(), static_cast<int>(y) + offset);
-                if (static_cast<bool>(c->getProperties()["sound"]))
-                    c->setVisible(! lidView);
-            }
-        // The window keeps the panel's proportions as it is resized: the height follows the width (the review of D267).
-        if (auto* constrainer = getConstrainer())
-            constrainer->setFixedAspectRatio(baseWidth / static_cast<double>(height));
-        const double scale = getWidth() > 0 ? getWidth() / static_cast<double>(baseWidth) : 1.0;
-        setSize(getWidth() > 0 ? getWidth() : baseWidth, juce::roundToInt(height * (getWidth() > 0 ? scale : 1.0)));
+        if (! processor.isPlaying())
+            return -1;
+        const auto k = processor.playingSixteenth();
+        return static_cast<int>(((k % 16) + 16) % 16);
+    }
+
+    int Editor::queuedPattern() const
+    {
+        // A pattern picked while another plays is the whole chain until the bar line takes it.
+        if (! processor.isPlaying())
+            return -1;
+        const auto chain = processor.chain();
+        const int heard = processor.playingPattern();
+        return chain.size() == 1 && heard >= 0 && chain.front() != heard ? chain.front() : -1;
+    }
+
+    void Editor::refresh() { board->repaint(); } // its children with it
+
+    void Editor::layOut()
+    {
+        followTransport();
+        lidOverlay->setVisible(lidView);
+        if (lidView)
+            lidOverlay->toFront(false);
         resized();
         refresh();
     }
@@ -697,18 +250,22 @@ namespace cs808
 
     void Editor::resized()
     {
-        const float scale = getWidth() / static_cast<float>(baseWidth);
-        content->setTransform(juce::AffineTransform::scale(scale));
+        // The panel keeps its shape, as large as the window lets it; the desk shows round it.
+        const float scale = std::min(getWidth() / static_cast<float>(baseWidth), getHeight() / static_cast<float>(baseHeight));
+        const float x = (getWidth() - baseWidth * scale) * 0.5f, y = (getHeight() - baseHeight * scale) * 0.5f;
+        board->setTransform(juce::AffineTransform::scale(scale).translated(x, y));
+        lidOverlay->setBounds(getLocalBounds());
         // The overlays cover the window, whatever its size; in a window narrower than the panel they are laid out at
         // the panel's width and drawn smaller with it, so their columns keep their room (D273).
+        const float widthScale = getWidth() / static_cast<float>(baseWidth);
         for (juce::Component* overlay : { static_cast<juce::Component*>(library.get()), static_cast<juce::Component*>(controllerPanel.get()) })
         {
             if (overlay == nullptr)
                 continue;
-            if (scale < 1.0f)
+            if (widthScale < 1.0f)
             {
-                overlay->setTransform(juce::AffineTransform::scale(scale));
-                overlay->setBounds(0, 0, baseWidth, juce::roundToInt(static_cast<float>(getHeight()) / scale));
+                overlay->setTransform(juce::AffineTransform::scale(widthScale));
+                overlay->setBounds(0, 0, baseWidth, juce::roundToInt(static_cast<float>(getHeight()) / widthScale));
             }
             else
             {
@@ -720,315 +277,116 @@ namespace cs808
 
     // ---- Building the panel -----------------------------------------------------------------------------------
 
-    void Editor::buildHeader()
+    void Editor::buildColumns()
     {
-        const auto place = [](juce::Component& c, int x, int y, int w, int h)
-        {
-            c.setBounds(x, y, w, h);
-            c.getProperties().set("baseY", y);
-            c.getProperties().set("region", 0);
-        };
-        int x = 520;
-        const auto chip = [&](const juce::String& text, int w, std::function<void(const juce::MouseEvent&)> click, std::function<bool()> on = {})
-        {
-            auto& c = add<Chip>(*content);
-            c.text = text;
-            c.onClick = std::move(click);
-            c.isOn = std::move(on);
-            place(c, x, 22, w, 26);
-            x += w + 6;
-            return &c;
-        };
-        chip("File", 52, [this](const juce::MouseEvent&) { showFileMenu(); });
-        chip("Library", 66, [this](const juce::MouseEvent&) { openLibrary(); });
-        chip("Bank", 56, [this](const juce::MouseEvent&) { showBankMenu(); });
-        chip("Theme", 60, [this](const juce::MouseEvent&) { showThemeMenu(); });
-        chip("Undo", 52, [this](const juce::MouseEvent&) { processor.undo(); refresh(); });
-        chip("Redo", 52, [this](const juce::MouseEvent&) { processor.redo(); refresh(); });
-        chip("Controller", 84, [this](const juce::MouseEvent&) { openControllerSetup(); },
-             [] { return ! coolsynth::midi::ControllerSetup::instance().map().empty(); });
-
-        auto& views = add<Choices>(*content);
-        views.options = { "Panel", "Under the Lid" };
-        views.get = [this] { return lidView ? 1 : 0; };
-        views.set = [this](int v) { lidView = v == 1; layoutForLanes(); };
-        place(views, baseWidth - margin - 210, 22, 200, 26);
-    }
-
-    void Editor::buildSound()
-    {
-        const float colW = static_cast<float>(baseWidth - 2 * margin) / panelLanes;
+        // Each column: its name, its knobs in the kit's order, and the voice switch where the drum has one (D292).
         std::array<int, panelLanes> rows {};
+        const auto placeKnob = [&](Knob& knob, int column)
+        {
+            const int row = rows[static_cast<std::size_t>(column)]++;
+            const float cx = columnCentre(column);
+            const int top = knobTop + row * knobPitch;
+            knob.diameter = static_cast<float>(knobSize);
+            knob.setBounds(juce::roundToInt(cx - 30.0f), top - 8, 60, 8 + knobSize + 5 + 12);
+            columnKeepOuts.push_back({ juce::Rectangle<float>(2.0f * (knobSize / 2 + 9), 2.0f * (knobSize / 2 + 9)).withCentre({ cx, top + knobSize * 0.5f }), true });
+            columnKeepOuts.push_back(wordKeepOut(knob.label.toUpperCase(), labelFont(10.0f), cx, static_cast<float>(top + knobSize + 4), 14.0f));
+        };
         for (int k = 0; k < knobCount; ++k)
         {
             const auto& spec = knobs[static_cast<std::size_t>(k)];
-            const int col = spec.lane + 1;
-            auto& knob = add<Knob>(*content);
+            auto& knob = add<Knob>(*board);
             knob.label = spec.label;
+            knob.accent = spec.lane < 0; // the Accent's cap is orange
             knob.defaultValue = knobDefault(k);
             knob.get = [this, k] { return processor.project().kit.knob[static_cast<std::size_t>(k)]; };
             knob.set = [this, k](float v) { processor.editKit([k, v](KitValues& kit) { kit.knob[static_cast<std::size_t>(k)] = v; }); };
             knob.gestureStart = [this] { processor.beginGesture(); };
-            knob.gestureEnd = [this] { processor.endGesture(); };
-            const int row = rows[static_cast<std::size_t>(col)]++;
-            const int y = soundTop + 34 + row * 66;
-            knob.setBounds(juce::roundToInt(margin + col * colW + colW / 2 - 30), y, 60, 60);
-            knob.getProperties().set("baseY", y);
-            knob.getProperties().set("region", 0);
-            knob.getProperties().set("sound", true);
+            knob.gestureEnd = [this] { processor.endGesture(); refresh(); };
+            placeKnob(knob, spec.lane + 1);
         }
         {
             // The master volume, under the Accent as on the 808 (the review of D267: a controller's knob 8 turned
             // it with nothing on the panel to show it).
-            auto& volume = add<Knob>(*content);
+            auto& volume = add<Knob>(*board);
             volume.label = "Volume";
             volume.defaultValue = volumePosition(0.0f);
             volume.get = [this] { return volumePosition(processor.project().kit.volumeDb); };
             volume.set = [this](float v) { processor.editKit([v](KitValues& kit) { kit.volumeDb = volumeDbAt(v); }); };
             volume.gestureStart = [this] { processor.beginGesture(); };
             volume.gestureEnd = [this] { processor.endGesture(); };
-            const int y = soundTop + 34 + rows[0]++ * 66;
-            volume.setBounds(juce::roundToInt(margin + colW / 2 - 30), y, 60, 60);
-            volume.getProperties().set("baseY", y);
-            volume.getProperties().set("region", 0);
-            volume.getProperties().set("sound", true);
+            placeKnob(volume, 0);
         }
+        // The 808's voice selectors, as slide switches: the toms or the congas, the rim shot or the claves, the clap
+        // or the maracas.
+        const auto words = [](int lane) -> std::pair<const char*, const char*>
+        {
+            const juce::String code = instruments[static_cast<std::size_t>(lane)].code;
+            if (code == "RS")
+                return { "Rim shot", "Claves" };
+            if (code == "CP")
+                return { "Clap", "Maracas" };
+            return { "Tom", "Conga" };
+        };
         for (int c = 0; c < panelLanes; ++c)
         {
-            const int x = juce::roundToInt(margin + c * colW);
+            const float cx = columnCentre(c);
             if (c > 0 && instruments[static_cast<std::size_t>(c - 1)].altCode != nullptr)
             {
-                auto& pair = add<Choices>(*content);
-                const auto& inst = instruments[static_cast<std::size_t>(c - 1)];
-                pair.options = { inst.code, inst.altCode };
-                pair.fontHeight = 10.0f;
-                pair.get = [this, c] { return processor.project().kit.alt[static_cast<std::size_t>(c - 1)] ? 1 : 0; };
-                pair.set = [this, c](int v) { processor.editKit([c, v](KitValues& kit) { kit.alt[static_cast<std::size_t>(c - 1)] = v == 1; }); refresh(); };
-                const int y = soundTop + 34 + rows[static_cast<std::size_t>(c)] * 66 + 4;
-                pair.setBounds(x + juce::roundToInt(colW / 2) - 30, y, 60, 22);
-                pair.getProperties().set("baseY", y);
-                pair.getProperties().set("region", 0);
-                pair.getProperties().set("sound", true);
+                auto& slide = add<SlideSwitch>(*board);
+                const auto [first, second] = words(c - 1);
+                slide.first = first;
+                slide.second = second;
+                slide.get = [this, c] { return processor.project().kit.alt[static_cast<std::size_t>(c - 1)]; };
+                slide.set = [this, c](bool v) { processor.editKit([c, v](KitValues& kit) { kit.alt[static_cast<std::size_t>(c - 1)] = v; }); refresh(); };
+                const int top = knobTop + rows[static_cast<std::size_t>(c)] * knobPitch;
+                slide.setBounds(juce::roundToInt(cx - 40.0f), top, 80, SlideSwitch::height);
+                columnKeepOuts.push_back(wordKeepOut(slide.first.toUpperCase(), labelFont(10.0f), cx, top - 1.0f, 14.0f));
+                columnKeepOuts.push_back({ { cx - 16.0f, top + 13.0f, 32.0f, 50.0f } });
+                columnKeepOuts.push_back(wordKeepOut(slide.second.toUpperCase(), labelFont(10.0f), cx, top + 62.0f, 14.0f));
             }
-            auto& key = add<NameKey>(*content);
-            key.editor = this;
-            key.panelLane = c;
-            const int y = soundTop + soundHeight - 44;
-            key.setBounds(x + 6, y, juce::roundToInt(colW) - 12, 38);
-            key.getProperties().set("baseY", y);
-            key.getProperties().set("region", 0);
-            key.getProperties().set("sound", true);
+            auto& label = add<ColumnLabel>(*board);
+            label.editor = this;
+            label.column = c;
+            label.setBounds(juce::roundToInt(columnX(c)), 50, juce::roundToInt(columnWidth(c)), 30);
+            if (c == 0)
+                columnKeepOuts.push_back(wordKeepOut("MASTER", headFont(13.0f), cx, 56.0f, 20.0f));
+            else
+            {
+                columnKeepOuts.push_back(wordKeepOut(instruments[static_cast<std::size_t>(c - 1)].code, headFont(13.0f), cx, 50.0f, 18.0f));
+                columnKeepOuts.push_back(wordKeepOut(juce::String(instruments[static_cast<std::size_t>(c - 1)].name).toUpperCase(), labelFont(10.0f), cx, 66.0f, 14.0f));
+            }
         }
     }
 
     void Editor::buildTransport()
     {
-        const auto place = [](juce::Component& c, int x, int y, int w, int h)
-        {
-            c.setBounds(x, y, w, h);
-            c.getProperties().set("baseY", y);
-            c.getProperties().set("region", 1);
-        };
-        auto& play = add<Chip>(*content);
-        play.text = "PLAY";
-        play.fontHeight = 12.0f;
-        play.isOn = [this] { return processor.isPlaying(); };
-        play.onClick = [this](const juce::MouseEvent&) { processor.setPlaying(! processor.isPlaying()); };
-        place(play, margin, keysTop, 58, keysHeight);
-
-        auto& tempo = add<NumberBox>(*content);
-        tempo.label = "Tempo";
-        tempo.minimum = 30.0;
-        tempo.maximum = 300.0;
-        tempo.step = 0.5;
-        tempo.pixelsPerStep = 2.0;
-        tempo.defaultValue = 120.0;
-        tempo.text = [this](double v) { return juce::String(processor.followingClock() ? processor.tempoNow() : v, 1); };
-        tempo.get = [this] { return processor.project().play.tempo; };
-        // Following a MIDI clock, the clock sets the tempo: the box shows it and takes no edits.
-        tempo.set = [this](double v)
-        {
-            if (! processor.followingClock())
-                processor.editPlay([v](PlaySettings& p) { p.tempo = v; });
-        };
-        tempo.gestureStart = [this] { processor.beginGesture(); };
-        tempo.gestureEnd = [this] { processor.endGesture(); };
-        place(tempo, 84, keysTop + 6, 70, 46);
-
-        auto& swing = add<Knob>(*content);
-        swing.label = "Swing";
-        swing.defaultValue = 0.0f;
-        swing.get = [this] { return (processor.project().play.swing - 0.5f) / 0.25f; };
-        swing.set = [this](float v) { processor.editPlay([v](PlaySettings& p) { p.swing = 0.5f + 0.25f * v; }); };
-        swing.gestureStart = [this] { processor.beginGesture(); };
-        swing.gestureEnd = [this] { processor.endGesture(); };
-        place(swing, 158, keysTop - 2, 58, 60);
-
-        auto& editAB = add<Choices>(*content);
-        editAB.options = { "Edit A", "Edit B" };
-        editAB.fontHeight = 10.0f;
-        editAB.get = [this] { return editB ? 1 : 0; };
-        editAB.set = [this](int v) { editB = v == 1; refresh(); };
-        place(editAB, 222, keysTop + 32, 88, 22);
-
-        const int right = keysRight + 16;
-        auto& variation = add<Choices>(*content);
-        variation.options = { "A", "AB", "B" };
-        variation.get = [this]
-        {
-            const auto v = processor.project().play.variation;
-            return v == SequencerVariation::a ? 0 : v == SequencerVariation::ab ? 1 : 2;
-        };
-        variation.set = [this](int v)
-        {
-            processor.editPlay([v](PlaySettings& p) { p.variation = v == 0 ? SequencerVariation::a : v == 1 ? SequencerVariation::ab : SequencerVariation::b; });
-            if (v != 1)
-                editB = v == 2;
-            refresh();
-        };
-        place(variation, right, keysTop, 78, 26);
-
-        auto& fill = add<Chip>(*content);
-        fill.text = "Fill";
-        fill.onClick = [this](const juce::MouseEvent& e)
-        {
-            if (e.mods.isShiftDown() || ! processor.isPlaying())
-            {
-                // Shift-click, or while stopped: edit the fill; again, back to the pattern edited before it.
-                if (editPattern == -1)
-                    editPattern = patternBeforeFill;
-                else
-                {
-                    patternBeforeFill = editPattern;
-                    editPattern = -1;
-                }
-                patternMode = false;
-                refresh();
-            }
-            else
-                processor.requestFill();
-        };
-        fill.isOn = [this] { return editPattern == -1; };
-        place(fill, right + 84, keysTop, 36, 26);
-
-        auto& rec = add<Chip>(*content);
-        rec.text = "Rec";
-        rec.isOn = [this] { return processor.isRecording(); };
-        rec.onClick = [this](const juce::MouseEvent&) { processor.setRecording(! processor.isRecording()); };
-        place(rec, right + 124, keysTop, 34, 26);
-
-        auto& patternKey = add<Chip>(*content);
-        patternKey.filledWhenOn = false;
-        patternKey.isOn = [this] { return patternMode; };
-        patternKey.onClick = [this](const juce::MouseEvent&) { patternMode = ! patternMode; firstChainKey = -1; refresh(); };
-        patternKey.text = "Pattern";
-        place(patternKey, right, keysTop + 30, 78, 26);
-
-        auto& drag = add<Chip>(*content);
-        drag.text = "Drag MIDI";
-        drag.dashed = true;
-        drag.fontHeight = 10.0f;
-        drag.onClick = [](const juce::MouseEvent&) {};
-        drag.addMouseListener(this, false);
-        drag.getProperties().set("midiDrag", true);
-        place(drag, right + 84, keysTop + 30, 74, 26);
+        transport = std::make_unique<TransportStrip>(*this);
+        board->addAndMakeVisible(*transport);
+        const int w = transport->preferredWidth();
+        transport->setBounds(baseWidth - 30 - w, 5, w, TransportStrip::height);
     }
 
-    void Editor::buildInspector()
+    void Editor::updateKeepOuts()
     {
-        const int base = lanesTop + panelLanes * laneHeight + 8 + 6;
-        const auto place = [base](juce::Component& c, int x, int dy, int w, int h)
-        {
-            c.setBounds(x, base + dy, w, h);
-            c.getProperties().set("baseY", base + dy);
-            c.getProperties().set("region", 2);
-        };
-        auto& chance = add<NumberBox>(*content);
-        chance.label = "Chance";
-        chance.labelBelow = false;
-        chance.valueHeight = 13.0f;
-        chance.minimum = 5;
-        chance.maximum = 100;
-        chance.step = 5;
-        chance.defaultValue = 100;
-        chance.text = [](double v) { return juce::String(juce::roundToInt(v)) + " %"; };
-        chance.get = [this]
-        {
-            if (selectedStep < 0)
-                return 100.0;
-            const auto& l = laneShown(selectedLane);
-            return static_cast<double>((editB ? l.b : l.a)[static_cast<std::size_t>(selectedStep)].chance) * 100.0;
-        };
-        chance.set = [this](double v)
-        {
-            if (selectedStep < 0)
-                return;
-            const int step = selectedStep;
-            const bool b = editB;
-            editLane(selectedLane, [&](SequencerLane& l) { auto& s = (b ? l.b : l.a)[static_cast<std::size_t>(step)]; s.on = true; s.chance = static_cast<float>(v / 100.0); }, false);
-        };
-        chance.gestureStart = [this] { processor.beginGesture(); };
-        chance.gestureEnd = [this] { processor.endGesture(); };
-        place(chance, 220, 20, 120, 24);
-
-        auto& hits = add<Choices>(*content);
-        hits.options = { "1 hit", "2", "3" };
-        hits.fontHeight = 10.0f;
-        hits.get = [this]
-        {
-            if (selectedStep < 0)
-                return -1;
-            const auto& l = laneShown(selectedLane);
-            return static_cast<int>((editB ? l.b : l.a)[static_cast<std::size_t>(selectedStep)].hits) - 1;
-        };
-        hits.set = [this](int v)
-        {
-            if (selectedStep < 0)
-                return;
-            const int step = selectedStep;
-            const bool b = editB;
-            editLane(selectedLane, [&](SequencerLane& l) { auto& s = (b ? l.b : l.a)[static_cast<std::size_t>(step)]; s.on = true; s.hits = static_cast<std::uint8_t>(v + 1); });
-        };
-        place(hits, 356, 20, 110, 24);
-
-        int x = 760;
-        const auto op = [&](const juce::String& text, std::function<void()> act)
-        {
-            auto& c = add<Chip>(*content);
-            c.text = text;
-            c.fontHeight = 10.5f;
-            c.onClick = [act](const juce::MouseEvent&) { act(); };
-            place(c, x, 20, 62, 24);
-            x += 68;
-        };
-        op("Copy", [this] { clipboard = patternShown(); });
-        op("Paste", [this]
-        {
-            if (! clipboard)
-                return;
-            const int pattern = editPattern;
-            const auto copy = *clipboard;
-            processor.editBank([&](SequencerBank& bank) { (pattern < 0 ? bank.fill : bank.pattern[static_cast<std::size_t>(pattern)]) = copy; });
-            refresh();
-        });
-        op("Clear", [this]
-        {
-            const int pattern = editPattern;
-            processor.editBank([&](SequencerBank& bank) { (pattern < 0 ? bank.fill : bank.pattern[static_cast<std::size_t>(pattern)]) = SequencerPattern {}; });
-            refresh();
-        });
-        op("Keep", [this] { savePatternToLibrary(); });
-
-        auto& info = add<juce::Label>(*content);
-        info.setInterceptsMouseClicks(false, false);
-        info.getProperties().set("info", true);
-        place(info, margin, 6, 200, 48);
+        auto list = columnKeepOuts;
+        list.push_back({ { 26.0f, 6.0f, 344.0f, 34.0f }, false, true }); // the name plate keeps its outline
+        list.push_back({ transport->getBounds().toFloat().expanded(2.0f) });
+        board->setKeepOuts(std::move(list));
     }
 
     // ---- Patterns and chains ----------------------------------------------------------------------------------
 
     void Editor::selectPatternKey(int index, bool extend)
     {
+        // Picked while playing, it comes in at the next bar line or at the end of the pattern that plays, as the
+        // Change keys say (D297).
+        const auto setChain = [this](const std::vector<int>& chain)
+        {
+            if (processor.isPlaying() && processor.project().play.changeAtBar)
+                processor.atNextBar([&] { processor.setChain(chain); });
+            else
+                processor.setChain(chain);
+        };
         if (extend && firstChainKey >= 0)
         {
             std::vector<int> chain;
@@ -1039,15 +397,121 @@ namespace cs808
                 if (i == index)
                     break;
             }
-            processor.setChain(chain);
+            setChain(chain);
         }
         else
         {
             firstChainKey = index;
-            processor.setChain({ index });
+            setChain({ index });
         }
         editPattern = index;
         refresh();
+    }
+
+    void Editor::editFill()
+    {
+        // The F slot: the fill is edited; again, back to the pattern edited before it.
+        if (editPattern == -1)
+            editPattern = patternBeforeFill;
+        else
+        {
+            patternBeforeFill = editPattern;
+            editPattern = -1;
+        }
+        refresh();
+    }
+
+    void Editor::queueFill()
+    {
+        // The fill plays in the next bar; asked while stopped, nothing happens, so nothing is lit.
+        if (! processor.isPlaying())
+            return;
+        processor.requestFill();
+        fillAsked = true;
+        refresh();
+    }
+
+    void Editor::addToChain(int pattern)
+    {
+        if (pattern < 0)
+            return;
+        auto chain = processor.chain();
+        if (static_cast<int>(chain.size()) >= coolsynth::synth::StepSequencer::maxChain)
+            return;
+        chain.push_back(pattern);
+        processor.setChain(chain);
+        refresh();
+    }
+
+    void Editor::selectBankTab(int index)
+    {
+        // A tab past the banks there are makes the banks up to it, each new and empty.
+        while (static_cast<int>(processor.project().banks.size()) <= index && static_cast<int>(processor.project().banks.size()) < Project::maxBanks)
+            processor.addBank();
+        processor.selectBank(index);
+        refresh();
+    }
+
+    void Editor::copyPattern(int pattern)
+    {
+        const auto& bank = processor.project().currentBank();
+        clipboard = pattern < 0 ? bank.fill : bank.pattern[static_cast<std::size_t>(pattern)];
+    }
+
+    void Editor::pastePattern(int pattern)
+    {
+        if (! clipboard)
+            return;
+        const auto copy = *clipboard;
+        processor.editBank([&](SequencerBank& bank) { (pattern < 0 ? bank.fill : bank.pattern[static_cast<std::size_t>(pattern)]) = copy; });
+        refresh();
+    }
+
+    void Editor::clearPattern(int pattern)
+    {
+        processor.editBank([&](SequencerBank& bank) { (pattern < 0 ? bank.fill : bank.pattern[static_cast<std::size_t>(pattern)]) = SequencerPattern {}; });
+        refresh();
+    }
+
+    void Editor::followTransport()
+    {
+        // Where the chain plays: the audio thread reports the pattern and the step, so each bar line moves on to the
+        // next entry that plays that pattern. A fill takes its bar's entry, as the chain counts on under it.
+        if (! processor.isPlaying())
+        {
+            chainPlace = -1;
+            lastPatternHeard = -2;
+            lastStep = -1;
+            fillAsked = false;
+            return;
+        }
+        const auto chain = processor.chain();
+        const int heard = processor.playingPattern();
+        const int step = stepInBar();
+        if (heard == -1)
+            fillAsked = false;
+        const bool chainChanged = chain != lastChain;
+        const bool newBar = heard != lastPatternHeard || step < lastStep || chainChanged;
+        if (newBar && ! chain.empty())
+        {
+            const int n = static_cast<int>(chain.size());
+            const auto find = [&](int from)
+            {
+                for (int i = 0; i < n; ++i)
+                    if (chain[static_cast<std::size_t>((from + i) % n)] == heard)
+                        return (from + i) % n;
+                return -1;
+            };
+            if (chainChanged || chainPlace < 0 || chainPlace >= n)
+                chainPlace = heard == -1 ? std::max(0, chainPlace) : find(0);
+            else if (heard == -1)
+                chainPlace = (chainPlace + 1) % n;
+            else
+                chainPlace = find((chainPlace + 1) % n);
+        }
+        lastChain = chain;
+        lastPatternHeard = heard;
+        lastStep = step;
     }
 
     // ---- Files, library, themes -------------------------------------------------------------------------------
@@ -1061,50 +525,46 @@ namespace cs808
         m.addItem(4, "Save project as...");
         m.addSeparator();
         m.addItem(5, "Keep this pattern in the library...");
-        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withMousePosition(), [this](int r)
-        {
-            if (r == 1) newProject();
-            else if (r == 2) openProject();
-            else if (r == 3) saveProject(false);
-            else if (r == 4) saveProject(true);
-            else if (r == 5) savePatternToLibrary();
-        });
-    }
-
-    void Editor::showThemeMenu()
-    {
-        juce::PopupMenu m;
-        for (int i = 0; i < 4; ++i)
-            m.addItem(i + 1, themes()[static_cast<std::size_t>(i)].name, true, i == themeIndex);
-        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withMousePosition(), [this](int r)
-        {
-            if (r <= 0)
-                return;
-            themeIndex = r - 1;
-            setTheme(themeIndex);
-            settings->setValue("theme", themeIndex);
-            repaint();
-            refresh();
-        });
-    }
-
-    void Editor::showBankMenu()
-    {
-        juce::PopupMenu m;
+        m.addSeparator();
+        juce::PopupMenu banks;
         const auto& p = processor.project();
         for (int i = 0; i < static_cast<int>(p.banks.size()); ++i)
-            m.addItem(i + 1, "Bank " + juce::String(i + 1), true, i == p.bank);
+            banks.addItem(100 + i, "Bank " + (i < 26 ? juce::String::charToString(static_cast<juce::juce_wchar>('A' + i)) : juce::String(i + 1)), true, i == p.bank);
+        banks.addSeparator();
+        banks.addItem(99, "New bank", static_cast<int>(p.banks.size()) < Project::maxBanks);
+        m.addSubMenu("Bank", banks);
+        juce::PopupMenu themeMenu;
+        for (int i = 0; i < 4; ++i)
+            themeMenu.addItem(200 + i, themes()[static_cast<std::size_t>(i)].name, true, i == themeIndex);
+        m.addSubMenu("Theme", themeMenu);
+        m.addItem(6, "Controller setup...", true, ! coolsynth::midi::ControllerSetup::instance().map().empty());
         m.addSeparator();
-        m.addItem(1000, "New bank");
-        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withMousePosition(), [this](int r)
+        m.addItem(7, "Undo", processor.canUndo());
+        m.addItem(8, "Redo", processor.canRedo());
+        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withMousePosition(),
+                        [safe = juce::Component::SafePointer<Editor>(this)](int r)
         {
-            if (r <= 0)
+            if (safe == nullptr || r <= 0)
                 return;
-            if (r == 1000)
-                processor.addBank();
-            else
-                processor.selectBank(r - 1);
-            refresh();
+            auto& e = *safe;
+            if (r == 1) e.newProject();
+            else if (r == 2) e.openProject();
+            else if (r == 3) e.saveProject(false);
+            else if (r == 4) e.saveProject(true);
+            else if (r == 5) e.savePatternToLibrary(e.editPattern);
+            else if (r == 6) e.openControllerSetup();
+            else if (r == 7) { e.processor.undo(); e.refresh(); }
+            else if (r == 8) { e.processor.redo(); e.refresh(); }
+            else if (r == 99) { e.processor.addBank(); e.refresh(); }
+            else if (r >= 100 && r < 200) { e.processor.selectBank(r - 100); e.refresh(); }
+            else if (r >= 200 && r < 204)
+            {
+                e.themeIndex = r - 200;
+                setTheme(e.themeIndex);
+                e.settings->setValue("theme", e.themeIndex);
+                e.repaint();
+                e.refresh();
+            }
         });
     }
 
@@ -1174,19 +634,20 @@ namespace cs808
         });
     }
 
-    void Editor::savePatternToLibrary()
+    void Editor::savePatternToLibrary(int pattern)
     {
         auto* window = new juce::AlertWindow("Keep this pattern", "A name for it in the library:", juce::MessageBoxIconType::NoIcon);
         window->addTextEditor("name", "My pattern");
         window->addButton("Keep", 1, juce::KeyPress(juce::KeyPress::returnKey));
         window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-        window->enterModalState(true, juce::ModalCallbackFunction::create([this, window](int r)
+        window->enterModalState(true, juce::ModalCallbackFunction::create([this, window, pattern](int r)
         {
             if (r == 1)
             {
+                const auto& bank = processor.project().currentBank();
                 PatternFile f;
                 f.name = window->getTextEditorContents("name");
-                f.pattern = patternShown();
+                f.pattern = pattern < 0 ? bank.fill : bank.pattern[static_cast<std::size_t>(pattern)];
                 f.alt = processor.project().kit.alt;
                 f.play = processor.project().play;
                 f.usesB = f.play.variation != SequencerVariation::a;
@@ -1354,8 +815,13 @@ namespace cs808
         editB = false;
         selectedStep = -1;
         firstChainKey = -1;
-        patternMode = false;
         refresh();
+    }
+
+    void Editor::makeMidiDragSource(juce::Component& key)
+    {
+        key.addMouseListener(this, false);
+        key.getProperties().set("midiDrag", true);
     }
 
     void Editor::startMidiDrag()
@@ -1368,6 +834,23 @@ namespace cs808
             midiDragging = true;
             performExternalDragDropOfFiles({ f.getFullPathName() }, false, this, [this] { midiDragging = false; });
         }
+    }
+
+    void Editor::tapTempo()
+    {
+        // The tempo from the last taps' average gap; a pause of two seconds begins the count again.
+        const double now = juce::Time::getMillisecondCounterHiRes();
+        if (! taps.empty() && now - taps.back() > 2000.0)
+            taps.clear();
+        taps.push_back(now);
+        if (taps.size() > 5)
+            taps.erase(taps.begin());
+        if (taps.size() < 2 || processor.followingClock())
+            return;
+        const double gap = (taps.back() - taps.front()) / static_cast<double>(taps.size() - 1);
+        const double tempo = juce::jlimit(30.0, 300.0, std::round(60000.0 / gap * 2.0) / 2.0);
+        processor.editPlay([tempo](PlaySettings& s) { s.tempo = tempo; });
+        refresh();
     }
 
     // ---- Keys and time ----------------------------------------------------------------------------------------
@@ -1413,61 +896,48 @@ namespace cs808
 
     void Editor::timerCallback()
     {
-        if (processor.applyRecordedHits())
-            refresh();
+        bool edited = processor.applyRecordedHits();
         const auto bits = processor.takeStruckLanes();
         const double now = juce::Time::getMillisecondCounterHiRes();
         if (bits != 0)
         {
-            for (int l = 0; l < laneCount; ++l)
-                if ((bits >> l) & 1u)
-                    ledUntil[static_cast<std::size_t>(l + 1)] = now + 90.0;
-            if ((bits >> laneCount) & 1u)
-                ledUntil[0] = now + 90.0;
             lid->struck(bits);
+            board->struck(bits, now);
         }
         lid->tick(now);
-        // The step inspector's text.
-        for (auto* c : parts)
-            if (static_cast<bool>(c->getProperties()["info"]))
-                if (auto* label = dynamic_cast<juce::Label*>(c))
-                {
-                    const auto& kit = processor.project().kit;
-                    juce::String text;
-                    if (selectedStep >= 0)
-                        text << "Step " << (selectedStep + 1) << "\n" << laneName(selectedLane, kit);
-                    else
-                        text << "No step selected\nRight-click a step";
-                    text << "\n" << (editPattern < 0 ? juce::String("Fill") : "Pattern " + juce::String(editPattern + 1).paddedLeft('0', 2))
-                         << (editB ? " B" : " A") << ", bank " << (processor.project().bank + 1);
-                    label->setColour(juce::Label::textColourId, theme().dim);
-                    label->setFont(uiFont(11.0f));
-                    if (label->getText() != text)
-                        label->setText(text, juce::dontSendNotification);
-                }
-        // The panel is drawn again only when something it shows changed, or a light is lit or just went out (the
-        // review of D267: it was drawn whole 30 times a second).
+        board->tick(now);
+        followTransport();
+        // The panel is drawn again only when something it shows changed (the review of D267: it was drawn whole 30
+        // times a second); what only moves with the beat redraws the glass and the strip, not the board.
         std::uint64_t look = processor.editCount();
-        const auto fold = [&look](std::int64_t v) { look = look * 1000003u ^ static_cast<std::uint64_t>(v); };
-        fold(processor.isPlaying() ? processor.playingSixteenth() : -1);
-        fold(processor.playingPattern());
-        fold(processor.playingVariationB());
-        fold(processor.isRecording());
-        fold(processor.followingClock() ? juce::roundToInt(processor.tempoNow() * 10.0) : -1);
-        fold(static_cast<std::int64_t>(processor.chain().size()));
-        fold(processor.chain().front());
-        fold(selectedLane);
-        fold(editPattern);
-        fold(editB);
-        fold(selectedStep);
-        fold(patternMode);
-        fold(firstChainKey);
-        for (const auto until : ledUntil)
-            fold(until > now ? 1 : 0);
-        if (look != lastLook)
+        const auto fold = [](std::uint64_t& h, std::int64_t v) { h = h * 1000003u ^ static_cast<std::uint64_t>(v); };
+        fold(look, selectedLane);
+        fold(look, editPattern);
+        fold(look, editB);
+        fold(look, static_cast<std::int64_t>(processor.project().bank));
+        for (const int c : processor.chain())
+            fold(look, c);
+        std::uint64_t beat = 0;
+        fold(beat, processor.isPlaying() ? processor.playingSixteenth() : -1);
+        fold(beat, processor.playingPattern());
+        fold(beat, processor.playingVariationB());
+        fold(beat, processor.isRecording());
+        fold(beat, processor.followingClock() ? juce::roundToInt(processor.tempoNow() * 10.0) : -1);
+        fold(beat, fillAsked);
+        fold(beat, chainPlace);
+        if (fillAsked || queuedPattern() >= 0)
+            fold(beat, static_cast<std::int64_t>(juce::Time::getMillisecondCounter() / 250u)); // the queued slot blinks
+        if (edited || look != lastLook)
         {
             lastLook = look;
+            lastBeat = beat;
             refresh();
+        }
+        else if (beat != lastBeat)
+        {
+            lastBeat = beat;
+            sequencer->repaintPlaying();
+            transport->repaint();
         }
     }
 

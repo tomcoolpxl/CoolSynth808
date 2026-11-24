@@ -30,6 +30,7 @@ juce_add_binary_data(CoolSynth808Library
         resources/lid/board_ht.json # the high tom,
         resources/lid/board_oh.json # the open hat alone
         resources/lid/board_ch.json # and the closed hat alone (D280)
+        resources/lid/board_envelopes.json # each drum's output after a strike, for the panel's etched circuit (D298)
         # The panel's typefaces (D292): Archivo for every label, IBM Plex Mono for numbers; both SIL OFL, their
         # licences beside them in resources/fonts.
         resources/fonts/ArchivoCondensed-SemiBold.ttf
@@ -69,6 +70,10 @@ set(COOLSYNTH808_SOURCES
     src/ui/LibraryShelf.cpp
     src/ui/Widgets.cpp
     src/ui/Hardware.cpp
+    src/ui/EtchedBoard.cpp
+    src/ui/EtchedCircuit.cpp
+    src/ui/Transport.cpp
+    src/ui/Sequencer.cpp
     src/ui/LidView.cpp)
 
 target_sources(CoolSynth808 PRIVATE ${COOLSYNTH808_SOURCES})

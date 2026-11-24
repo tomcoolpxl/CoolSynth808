@@ -9,9 +9,9 @@
 #include "Processor.h"
 
 /*
-    The panel drawn into PNG files, to look at without a screen: every theme, the lanes open and closed, Under the
-    Lid, and the library. Only when COOLSYNTH808_SNAPSHOTS names a folder; otherwise it checks that the panel builds
-    and lays out at every width.
+    The panel drawn into PNG files, to look at without a screen: every theme while a beat plays, a pattern waiting
+    for the bar line, stopped, Under the Lid, and the library. Only when COOLSYNTH808_SNAPSHOTS names a folder;
+    otherwise it checks that the panel builds and lays out at every width.
 */
 using namespace cs808;
 
@@ -32,10 +32,10 @@ public:
             std::unique_ptr<juce::AudioProcessorEditor> e(p->createEditor());
             auto* editor = dynamic_cast<Editor*>(e.get());
             expect(editor != nullptr);
-            for (const int width : { 620, 1240, 1860 })
+            for (const int width : { 620, 1280, 1860 })
             {
                 editor->setSize(width, 600);
-                editor->layoutForLanes();
+                editor->layOut();
                 expectEquals(editor->getWidth(), width);
                 expectGreaterThan(editor->getHeight(), 200);
             }
@@ -61,20 +61,41 @@ public:
             auto p = std::make_unique<Processor>();
             p->setPlayConfigDetails(0, 2, 48000.0, 512);
             p->prepareToPlay(48000.0, 512);
-            // A library beat in pattern 1, so the lanes have something to show.
+            // Library beats in patterns 1 and 2, chained 1, 1, 2, so the lanes and the chain have something to show.
             const auto library = builtInLibrary();
-            if (! library.empty())
+            if (library.size() > 1)
             {
                 const auto& beat = library.front();
-                p->editBank([&](SequencerBank& b) { b.pattern[0] = beat.pattern.pattern; }, false);
+                p->editBank([&](SequencerBank& b)
+                {
+                    b.pattern[0] = beat.pattern.pattern;
+                    b.pattern[1] = library[1].pattern.pattern;
+                }, false);
                 p->editPlay([&](PlaySettings& s) { s = beat.pattern.play; });
             }
+            p->setChain({ 0, 0, 1 });
             std::unique_ptr<juce::AudioProcessorEditor> e(p->createEditor());
             auto* editor = dynamic_cast<Editor*>(e.get());
-            editor->setSize(1240, 600);
+            editor->setSize(1280, 800);
+            // Playing, on the fifth step of the bar (D292): the playing pattern, the chain's block and the steps lit.
+            const auto runUntil = [&](const std::function<bool()>& done)
+            {
+                juce::AudioBuffer<float> buffer(2, 512);
+                juce::MidiBuffer midi;
+                for (int block = 0; block < 2000 && ! done(); ++block)
+                {
+                    buffer.clear();
+                    midi.clear();
+                    p->processBlock(buffer, midi);
+                }
+            };
+            const auto playTo = [&](int sixteenth) { runUntil([&] { return p->isPlaying() && p->playingSixteenth() >= sixteenth; }); };
+            p->setPlaying(true);
+            playTo(4);
+            expect(p->isPlaying());
             const auto shoot = [&](const juce::String& name)
             {
-                editor->layoutForLanes();
+                editor->layOut();
                 // twice the density, to judge the drawing as a screen shows it (D292)
                 const auto image = editor->createComponentSnapshot(editor->getLocalBounds(), true, 2.0f);
                 juce::FileOutputStream out(folder.getChildFile(name + ".png"));
@@ -85,14 +106,10 @@ public:
             for (int t = 0; t < 4; ++t)
             {
                 setTheme(t);
-                editor->lanesOpen = true;
                 editor->lidView = false;
                 shoot(juce::String("panel-") + themes()[static_cast<std::size_t>(t)].id);
             }
             setTheme(0);
-            editor->lanesOpen = false;
-            shoot("panel-lanes-closed");
-            editor->lanesOpen = true;
             editor->lidView = true;
             shoot("lid");
             // Every drum struck, 40 ms on: the board lit from the recordings (D280).
@@ -125,7 +142,7 @@ public:
                             if (nextStep == 14) lanes = (lanes & ~(1u << 10)) | (1u << 9);  // an open hat
                             editor->lidForTesting().struck(lanes);
                         }
-                        editor->layoutForLanes();
+                        editor->layOut();
                         const auto image = editor->createComponentSnapshot(editor->getLocalBounds(), true, 1.0f);
                         juce::FileOutputStream out(frames.getChildFile(juce::String(sheet) + "-" + juce::String(f).paddedLeft('0', 3) + ".png"));
                         out.setPosition(0);
@@ -154,12 +171,22 @@ public:
             shoot("lid-hi-hats");
             editor->lidForTesting().showSheet(0);
             editor->lidView = false;
-            editor->patternMode = true;
-            shoot("pattern-mode");
-            editor->patternMode = false;
+            // The panel's etched circuit lit (D298): the bass drum, the snare and the closed hat struck, 30 ms on.
+            editor->boardForTesting().struck((1u << 0) | (1u << 1) | (1u << 10), 50000.0);
+            editor->boardForTesting().tick(50030.0);
+            shoot("panel-struck");
+            editor->boardForTesting().tick(60000.0);
+            // Pattern 3 picked while 1 plays: it waits for the bar line, and the status says when it comes.
+            editor->selectPatternKey(2, false);
+            editor->editPattern = 0;
+            shoot("panel-queued");
+            p->setPlaying(false);
+            runUntil([&] { return ! p->isPlaying(); });
+            p->setChain({ 0 });
+            shoot("panel-stopped");
             editor->setSize(620, 300);
             shoot("panel-narrow");
-            editor->setSize(1240, 600);
+            editor->setSize(1280, 800);
             editor->openControllerSetup();
             shoot("controller");
             // The library's shelf (D273), a beat of two halves chosen, and drawn smaller in a narrow window.
@@ -171,7 +198,7 @@ public:
                 shoot("library");
                 editor->setSize(620, 300);
                 shoot("library-narrow");
-                editor->setSize(1240, 600);
+                editor->setSize(1280, 800);
             }
             expect(folder.getChildFile("lid.png").existsAsFile());
         }

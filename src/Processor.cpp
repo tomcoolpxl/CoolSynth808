@@ -403,6 +403,7 @@ namespace cs808
             coolsynth::synth::SequencerSettings s;
             s.swing = playOnAudio.swing;
             s.variation = playOnAudio.variation;
+            s.loop = playOnAudio.loop;
             sequencer.setSettings(s);
         }
         if (bankDirty.exchange(false))
@@ -679,9 +680,9 @@ namespace cs808
             if (lane < 0)
                 continue;
             hitLanes |= 1u << lane;
-            if (rec)
+            // Past the end of a chain that does not loop there is no pattern to write into (D297).
+            if (const auto place = sequencer.placeAt(beatAt(metadata.samplePosition)); rec && place.pattern >= -1)
             {
-                const auto place = sequencer.placeAt(beatAt(metadata.samplePosition));
                 const auto& bank = sequencer.bank();
                 const auto& pattern = place.pattern < 0 ? bank.fill : bank.pattern[static_cast<std::size_t>(place.pattern)];
                 const int length = juce::jlimit(1, SequencerLane::steps, pattern.lanes[static_cast<std::size_t>(lane)].length);
@@ -743,6 +744,9 @@ namespace cs808
         if (playing && ! byClock)
             beat = beatEnd;
         samplesSoFar += n;
+        // A chain that does not loop has played through: its own transport stops (D297). A clock leads on its own.
+        if (playing && ! byClock && ! playOnAudio.loop && sequencer.endedAt(beat))
+            playRequest.store(0, std::memory_order_release);
 
         if (playing)
         {

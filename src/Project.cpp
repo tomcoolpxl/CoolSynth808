@@ -90,6 +90,8 @@ namespace cs808
             o->setProperty("tempo", p.tempo);
             o->setProperty("swing", juce::roundToInt(p.swing * 100.0f));
             o->setProperty("variation", variationName(p.variation));
+            o->setProperty("loop", p.loop);
+            o->setProperty("change", p.changeAtBar ? "bar" : "pattern");
             return juce::var(o);
         }
 
@@ -98,6 +100,8 @@ namespace cs808
             p.tempo = juce::jlimit(30.0, 300.0, static_cast<double>(v.getProperty("tempo", 120.0)));
             p.swing = juce::jlimit(0.5f, 0.75f, static_cast<float>(static_cast<double>(v.getProperty("swing", 50))) / 100.0f);
             p.variation = variationOf(v.getProperty("variation", "A").toString());
+            p.loop = static_cast<bool>(v.getProperty("loop", true));
+            p.changeAtBar = v.getProperty("change", "bar").toString() != "pattern";
         }
 
         juce::var altToVar(const std::array<bool, laneCount>& alt)

@@ -8,25 +8,28 @@ on the published service notes of the machine and checked against recordings of 
 
 ## Playing it
 
-The panel has a column of knobs per drum, as on the machine: the bass drum's Level, Tone and Decay, the snare's
-Snappy, the toms' Tuning and so on, and the Accent and Volume on the left. Click a drum's name to hear it.
+The top of the panel is the machine's circuit board, etched into the metal, with each drum's knobs mounted on its own
+column of copper: the bass drum's Level, Tone and Decay, the snare's Snappy, the toms' Tuning and so on, and the
+Accent and Volume under Master. Slide switches choose the second instrument of a circuit: conga for tom, claves for
+rim shot, maracas for clap. As the beat plays, each drum's column lights the way its recorded circuit rings.
 
-- The row of sixteen keys shows the steps of the drum you selected: click a step to switch it on or off.
-- Drag a step down to make it play less often; its height shows the chance.
-- Right-click a step to select it; the line at the bottom then sets its chance and a roll of two or three hits.
-- Open the lanes to see every drum at once, each with its own length (a shorter lane runs on across the bars).
-- Space starts and stops; Swing delays every second sixteenth, as Roger Linn's drum machines do.
-- A, AB and B play the pattern's two halves: A, B, or A then B.
-- Pattern turns the sixteen keys into the bank's sixteen patterns: click one to play it, shift-click another to play
-  the ones in between in a row (a chain).
-- Fill plays the bank's fill pattern once, in the next bar; shift-click it to edit the fill.
-- Rec writes the drums you play (on MIDI, or by clicking their names) on the nearest step while it runs.
+The sequencer sits on smoked glass below it.
+
+- The patterns row: banks A to D, the sixteen patterns, F for the fill and Fill to play it once in the next bar; A,
+  AB and B play the pattern's two halves. Click a pattern to play and edit it; right-click it for copy, paste, clear,
+  save to the library and add to the chain.
+- The chain: the patterns in the order they play, a block with a repeat count for each; click a block for more
+  repeats, right-click to remove it, + adds the pattern you edit. Loop plays it round and round, or once and then
+  stops. Change says when a pattern you pick while playing comes in: at the next bar, or at the end of the pattern.
+- The lanes, one per drum, each with its own length (a shorter lane runs on across the bars): click a step to switch
+  it on or off and pick its lane, drag it down to make it play less often, right-click it for its chance, a roll of
+  two or three hits and its accent. A row of lights above shows the step that plays.
+- On the right, the picked lane's length, Every 4, Every 2, Clear and a shift, and the pattern's tools.
+- The strip at the top right: Play, Rec (writes the drums you play onto the nearest step), the tempo (drag it), Tap,
+  Swing (delays every second sixteenth, as Roger Linn's drum machines do), Library and File. Space starts and stops.
+- File also holds the banks, the themes, Controller (a MIDI controller: the main knob chooses the drum, knobs follow
+  it, pads play the drums or, after a press of the main knob, enter its steps), Undo and Redo.
 - Drag MIDI drags the pattern into your music software as a MIDI file.
-- Under the Lid shows the circuits as they are struck, and each drum complete, every part of its circuit with the
-  currents ngspice records for it, from the Sheet menu.
-- Controller sets up a MIDI controller: the main knob chooses the drum, knobs follow it, pads play the drums or, after
-  a press of the main knob, enter its steps. Click a place and move the control to link it. Input says which MIDI
-  input is the controller; Auto finds it, and notes from your other inputs then only play the drums.
 
 It follows a MIDI clock when one comes in (its start, stop and tempo), and sends its own when none does. The audio
 and MIDI settings are in the Options menu of the window.
@@ -35,7 +38,7 @@ and MIDI settings are in the Options menu of the window.
 
 - File saves and opens projects (`.cs808`): the kit, every bank of patterns and the tempo. The app opens the last
   state again by itself.
-- Library holds starter beats for 22 modern genres, from house and trap to amapiano and drum and bass, and classic beats the 808 made famous, by family and decade, and the patterns you keep with Keep.
+- Library holds starter beats for 22 modern genres, from house and trap to amapiano and drum and bass, and classic beats the 808 made famous, by family and decade, and the patterns you save to it.
   Audition plays a beat in place of your pattern until you load it or stop, coming in on the next bar line while
   the transport plays; your own patterns can be renamed or sent
   to the Recycle Bin, and Keep a copy puts a classic among them.

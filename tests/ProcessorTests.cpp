@@ -130,6 +130,23 @@ public:
             expectEquals(stops, 1);
         }
 
+        beginTest("with_the_loop_off_its_transport_stops_after_the_chain");
+        {
+            // D297: the chain 0, 0 (two bars) with the loop off plays them and stops; with the loop on it plays on.
+            for (const bool loop : { false, true })
+            {
+                auto p = prepared();
+                p->editBank([](SequencerBank& b) { b.pattern[0].lanes[1].a[0].on = true; }, false);
+                p->editPlay([loop](PlaySettings& s) { s.loop = loop; });
+                p->setChain({ 0, 0 });
+                p->setPlaying(true);
+                render(*p, 7 * 24000); // seven beats: still in the second bar
+                expect(p->isPlaying(), "still playing in its last bar");
+                render(*p, 2 * 24000);
+                expect(p->isPlaying() == loop, loop ? "the loop on plays on" : "the loop off has stopped");
+            }
+        }
+
         beginTest("an_incoming_clock_takes_over_tempo_and_start");
         {
             auto p = prepared();
