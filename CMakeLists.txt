@@ -25,6 +25,11 @@ juce_add_binary_data(CoolSynth808Library
         resources/lid/bassdrum_currents.json # the bass drum's currents, recorded from ngspice by the engine's tools/kick808/mockup_currents.py
         resources/lid/snare_currents.json # the snare's, by its tools/tr808/lid_currents.py (D278)
         resources/lid/tom_currents.json # the low tom's, the same way
+        resources/lid/midtom_currents.json # the mid and high tom's, and the three congas' (D339)
+        resources/lid/hightom_currents.json
+        resources/lid/lowconga_currents.json
+        resources/lid/midconga_currents.json
+        resources/lid/highconga_currents.json
         resources/lid/rimshot_currents.json # the rim shot's
         resources/lid/clap_currents.json # the hand clap's, its maracas' side left out
         resources/lid/cowbell_currents.json # the cowbell's parts of the metal board

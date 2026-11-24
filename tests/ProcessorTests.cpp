@@ -171,6 +171,12 @@ public:
                 { "bass drum", 0, W::bassDrum, "bassdrum_currents.json", 300.0f, [](KitValues& k) { k.knob[1] = 0.8f; k.knob[2] = 0.5f; k.knob[3] = 0.6f; }, -1 },
                 { "snare", 1, W::snare, "snare_currents.json", 300.0f, [](KitValues& k) { k.knob[4] = 0.8f; k.knob[5] = 0.5f; k.knob[6] = 0.6f; }, -1 },
                 { "low tom", 2, W::lowTom, "tom_currents.json", 600.0f, [](KitValues& k) { k.knob[7] = 0.8f; k.knob[8] = 0.5f; }, -1 },
+                // D339: the toms' sheet shows each tom and conga struck, each against its own recording
+                { "mid tom", 3, W::lowTom, "midtom_currents.json", 600.0f, [](KitValues& k) { k.knob[9] = 0.8f; k.knob[10] = 0.5f; }, -1 },
+                { "high tom", 4, W::lowTom, "hightom_currents.json", 600.0f, [](KitValues& k) { k.knob[11] = 0.8f; k.knob[12] = 0.5f; }, -1 },
+                { "low conga", 2, W::lowTom, "lowconga_currents.json", 600.0f, [](KitValues& k) { k.knob[7] = 0.8f; k.knob[8] = 0.5f; k.alt[2] = true; }, -1 },
+                { "mid conga", 3, W::lowTom, "midconga_currents.json", 600.0f, [](KitValues& k) { k.knob[9] = 0.8f; k.knob[10] = 0.5f; k.alt[3] = true; }, -1 },
+                { "high conga", 4, W::lowTom, "highconga_currents.json", 600.0f, [](KitValues& k) { k.knob[11] = 0.8f; k.knob[12] = 0.5f; k.alt[4] = true; }, -1 },
                 { "rim shot", 5, W::rimShot, "rimshot_currents.json", 150.0f, [](KitValues& k) { k.knob[13] = 0.8f; }, -1 },
                 { "hand clap", 6, W::clap, "clap_currents.json", 300.0f, [](KitValues& k) { k.knob[14] = 0.8f; }, -1 },
                 { "cowbell", 7, W::cowbell, "cowbell_currents.json", 250.0f, [](KitValues& k) { k.knob[15] = 0.8f; }, -1 },

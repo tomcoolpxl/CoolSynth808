@@ -840,7 +840,7 @@ namespace cs808
         /** The lane each drum drawn complete plays in. */
         constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5, 6, 7, 8, 8, 9, -1 }; // the hi-hats: the open one, and the closed (10) too
 
-        Recording parseRecording(const juce::var& root, int which);
+        Recording parseRecording(const juce::var& root, int which, int variant = 0);
 
         /** A step of our sequencer, as the CPU section's sheet shows it (D321). */
         struct CpuStep
@@ -889,10 +889,12 @@ namespace cs808
             const char* const nets[] { "v5", "vcc", "0", "ncl", "nint", "nrc1", "ntrc", "ntm2", "ntosc", "ntempo", "nss", "nfill", "nand",
                                        "ngate", "bus_pa", "bus_pb", "bus_ph", "bus_pg", "bus_pc", "bus_d", "bus_a", "nwe", "nce", "nce7",
                                        "nce8", "nce9", "nce10", "bus_pd", "bus_pe", "bus_pf", "npf3", "npi2", "nq27", "nic6a", "nrc23",
-                                       "nic6b", "nrc27", "n6", "nb31", "nb32", "nx", "nq33", "vt" };
+                                       "nic6b", "nrc27", "n6", "nb31", "nb32", "nx", "nq33", "nb33", "nb34", "vbu", "vt" };
             const char* const currents[] { "r117.i", "r120.i", "r113.i", "q31.ic", "q31.ib", "q31.ie", "q32.ic", "q32.ib", "q32.ie",
                                            "q27.ic", "q27.ib", "q27.ie", "q34.ic", "q34.ib", "q34.ie", "q18.ic", "q18.ib", "q18.ie",
-                                           "r100.i", "r102.i", "c23.i", "c27.i", "r85.i", "tm1.i", "tempo.i", "tm2.i", "vr3.i" };
+                                           "r100.i", "r102.i", "c23.i", "c27.i", "r85.i", "tm1.i", "tempo.i", "tm2.i", "vr3.i",
+                                           "q33.ic", "q33.ib", "q33.ie", "r118.i", "r119.i", "r122.i", "r123.i",
+                                           "r95.i", "r96.i", "r98.i", "r99.i" };
             for (const auto* n : nets)
                 r.series[n].assign(static_cast<std::size_t>(r.samples), 0.0f);
             for (const auto* n : currents)
@@ -938,6 +940,9 @@ namespace cs808
                     }
                 }
                 set("nce", reading ? 0.0 : 5.0);
+                // IC5's pull-ups (D339): current through the one whose select is low
+                for (const auto& [pull, ce] : { std::pair { "r99.i", "nce7" }, std::pair { "r96.i", "nce8" }, std::pair { "r98.i", "nce9" }, std::pair { "r95.i", "nce10" } })
+                    set(pull, r.series[ce][i] < 2.5f ? 5.0 / 15000.0 : 0.0);
                 set("bus_pc", data);
                 set("bus_d", data);
                 set("bus_a", ms < 0.075 ? 5.0 * addressBits / 5.0 : 0.0);
@@ -949,7 +954,21 @@ namespace cs808
                 set("bus_pf", stands ? 5.0 * count({ 2, 1, 0 }) / 3.0 : ms < 0.075 ? 5.0 * addressBits / 5.0 : 0.0);
                 const bool accented = stands && accent;
                 set("npf3", accented ? 5.0 : 0.0);
-                set("nq33", accented ? 0.1 : 5.0); // Q33 turns PF-3 over: Q34 shunts VR3 unless the step is accented
+                // Q33 turns PF-3 over (R119, R118 on its base): on, it pulls Q34's base down through R123 against R122, and
+                // Q34 lets VR3 be; off, R122 lifts Q34's base and Q34 shunts VR3 to about 5 V (page 8, D339)
+                set("nb33", accented ? 0.7 : 0.0);
+                set("nq33", accented ? 0.1 : 5.7);
+                set("nb34", accented ? 0.1 + (15.0 - 0.1) * 15.0 / 48.0 : 5.7);
+                set("vbu", 5.0);
+                const double i119 = accented ? (5.0 - 0.7) / 22000.0 : 0.0, i118 = accented ? 0.7 / 10000.0 : 0.0;
+                const double vb34 = r.series["nb34"][i], i122 = (15.0 - vb34) / 33000.0, i123 = accented ? (vb34 - 0.1) / 15000.0 : 0.0;
+                set("r119.i", i119);
+                set("r118.i", i118);
+                set("r122.i", i122);
+                set("r123.i", i123);
+                set("q33.ib", i119 - i118);
+                set("q33.ic", i123);
+                set("q33.ie", -(i119 - i118) - i123);
                 const double nx = accented ? accentVolts : 5.0;
                 set("nx", nx);
                 // the trigger: PI-2's 10 us pulse, Q27 turning it over, IC6's two halves timing 1 ms from its end
@@ -986,7 +1005,11 @@ namespace cs808
                         { "c23", { "nic6a", "nrc23" } }, { "r100", { "v5", "nrc23" } }, { "c27", { "nic6b", "nrc27" } },
                         { "r102", { "v5", "nrc27" } }, { "r85", { "bus_pc", "bus_d" } }, { "tm1", { "nrc1", "0" } },
                         { "tempo", { "ntrc", "ntm2" } }, { "tm2", { "ntm2", "0" } }, { "vr3", { "vcc", "nx" } },
-                        { "q34", { "nx", "nq33", "v5" } }, { "q18", { "ngate", "nand", "0" } } };
+                        { "q34", { "nx", "nb34", "v5" } }, { "q18", { "ngate", "nand", "0" } },
+                        // named on page 8 (D339): Q33 with R118, R119, R123 and Q34's R122; IC5's four pull-ups
+                        { "q33", { "nq33", "nb33", "0" } }, { "r118", { "nb33", "0" } }, { "r119", { "npf3", "nb33" } },
+                        { "r123", { "nb34", "nq33" } }, { "r122", { "vcc", "nb34" } },
+                        { "r99", { "vbu", "nce7" } }, { "r96", { "vbu", "nce8" } }, { "r98", { "vbu", "nce9" } }, { "r95", { "vbu", "nce10" } } };
             juce::StringArray drums;
             static constexpr std::array<const char*, 11> codes { "BD", "SD", "LT", "MT", "HT", "RS", "CP", "CB", "CY", "OH", "CH" };
             for (int l = 0; l < 11; ++l)
@@ -997,12 +1020,29 @@ namespace cs808
             return r;
         }
 
-        Recording loadRecording(int which)
+        /** The toms' sheet's six (D339): the low, mid and high tom, then their congas, each from tools/tr808/tom.cir. */
+        constexpr std::array<const char*, 6> tomNames { "low tom", "mid tom", "high tom", "low conga", "mid conga", "high conga" };
+
+        juce::var tomRecording(int variant)
+        {
+            const auto blob = [](const char* data, int size) { return juce::JSON::parse(juce::String::fromUTF8(data, size)); };
+            switch (variant)
+            {
+                case 1: return blob(LibraryData::midtom_currents_json, LibraryData::midtom_currents_jsonSize);
+                case 2: return blob(LibraryData::hightom_currents_json, LibraryData::hightom_currents_jsonSize);
+                case 3: return blob(LibraryData::lowconga_currents_json, LibraryData::lowconga_currents_jsonSize);
+                case 4: return blob(LibraryData::midconga_currents_json, LibraryData::midconga_currents_jsonSize);
+                case 5: return blob(LibraryData::highconga_currents_json, LibraryData::highconga_currents_jsonSize);
+                default: return blob(LibraryData::tom_currents_json, LibraryData::tom_currents_jsonSize);
+            }
+        }
+
+        Recording loadRecording(int which, int variant = 0)
         {
             if (which == cpuSection)
                 return cpuStepRecording({});
             const auto root = which == snareDrum ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::snare_currents_json, LibraryData::snare_currents_jsonSize))
-                              : which == lowTom  ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::tom_currents_json, LibraryData::tom_currents_jsonSize))
+                              : which == lowTom  ? tomRecording(variant)
                               : which == rimShot ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::rimshot_currents_json, LibraryData::rimshot_currents_jsonSize))
                               : which == handClap ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::clap_currents_json, LibraryData::clap_currents_jsonSize))
                               : which == cowbell ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::cowbell_currents_json, LibraryData::cowbell_currents_jsonSize))
@@ -1010,10 +1050,10 @@ namespace cs808
                               : which == cymbal ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::cymbal_currents_json, LibraryData::cymbal_currents_jsonSize))
                               : which == hiHats ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::hats_currents_json, LibraryData::hats_currents_jsonSize))
                                                  : juce::JSON::parse(juce::String::fromUTF8(LibraryData::bassdrum_currents_json, LibraryData::bassdrum_currents_jsonSize));
-            return parseRecording(root, which);
+            return parseRecording(root, which, variant);
         }
 
-        Recording parseRecording(const juce::var& root, int which)
+        Recording parseRecording(const juce::var& root, int which, int variant)
         {
             Recording r;
             const auto* times = root.getProperty("t", {}).getArray();
@@ -1072,7 +1112,7 @@ namespace cs808
                 r.setting << "the rim shot (the claves' parts switched out), " << set.getProperty("amp", "?").toString()
                           << " V on the trigger line, Level " << set.getProperty("lev", "?").toString();
             else if (which == lowTom)
-                r.setting << "the low tom, " << set.getProperty("amp", "?").toString() << " V on the trigger line, Tuning "
+                r.setting << "the " << tomNames[static_cast<std::size_t>(juce::jlimit(0, 5, variant))] << ", " << set.getProperty("amp", "?").toString() << " V on the trigger line, Tuning "
                           << set.getProperty("tune", "?").toString() << ", Level " << set.getProperty("lev", "?").toString()
                           << ", the pink noise as a " << juce::String(juce::roundToInt(set.getProperty("pn", "0").toString().getDoubleValue() * 1000.0))
                           << " mV sine at 150 Hz (so the hit is the same every time)";
@@ -1186,6 +1226,9 @@ namespace cs808
             struct Wire { Pt a, b; std::vector<float> current; float offset = 0.0f; Coef coef; };
 
             int which = bassDrum;
+            int variant = 0; // the toms' sheet: which tom or conga (D339)
+            int framesSeen = 0;         // the engine's capture frames at the last tick, and when they last grew (D339)
+            double framesSeenAt = 0.0;
             float width = 690.0f, height = 282.0f; // the sheet, in drawing units
             Recording rec;
             Board drawing { Board::Empty {} };
@@ -1263,7 +1306,8 @@ namespace cs808
                 return ms <= 6.0 ? "the attack: Q43 holds the pitch up" : "the ring: the resonator sounds on";
             }
 
-            explicit FullDrum(int drum) : which(drum), rec(loadRecording(drum))
+            /** `tomVariant` for the toms' sheet (D339): 0 to 2 the low, mid and high tom, 3 to 5 their congas. */
+            explicit FullDrum(int drum, int tomVariant = 0) : which(drum), variant(tomVariant), rec(loadRecording(drum, tomVariant))
             {
                 if (rec.samples < 2)
                 {
@@ -1476,9 +1520,9 @@ namespace cs808
                 The CPU section (D321): the main board's, as the service notes draw and describe it (pages 3 to 5, 14 to 16),
                 its chips as boxes with the pins the notes name. The clocks on the left (IFT-1, IC1's interrupt and tempo,
                 IC2A, the status gate IC3 with Q18); the CPU in the middle, its scan and keys below; the memory on the right
-                (IC7 to IC10, R85 to R88, the decoder IC5); along the top the step's instrument data to the drums' gates;
-                along the bottom the trigger: Q27, IC6's monostable and the accent's Q31 to Q34 with VR3. Where the notes
-                name no part (the pull-ups, Q33's resistors, IC5's type) none is drawn.
+                (IC7 to IC10, R85 to R88, the decoder IC5 with its pull-ups); along the top the step's instrument data to
+                the drums' gates; along the bottom the trigger: Q27, IC6's monostable and the accent's Q31 to Q34 with VR3
+                (page 8 of the service notes, D339).
             */
             void buildCpuSection(Board::Sheet& a, auto& W, auto& R, auto& C, auto& POT, auto& Q, auto& pin, auto& open, auto& gnd, auto& supply)
             {
@@ -1596,10 +1640,22 @@ namespace cs808
                     W({ { 390, y + 18 }, { 365, y + 18 } });
                     W({ { 390, y + 28 }, { 350, y + 28 } });
                 }
-                chip("IC5 ~ the decoder: PE-2 and PE-3 pick one of the four RAMs, enabled by PI-1 (its type is not given)", 490, 40, 50, 156, { "IC5", "DECODER" },
+                chip("IC5 ~ an MC14051BCP, an eight-way analog switch used as the decoder: PE-2 and PE-3 pick one of the four RAMs, enabled by PI-1", 490, 40, 50, 156, { "IC5", "MC14051" },
                      { { 'l', 48, "", "nce7" }, { 'l', 94, "", "nce8" }, { 'l', 140, "", "nce9" }, { 'l', 186, "", "nce10" },
                        { 'r', 100, "", "bus_pe" }, { 'b', 530, "CE", "nce" } });
                 pin(550, 100, "bus_pe", "PE-2/3", 554, 100, L);
+                // IC5's pull-ups to BU, the backup supply: each select high while IC5 leaves it (15 k x 4 on page 8)
+                {
+                    const std::array<const char*, 4> ids { "r99", "r96", "r98", "r95" };
+                    const std::array<const char*, 4> names { "R99 ~ 15 k: pulls IC5's X4 up to BU while it is off", "R96 ~ 15 k: X5's",
+                                                             "R98 ~ 15 k: X6's", "R95 ~ 15 k: X7's" };
+                    for (int k = 0; k < 4; ++k)
+                    {
+                        const float y = 48.0f + 46.0f * static_cast<float>(k);
+                        R(ids[static_cast<std::size_t>(k)], 480, y - 18.0f, 'v', 18, names[static_cast<std::size_t>(k)]);
+                        pin(480, y - 18.0f, "vbu", k == 0 ? "BU" : "", 484, y - 22.0f, L);
+                    }
+                }
                 W({ { 330, 200 }, { 370, 200 }, { 370, 212 }, { 530, 212 }, { 530, 206 } });
 
                 // ---- The trigger (bottom) ----
@@ -1631,7 +1687,19 @@ namespace cs808
                 W({ { 650, 144 }, { 650, 210 } });
                 W({ { 610, 144 }, { 650, 144 } });
                 Q("q34", 610, 156, false, "Q34 ~ shunts VR3 to about 5 V while PF-3 is low: no accent, a 4 V trigger");
-                pin(594, 156, "nq33", "PF3 / Q33", 590, 156, Rj);
+                // Q34's base: R122 from +15 V, R123 down to Q33, which PF-3 turns on through R119 (R118 holding it off)
+                supply(594, 120, true);
+                R("r122", 594, 120, 'v', 36, "R122 ~ 33 k: lifts Q34's base, so Q34 shunts VR3");
+                W({ { 594, 156 }, { 580, 156 } });
+                R("r123", 580, 156, 'v', 18, "R123 ~ 15 k");
+                W({ { 580, 174 }, { 580, 190 }, { 620, 190 }, { 620, 204 } });
+                Q("q33", 620, 216, false, "Q33 ~ turns PF-3 over: on for an accented step, pulling Q34's base down");
+                gnd(620, 228);
+                R("r119", 560, 216, 'h', 22, "R119 ~ 22 k");
+                pin(560, 216, "npf3", "PF-3", 556, 212, Rj);
+                W({ { 582, 216 }, { 590, 216 }, { 604, 216 } });
+                R("r118", 590, 216, 'v', 18, "R118 ~ 10 k");
+                gnd(590, 234);
                 pin(610, 168, "v5", "+5 V", 614, 172, L);
                 R("r120", 650, 210, 'v', 22, "R120 ~ 4.7 k");
                 W({ { 650, 232 }, { 650, 250 } });
@@ -1767,6 +1835,63 @@ namespace cs808
             void buildTom(Board::Sheet& a, auto& W, auto& term, auto& R, auto& C, auto& POT, auto& DI, auto& Q, auto& pin,
                           auto& open, auto& wiper, auto& two)
             {
+                // Each label as the low tom has it, and the mid's and the high's (the service notes, p. 9, D339).
+                static const std::map<std::string, std::array<const char*, 2>> others {
+                    { "R214 ~ 4.7 k", { "R243 ~ 4.7 k", "R269 ~ 4.7 k" } },
+                    { "Q51 ~ a PNP switch: it can only push current into the tom", { "Q54 ~ a PNP switch: it can only push current into the tom", "Q57 ~ a PNP switch: it can only push current into the tom" } },
+                    { "R213 ~ 10 k", { "R242 ~ 10 k", "R268 ~ 10 k" } },
+                    { "Q50 ~ on while the tom's step data stands", { "Q53 ~ on while the tom's step data stands", "Q56 ~ on while the tom's step data stands" } },
+                    { "LT ON", { "MT ON", "HT ON" } },
+                    { "R211 ~ 22 k", { "R240 ~ 22 k", "R267 ~ 22 k" } },
+                    { "R212 ~ 10 k", { "R241 ~ 10 k", "R271 ~ 10 k" } },
+                    { "R215 ~ 4.7 k", { "R251 ~ 4.7 k", "R270 ~ 4.7 k" } },
+                    { "C73 ~ 6.8 nF: the pulse's front edge", { "C86 ~ 2.7 nF: the pulse's front edge", "C99 ~ 2.7 nF: the pulse's front edge" } },
+                    { "D56 ~ clamps the falling edge", { "D58 ~ clamps the falling edge", "D60 ~ clamps the falling edge" } },
+                    { "R226 ~ 22 k", { "R255 ~ 22 k", "R282 ~ 22 k" } },
+                    { "R225 ~ 4.7 k", { "R254 ~ 6.8 k", "R281 ~ 5.6 k" } },
+                    { "R224 ~ 1.5 k, switched in for the conga", { "R253 ~ 2.2 k, switched in for the conga", "R280 ~ 1.5 k, switched in for the conga" } },
+                    { "IC15a ~ the resonator: a bridged-T that rings at the tom's pitch", { "IC17a ~ the resonator: a bridged-T that rings at the tom's pitch", "IC18a ~ the resonator: a bridged-T that rings at the tom's pitch" } },
+                    { "C76 ~ 0.056 uF", { "C90 ~ 0.027 uF", "C103 ~ 0.027 uF" } },
+                    { "C89 ~ on the mid tom only: 1 pF here, as if absent", { "C89 ~ 0.0082 uF, for the tom only", "C89 ~ on the mid tom only: 1 pF here, as if absent" } },
+                    { "C78 ~ 0.012 uF", { "C92 ~ 0.012 uF", "C105 ~ 0.0056 uF" } },
+                    { "C77 ~ 0.047 uF, for the tom only", { "C91 ~ 0.027 uF, for the tom only", "C104 ~ 0.022 uF, for the tom only" } },
+                    { "R228 ~ 820 k", { "R257 ~ 820 k", "R284 ~ 820 k" } },
+                    { "R231 ~ 1 k", { "R260 ~ 1 k", "R287 ~ 1 k" } },
+                    { "D80 ~ germanium: bends the pitch down as the tom rings out", { "D82 ~ germanium: bends the pitch down as the tom rings out", "D84 ~ germanium: bends the pitch down as the tom rings out" } },
+                    { "D81 ~ germanium, the other way", { "D83 ~ germanium, the other way", "D85 ~ germanium, the other way" } },
+                    { "R229 ~ 33 k", { "R258 ~ 33 k", "R285 ~ 33 k" } },
+                    { "IC15b ~ turns the resonator's output over", { "IC17b ~ turns the resonator's output over", "IC18b ~ turns the resonator's output over" } },
+                    { "R227 ~ 33 k", { "R256 ~ 33 k", "R283 ~ 33 k" } },
+                    { "R230 ~ 865 k: how long the tom rings", { "R259 ~ 865 k: how long the tom rings", "R286 ~ 880 k: how long the tom rings" } },
+                    { "R219 ~ 4.7 k", { "R244 ~ 4.7 k", "R274 ~ 4.7 k" } },
+                    { "D55", { "D57", "D59" } },
+                    { "C72 ~ 0.039 uF: the noise's envelope", { "C85 ~ 0.033 uF: the noise's envelope", "C100 ~ 0.033 uF: the noise's envelope" } },
+                    { "R218 ~ 2.2 M", { "R247 ~ 2.2 M", "R276 ~ 2.2 M" } },
+                    { "R216 ~ 15 k", { "R245 ~ 15 k", "R273 ~ 15 k" } },
+                    { "C71 ~ 0.047 uF", { "C84 ~ 0.047 uF", "C98 ~ 0.047 uF" } },
+                    { "R217 ~ 3.3 k", { "R246 ~ 3.3 k", "R272 ~ 3.3 k" } },
+                    { "R220 ~ 33 k", { "R248 ~ 33 k", "R275 ~ 33 k" } },
+                    { "Q52 ~ the gate: lets the noise through while the envelope lasts", { "Q55 ~ the gate: lets the noise through while the envelope lasts", "Q58 ~ the gate: lets the noise through while the envelope lasts" } },
+                    { "R221 ~ 4.7 k", { "R252 ~ 4.7 k", "R279 ~ 4.7 k" } },
+                    { "C74 ~ 0.047 uF", { "C87 ~ 0.033 uF", "C101 ~ 0.027 uF" } },
+                    { "R223 ~ 22 k", { "R249 ~ 22 k", "R277 ~ 22 k" } },
+                    { "R222 ~ 22 k", { "R250 ~ 22 k", "R278 ~ 22 k" } },
+                    { "C75 ~ 0.018 uF", { "C88 ~ 0.015 uF", "C102 ~ 0.01 uF" } },
+                    { "R232 ~ 100 k, open for the conga", { "R261 ~ 100 k, open for the conga", "R288 ~ 100 k, open for the conga" } },
+                    { "R233 ~ 100 k", { "R262 ~ 100 k", "R289 ~ 100 k" } },
+                    { "C81 ~ 0.047 uF", { "C96 ~ 0.039 uF", "C108 ~ 0.033 uF" } },
+                    { "IC13 ~ the mixer: the tone and the noise summed", { "IC16 ~ the mixer: the tone and the noise summed", "IC16 ~ the mixer: the tone and the noise summed" } },
+                    { "C83 ~ 1 nF", { "C97 ~ 1 nF", "C110 ~ 1 nF" } },
+                    { "R235 ~ 470 k", { "R266 ~ 470 k", "R291 ~ 470 k" } },
+                    { "VR10 LEVEL ~ 100 k", { "VR12 LEVEL ~ 100 k", "VR14 LEVEL ~ 100 k" } },
+                    { "C82 ~ 33 uF", { "C95 ~ 33 uF", "C109 ~ 33 uF" } },
+                };
+                const int pair = variant % 3;
+                const auto tl = [pair](const char* low) -> juce::String
+                {
+                    const auto it = others.find(low);
+                    return pair == 0 || it == others.end() ? juce::String(low) : juce::String(it->second[static_cast<std::size_t>(pair - 1)]);
+                };
                 width = 640.0f;
                 height = 362.0f;
                 const auto L = juce::Justification::centredLeft;
@@ -1804,69 +1929,69 @@ namespace cs808
                 W({ { 92, 122 }, { 92, 130 } }); R("r113", 92, 130, 'v', 22, "R113 ~ 4.7 k, holds the line down"); W({ { 92, 152 }, { 92, 166 }, { 66, 166 } });
                 W({ { 92, 130 }, { 110, 130 }, { 110, 112 }, { 150, 112 }, { 150, 118 } });
                 // The tom's switch
-                R("r214", 122, 112, 'v', 18, "R214 ~ 4.7 k"); W({ { 122, 130 }, { 134, 130 } });
-                Q("q51", 150, 130, true, "Q51 ~ a PNP switch: it can only push current into the tom");
-                R("r213", 122, 130, 'v', 26, "R213 ~ 10 k"); W({ { 122, 156 }, { 122, 160 } }); Q("q50", 122, 172, false, "Q50 ~ on while the tom's step data stands"); W({ { 122, 184 }, { 122, 340 } });
-                pin(74, 172, "nlt", "LT ON", 72, 182, M); W({ { 74, 172 }, { 76, 172 } }); R("r211", 76, 172, 'h', 22, "R211 ~ 22 k"); W({ { 98, 172 }, { 106, 172 } });
-                R("r212", 102, 172, 'v', 18, "R212 ~ 10 k"); W({ { 102, 190 }, { 102, 340 } });
-                W({ { 150, 142 }, { 150, 220 }, { 196, 220 } }); W({ { 150, 150 }, { 160, 150 } }); R("r215", 160, 150, 'v', 18, "R215 ~ 4.7 k"); W({ { 160, 168 }, { 160, 196 } });
+                R("r214", 122, 112, 'v', 18, tl("R214 ~ 4.7 k")); W({ { 122, 130 }, { 134, 130 } });
+                Q("q51", 150, 130, true, tl("Q51 ~ a PNP switch: it can only push current into the tom"));
+                R("r213", 122, 130, 'v', 26, tl("R213 ~ 10 k")); W({ { 122, 156 }, { 122, 160 } }); Q("q50", 122, 172, false, tl("Q50 ~ on while the tom's step data stands")); W({ { 122, 184 }, { 122, 340 } });
+                pin(74, 172, "nlt", tl("LT ON"), 72, 182, M); W({ { 74, 172 }, { 76, 172 } }); R("r211", 76, 172, 'h', 22, tl("R211 ~ 22 k")); W({ { 98, 172 }, { 106, 172 } });
+                R("r212", 102, 172, 'v', 18, tl("R212 ~ 10 k")); W({ { 102, 190 }, { 102, 340 } });
+                W({ { 150, 142 }, { 150, 220 }, { 196, 220 } }); W({ { 150, 150 }, { 160, 150 } }); R("r215", 160, 150, 'v', 18, tl("R215 ~ 4.7 k")); W({ { 160, 168 }, { 160, 196 } });
 
                 // The pulse into the resonator's + input
-                W({ { 176, 220 }, { 176, 170 } }); C("c73", 176, 170, 'h', 14, "C73 ~ 6.8 nF: the pulse's front edge"); W({ { 190, 170 }, { 208, 170 } });
-                DU("d56", 208, 170, 20, "D56 ~ clamps the falling edge"); W({ { 208, 190 }, { 208, 196 } });
-                R("r226", 208, 170, 'h', 22, "R226 ~ 22 k"); W({ { 230, 170 }, { 276, 170 }, { 276, 158 }, { 290, 158 } });
-                R("r225", 238, 170, 'v', 18, "R225 ~ 4.7 k"); W({ { 238, 188 }, { 238, 196 } });
-                R("r224", 262, 170, 'v', 18, "R224 ~ 1.5 k, switched in for the conga"); W({ { 262, 188 }, { 262, 196 } });
+                W({ { 176, 220 }, { 176, 170 } }); C("c73", 176, 170, 'h', 14, tl("C73 ~ 6.8 nF: the pulse's front edge")); W({ { 190, 170 }, { 208, 170 } });
+                DU("d56", 208, 170, 20, tl("D56 ~ clamps the falling edge")); W({ { 208, 190 }, { 208, 196 } });
+                R("r226", 208, 170, 'h', 22, tl("R226 ~ 22 k")); W({ { 230, 170 }, { 276, 170 }, { 276, 158 }, { 290, 158 } });
+                R("r225", 238, 170, 'v', 18, tl("R225 ~ 4.7 k")); W({ { 238, 188 }, { 238, 196 } });
+                R("r224", 262, 170, 'v', 18, tl("R224 ~ 1.5 k, switched in for the conga")); W({ { 262, 188 }, { 262, 196 } });
 
                 // The resonator: IC15a and its bridged-T, the Tuning pot and the germanium pair on the middle node
-                a.OP(290, 140, "IC15a ~ the resonator: a bridged-T that rings at the tom's pitch"); open(290, 146, "ninv"); open(290, 158, "np"); term(Pt(316, 152), {}, "no1", true);
+                a.OP(290, 140, tl("IC15a ~ the resonator: a bridged-T that rings at the tom's pitch")); open(290, 146, "ninv"); open(290, 158, "np"); term(Pt(316, 152), {}, "no1", true);
                 W({ { 290, 146 }, { 282, 146 }, { 282, 88 }, { 272, 88 } }); W({ { 272, 104 }, { 282, 104 } });
-                C("c76", 258, 104, 'h', 14, "C76 ~ 0.056 uF", true); C("cint", 258, 88, 'h', 14, "C89 ~ on the mid tom only: 1 pF here, as if absent", true);
-                W({ { 258, 40 }, { 258, 104 } }); C("c78", 258, 56, 'h', 14, "C78 ~ 0.012 uF"); C("c77", 258, 72, 'h', 14, "C77 ~ 0.047 uF, for the tom only");
+                C("c76", 258, 104, 'h', 14, tl("C76 ~ 0.056 uF"), true); C("cint", 258, 88, 'h', 14, tl("C89 ~ on the mid tom only: 1 pF here, as if absent"), true);
+                W({ { 258, 40 }, { 258, 104 } }); C("c78", 258, 56, 'h', 14, tl("C78 ~ 0.012 uF")); C("c77", 258, 72, 'h', 14, tl("C77 ~ 0.047 uF, for the tom only"));
                 W({ { 272, 56 }, { 330, 56 } }); W({ { 272, 72 }, { 330, 72 } }); W({ { 330, 56 }, { 330, 152 }, { 316, 152 } });
-                W({ { 282, 124 }, { 296, 124 } }); R("r228", 296, 124, 'h', 22, "R228 ~ 820 k"); W({ { 318, 124 }, { 330, 124 } });
+                W({ { 282, 124 }, { 296, 124 } }); R("r228", 296, 124, 'h', 22, tl("R228 ~ 820 k")); W({ { 318, 124 }, { 330, 124 } });
                 W({ { 236, 70 }, { 214, 70 }, { 214, 104 }, { 258, 104 } });
-                R("r231", 214, 104, 'v', 18, "R231 ~ 1 k"); W({ { 214, 122 }, { 214, 128 }, { 200, 128 } });
-                a.R(200, 108, false, 40, "VR TUNING ~ 500 ohm: the pitch");
+                R("r231", 214, 104, 'v', 18, tl("R231 ~ 1 k")); W({ { 214, 122 }, { 214, 128 }, { 200, 128 } });
+                a.R(200, 108, false, 40, tl("VR TUNING ~ 500 ohm: the pitch"));
                 two("rva", Pt(200, 108), Pt(200, 128)); two("rvb", Pt(200, 128), Pt(200, 148)); wiper(200, 128);
                 W({ { 200, 148 }, { 168, 148 } });
                 W({ { 200, 108 }, { 200, 50 }, { 236, 50 } });
-                DU("d80", 222, 50, 20, "D80 ~ germanium: bends the pitch down as the tom rings out");
-                DI("d81", 236, 50, 20, "D81 ~ germanium, the other way");
+                DU("d80", 222, 50, 20, tl("D80 ~ germanium: bends the pitch down as the tom rings out"));
+                DI("d81", 236, 50, 20, tl("D81 ~ germanium, the other way"));
 
                 // IC15b inverts the resonator's output and R230 feeds it back to the middle node
-                W({ { 330, 146 }, { 340, 146 } }); R("r229", 340, 146, 'h', 22, "R229 ~ 33 k"); W({ { 362, 146 }, { 380, 146 } });
-                a.OP(380, 140, "IC15b ~ turns the resonator's output over"); open(380, 146, "nin2"); open(380, 158, "0"); term(Pt(406, 152), {}, "no2", true);
+                W({ { 330, 146 }, { 340, 146 } }); R("r229", 340, 146, 'h', 22, tl("R229 ~ 33 k")); W({ { 362, 146 }, { 380, 146 } });
+                a.OP(380, 140, tl("IC15b ~ turns the resonator's output over")); open(380, 146, "nin2"); open(380, 158, "0"); term(Pt(406, 152), {}, "no2", true);
                 W({ { 380, 158 }, { 372, 158 }, { 372, 196 } });
-                W({ { 370, 146 }, { 370, 120 } }); R("r227", 370, 120, 'h', 22, "R227 ~ 33 k"); W({ { 392, 120 }, { 416, 120 }, { 416, 152 }, { 406, 152 } });
-                W({ { 416, 120 }, { 416, 40 }, { 292, 40 } }); R("r230", 270, 40, 'h', 22, "R230 ~ 865 k: how long the tom rings", true); W({ { 258, 40 }, { 270, 40 } });
+                W({ { 370, 146 }, { 370, 120 } }); R("r227", 370, 120, 'h', 22, tl("R227 ~ 33 k")); W({ { 392, 120 }, { 416, 120 }, { 416, 152 }, { 406, 152 } });
+                W({ { 416, 120 }, { 416, 40 }, { 292, 40 } }); R("r230", 270, 40, 'h', 22, tl("R230 ~ 865 k: how long the tom rings"), true); W({ { 258, 40 }, { 270, 40 } });
 
                 // The noise: the envelope (R219, D55, C72), the pink noise through R216 and C71, Q52 the gate, its filter
-                R("r219", 196, 220, 'h', 22, "R219 ~ 4.7 k"); W({ { 218, 220 }, { 226, 220 } });
-                DI("d55", 226, 220, 20, "D55"); W({ { 226, 240 }, { 226, 250 } });
-                C("c72", 226, 250, 'v', 14, "C72 ~ 0.039 uF: the noise's envelope"); W({ { 226, 264 }, { 226, 340 } });
-                W({ { 226, 246 }, { 236, 246 } }); R("r218", 236, 246, 'h', 22, "R218 ~ 2.2 M"); W({ { 258, 246 }, { 300, 246 } });
+                R("r219", 196, 220, 'h', 22, tl("R219 ~ 4.7 k")); W({ { 218, 220 }, { 226, 220 } });
+                DI("d55", 226, 220, 20, tl("D55")); W({ { 226, 240 }, { 226, 250 } });
+                C("c72", 226, 250, 'v', 14, tl("C72 ~ 0.039 uF: the noise's envelope")); W({ { 226, 264 }, { 226, 340 } });
+                W({ { 226, 246 }, { 236, 246 } }); R("r218", 236, 246, 'h', 22, tl("R218 ~ 2.2 M")); W({ { 258, 246 }, { 300, 246 } });
                 pin(318, 262, "npn", "PINK NOISE", 318, 274, M); W({ { 312, 262 }, { 318, 262 } });
-                R("r216", 290, 262, 'h', 22, "R216 ~ 15 k", true); W({ { 266, 262 }, { 290, 262 } });
-                C("c71", 266, 248, 'v', 14, "C71 ~ 0.047 uF", true); W({ { 266, 246 }, { 266, 248 } });
-                R("r217", 280, 262, 'v', 18, "R217 ~ 3.3 k"); W({ { 280, 280 }, { 280, 340 } });
-                R("r220", 300, 246, 'h', 22, "R220 ~ 33 k");
-                Q("q52", 338, 246, false, "Q52 ~ the gate: lets the noise through while the envelope lasts"); W({ { 338, 258 }, { 338, 340 } });
-                R("r221", 338, 208, 'v', 18, "R221 ~ 4.7 k"); W({ { 338, 226 }, { 338, 234 } });
-                W({ { 338, 230 }, { 350, 230 } }); C("c74", 350, 230, 'h', 14, "C74 ~ 0.047 uF"); W({ { 364, 230 }, { 380, 230 } });
-                R("r223", 372, 230, 'v', 18, "R223 ~ 22 k"); W({ { 372, 248 }, { 372, 340 } });
-                R("r222", 380, 230, 'h', 22, "R222 ~ 22 k"); W({ { 402, 230 }, { 430, 230 } });
-                C("c75", 414, 230, 'v', 14, "C75 ~ 0.018 uF"); W({ { 414, 244 }, { 414, 340 } });
-                R("r232", 430, 230, 'h', 22, "R232 ~ 100 k, open for the conga"); W({ { 452, 230 }, { 500, 230 } });
+                R("r216", 290, 262, 'h', 22, tl("R216 ~ 15 k"), true); W({ { 266, 262 }, { 290, 262 } });
+                C("c71", 266, 248, 'v', 14, tl("C71 ~ 0.047 uF"), true); W({ { 266, 246 }, { 266, 248 } });
+                R("r217", 280, 262, 'v', 18, tl("R217 ~ 3.3 k")); W({ { 280, 280 }, { 280, 340 } });
+                R("r220", 300, 246, 'h', 22, tl("R220 ~ 33 k"));
+                Q("q52", 338, 246, false, tl("Q52 ~ the gate: lets the noise through while the envelope lasts")); W({ { 338, 258 }, { 338, 340 } });
+                R("r221", 338, 208, 'v', 18, tl("R221 ~ 4.7 k")); W({ { 338, 226 }, { 338, 234 } });
+                W({ { 338, 230 }, { 350, 230 } }); C("c74", 350, 230, 'h', 14, tl("C74 ~ 0.047 uF")); W({ { 364, 230 }, { 380, 230 } });
+                R("r223", 372, 230, 'v', 18, tl("R223 ~ 22 k")); W({ { 372, 248 }, { 372, 340 } });
+                R("r222", 380, 230, 'h', 22, tl("R222 ~ 22 k")); W({ { 402, 230 }, { 430, 230 } });
+                C("c75", 414, 230, 'v', 14, tl("C75 ~ 0.018 uF")); W({ { 414, 244 }, { 414, 340 } });
+                R("r232", 430, 230, 'h', 22, tl("R232 ~ 100 k, open for the conga")); W({ { 452, 230 }, { 500, 230 } });
 
                 // The mixer, IC13, and the Level
-                W({ { 416, 152 }, { 430, 152 } }); R("r233", 430, 152, 'h', 22, "R233 ~ 100 k"); C("c81", 452, 152, 'h', 14, "C81 ~ 0.047 uF"); W({ { 466, 152 }, { 500, 152 } });
+                W({ { 416, 152 }, { 430, 152 } }); R("r233", 430, 152, 'h', 22, tl("R233 ~ 100 k")); C("c81", 452, 152, 'h', 14, tl("C81 ~ 0.047 uF")); W({ { 466, 152 }, { 500, 152 } });
                 W({ { 500, 84 }, { 500, 230 } });
-                a.OP(520, 140, "IC13 ~ the mixer: the tone and the noise summed"); open(520, 146, "nsum"); open(520, 158, "0"); term(Pt(546, 152), {}, "vout", true);
+                a.OP(520, 140, tl("IC13 ~ the mixer: the tone and the noise summed")); open(520, 146, "nsum"); open(520, 158, "0"); term(Pt(546, 152), {}, "vout", true);
                 W({ { 500, 146 }, { 520, 146 } }); W({ { 520, 158 }, { 512, 158 }, { 512, 196 } });
-                C("c83", 500, 84, 'h', 14, "C83 ~ 1 nF"); W({ { 514, 84 }, { 560, 84 } });
-                R("r235", 500, 100, 'h', 22, "R235 ~ 470 k"); W({ { 522, 100 }, { 560, 100 } });
-                POT("rvr10", 500, 116, 'h', 22, "VR10 LEVEL ~ 100 k"); C("c82", 522, 116, 'h', 14, "C82 ~ 33 uF"); W({ { 536, 116 }, { 560, 116 } });
+                C("c83", 500, 84, 'h', 14, tl("C83 ~ 1 nF")); W({ { 514, 84 }, { 560, 84 } });
+                R("r235", 500, 100, 'h', 22, tl("R235 ~ 470 k")); W({ { 522, 100 }, { 560, 100 } });
+                POT("rvr10", 500, 116, 'h', 22, tl("VR10 LEVEL ~ 100 k")); C("c82", 522, 116, 'h', 14, tl("C82 ~ 33 uF")); W({ { 536, 116 }, { 560, 116 } });
                 W({ { 546, 152 }, { 560, 152 }, { 560, 84 } }); W({ { 560, 152 }, { 580, 152 } });
                 {
                     auto& out = a.add({});
@@ -2978,14 +3103,16 @@ namespace cs808
         Board board;
         int boardUnbound = 0; // the board's struck flows no recording drives (D280; the tests want none)
         std::array<std::unique_ptr<FullDrum>, drumsDrawn> drums; // each made the first time it is shown
+        std::array<std::unique_ptr<FullDrum>, 6> toms;           // the toms' sheet's six, likewise (D339)
+        int tomVariant = 0;                                      // the tom or conga struck last
         FullDrum* full = nullptr;                                // the one shown
         bool showFull = false;
 
         FullDrum& drum(int which)
         {
-            auto& d = drums[static_cast<std::size_t>(which)];
+            auto& d = which == lowTom ? toms[static_cast<std::size_t>(tomVariant)] : drums[static_cast<std::size_t>(which)];
             if (! d)
-                d = std::make_unique<FullDrum>(which);
+                d = std::make_unique<FullDrum>(which, which == lowTom ? tomVariant : 0);
             return *d;
         }
         double now = 0.0, last = 0.0;
@@ -3012,7 +3139,7 @@ namespace cs808
     {
         auto& i = *impl;
         i.boardUnbound = bindBoard(i.board);
-        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete", "Hand clap, complete", "Cowbell, complete", "Metal oscillators", "Cymbal, complete", "Hi-hats, complete", "CPU section" };
+        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Toms, complete", "Rim shot, complete", "Hand clap, complete", "Cowbell, complete", "Metal oscillators", "Cymbal, complete", "Hi-hats, complete", "CPU section" };
         i.sheet.chip.fontHeight = 10.5f;
         i.sheet.chip.text = "Sheet: Whole board";
         i.sheet.get = [this] { return impl->showFull && impl->full ? 1 + impl->full->which : 0; };
@@ -3076,9 +3203,15 @@ namespace cs808
     juce::StringArray LidView::completeDrumProblems()
     {
         juce::StringArray all;
+        const int shownTom = impl->tomVariant;
         for (int d = 0; d < drumsDrawn; ++d)
-            for (const auto& e : impl->drum(d).errors)
-                all.add(juce::String(d == cpuSection ? "the CPU section: " : d == hiHats ? "the hi-hats: " : d == cymbal ? "the cymbal: " : d == metalShared ? "the metal oscillators: " : d == cowbell ? "the cowbell: " : d == handClap ? "the hand clap: " : d == rimShot ? "the rim shot: " : d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
+            for (int v = 0; v < (d == lowTom ? 6 : 1); ++v) // the toms' sheet: each tom and conga (D339)
+            {
+                impl->tomVariant = v;
+                for (const auto& e : impl->drum(d).errors)
+                    all.add(juce::String(d == cpuSection ? "the CPU section: " : d == hiHats ? "the hi-hats: " : d == cymbal ? "the cymbal: " : d == metalShared ? "the metal oscillators: " : d == cowbell ? "the cowbell: " : d == handClap ? "the hand clap: " : d == rimShot ? "the rim shot: " : d == lowTom ? juce::String("the ") + tomNames[static_cast<std::size_t>(v)] + ": " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
+            }
+        impl->tomVariant = shownTom;
         return all;
     }
 
@@ -3141,10 +3274,29 @@ namespace cs808
         // Its drum struck, the sheet runs the hit in real time from the strike (D326; it was slowed down, with a Play
         // key and a slider). The hi-hats' closed hat is part of an open hat's hit while that runs (400 ms, its
         // recording's length); alone, it starts the sheet itself, as the engine starts its capture (D339).
+        // The toms' sheet (D339): the tom or conga struck last (the highest of several at once, as the engine's
+        // capture takes them), its own drawing and recording.
+        for (int lane = 4; lane >= 2; --lane)
+            if (((lanes >> lane) & 1u) != 0)
+            {
+                const int v = (lane - 2) + (processor.project().kit.alt[static_cast<std::size_t>(lane)] ? 3 : 0);
+                if (v != impl->tomVariant)
+                {
+                    impl->tomVariant = v;
+                    if (impl->showFull && impl->full && impl->full->which == lowTom)
+                    {
+                        impl->full = &impl->drum(lowTom);
+                        resized();
+                        repaint();
+                    }
+                }
+                break;
+            }
+        const bool toms = impl->showFull && impl->full && impl->full->which == lowTom && (lanes & 0b11100u) != 0;
         const bool hats = impl->showFull && impl->full && impl->full->which == hiHats;
         const bool closedAlone = hats && (lanes & (1u << 10)) != 0 && impl->now - impl->full->stepAt > 400.0;
         if (impl->showFull && impl->full && impl->full->which != cpuSection
-            && ((lanes & (1u << laneOfDrum[impl->full->which])) != 0 || closedAlone))
+            && ((lanes & (1u << laneOfDrum[impl->full->which])) != 0 || closedAlone || toms))
         {
             impl->full->stepAt = impl->now;
             impl->full->following = true;
@@ -3206,8 +3358,16 @@ namespace cs808
             auto& f = *impl->full;
             const unsigned int hits = watch.captureCount();
             const int frames = watch.framesCaptured();
-            // a hit's capture is taken once it is whole and newer than the sheet's
-            if (hits != f.liveHits && frames > 8 && watch.capturedTime(frames - 1) >= lengthOf[static_cast<std::size_t>(f.which)] - 1.0f)
+            // a hit's capture is taken once it is whole and newer than the sheet's: its recording's length, or no new
+            // frame for 120 ms (a drum that rang down, its voice ended, before the recording's end: a mid tom, D339)
+            if (frames != f.framesSeen)
+            {
+                f.framesSeen = frames;
+                f.framesSeenAt = impl->now;
+            }
+            const bool whole = frames > 8 && (watch.capturedTime(frames - 1) >= lengthOf[static_cast<std::size_t>(f.which)] - 1.0f
+                                              || impl->now - f.framesSeenAt >= 120.0);
+            if (hits != f.liveHits && whole)
             {
                 watch.holdCapture(true);
                 auto captured = f.fromCapture(watch, watch.framesCaptured());

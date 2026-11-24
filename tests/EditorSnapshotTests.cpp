@@ -276,6 +276,9 @@ public:
             shoot("lid-snare");
             editor->lidForTesting().showSheet(3);
             shoot("lid-low-tom");
+            editor->lidForTesting().struck(1u << 3); // the mid tom struck: the toms' sheet shows it (D339)
+            shoot("lid-mid-tom");
+            editor->lidForTesting().struck(1u << 2);
             editor->lidForTesting().showSheet(4);
             shoot("lid-rim-shot");
             editor->lidForTesting().showSheet(5);

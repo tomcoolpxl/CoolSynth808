@@ -249,7 +249,7 @@ namespace cs808
         // The trigger shaper: Q27 turns the pulse over, IC6 (a TC4011) widens it to about 1 ms (R100 C23, R102 C27);
         // the accent's Q31 to Q34 and VR3 set its height; the common trigger runs right and up to the trigger bus.
         cpu.addPart('Q', { 700.0f, 470.0f }, 8.0f, C::triggerBus, "Q27");
-        cpu.addPart('D', shaper, 21.0f, C::triggerBus, "IC6", 14, "TC4011BP");
+        cpu.addPart('D', shaper, 21.0f, C::triggerBus, "IC6", 14, "TC4011BCP");
         cpu.addPart('R', { 830.0f, 452.0f }, 7.0f, C::triggerBus, "R100");
         cpu.addPart('C', { 870.0f, 452.0f }, 7.0f, C::triggerBus, "C23");
         cpu.addPart('R', { 830.0f, 508.0f }, 7.0f, C::triggerBus, "R102");
@@ -264,7 +264,9 @@ namespace cs808
         {
             const float x = 730.0f + 52.0f * static_cast<float>(i);
             cpu.addPart('Q', { x, 575.0f }, 8.0f, C::triggerBus, "Q" + juce::String(31 + i));
-            cpu.addPart('R', { x, 612.0f }, 6.0f, C::triggerBus, "R" + juce::String(104 + i), 0, {}, true);
+            // each one's base resistor, as page 8 of the service notes names them (D339): R117, R120, R119, R122
+            static constexpr std::array<int, 4> baseResistor { 117, 120, 119, 122 };
+            cpu.addPart('R', { x, 612.0f }, 6.0f, C::triggerBus, "R" + juce::String(baseResistor[static_cast<std::size_t>(i)]), 0, {}, true);
             cpu.addTrace({ { x - 3.6f, 575.0f }, { x - 26.0f, 575.0f } }, C::triggerBus);
             cpu.addTrace({ { x, 582.0f }, { x, 604.0f } }, C::triggerBus);
             cpu.addTrace({ { x, 620.0f }, { x, 640.0f }, { 890.0f, 640.0f } }, C::cpuPower);
@@ -272,15 +274,16 @@ namespace cs808
         cpu.addPart('T', { 912.0f, 600.0f }, 8.0f, C::triggerBus, "VR3");
         cpu.addTrace({ { 912.0f, 591.6f }, { 912.0f, 575.0f }, { 891.0f, 575.0f } }, C::triggerBus);
 
-        // The memories: IC5 decodes PE2 and PE3 to pick one of four uPD444C (1K x 4 each, 18 pins), its four selects
-        // reaching each memory's pin 1 without a crossing.
-        cpu.addPart('D', decoder, 21.0f, C::cpuMemory, "IC5", 14, "MC14001");
+        // The memories: IC5 (an MC14051BCP, an eight-way analog switch used as the decoder, page 8) decodes PE2 and PE3
+        // to pick one of four uPD444C (1K x 4 each, 18 pins), its four selects reaching each memory's pin 1 without a
+        // crossing.
+        cpu.addPart('D', decoder, 21.0f, C::cpuMemory, "IC5", 16, "MC14051BCP");
         constexpr std::array<float, 4> ramX { 330.0f, 420.0f, 510.0f, 600.0f };
         constexpr float ramY = 600.0f;
         for (std::size_t r = 0; r < ramX.size(); ++r)
             cpu.addPart('D', { ramX[r], ramY }, 21.0f, C::cpuMemory, "IC" + juce::String(7 + static_cast<int>(r)), 18, "uPD444C");
         const auto ramTopPin0 = [&](std::size_t r) { return P(ramX[r] - 31.5f + 3.5f, ramY - 10.5f - 3.5f); };
-        const auto decoderBottom = [&](int i) { return P(decoder.x - 24.5f + 3.5f + 7.0f * static_cast<float>(i), decoder.y + 14.0f); };
+        const auto decoderBottom = [&](int i) { return P(decoder.x - 28.0f + 3.5f + 7.0f * static_cast<float>(i), decoder.y + 14.0f); };
         cpu.addTrace({ decoderBottom(0), { decoderBottom(0).x, 560.0f }, { ramTopPin0(0).x, 560.0f }, ramTopPin0(0) }, C::cpuMemory);
         cpu.addTrace({ decoderBottom(1), { decoderBottom(1).x, 564.0f }, { ramTopPin0(1).x, 564.0f }, ramTopPin0(1) }, C::cpuMemory);
         cpu.addTrace({ decoderBottom(3), { decoderBottom(3).x, 560.0f }, { ramTopPin0(3).x, 560.0f }, ramTopPin0(3) }, C::cpuMemory);
@@ -325,43 +328,39 @@ namespace cs808
         cpu.addTrace({ { 48.0f, 691.6f }, { 48.0f, 676.0f } }, C::cpuClock);
         cpu.addPart('C', { 80.0f, 700.0f }, 7.0f, C::cpuClock, "C11");
 
-        // The tempo clock: IC12 (a TC4013 as a toggle) halves the tempo oscillator, TM-2 trims its range, CN3 takes the
-        // Tempo knob; IC11 (an MC14001) gates the keys' scan.
-        cpu.addPart('D', { 790.0f, 700.0f }, 21.0f, C::cpuClock, "IC12", 14, "TC4013BP");
+        // The tempo oscillator (page 8, D339): Q13 and Q14 a pair, Q16 its output into IC1's gates; TM-2 trims its range,
+        // CN3 takes the Tempo knob.
+        for (int i = 0; i < 3; ++i)
+            cpu.addPart('Q', { 772.0f + 24.0f * static_cast<float>(i), 700.0f }, 8.0f, C::cpuClock, i == 0 ? "Q13" : i == 1 ? "Q14" : "Q16");
+        cpu.addTrace({ { 772.0f, 707.0f }, { 772.0f, 716.0f }, { 796.0f, 716.0f }, { 796.0f, 707.0f } }, C::cpuClock);
         cpu.addPart('T', { 868.0f, 700.0f }, 8.0f, C::cpuClock, "TM-2");
         cpu.addPart('J', { 940.0f, 700.0f }, 7.0f, C::cpuClock, "CN3", 3);
-        cpu.addTrace({ { 814.5f - 3.5f, 686.0f }, { 811.0f, 676.0f }, { 868.0f, 676.0f }, { 868.0f, 691.6f } }, C::cpuClock);
+        cpu.addTrace({ { 820.0f, 693.0f }, { 820.0f, 676.0f }, { 868.0f, 676.0f }, { 868.0f, 691.6f } }, C::cpuClock);
         cpu.addTrace({ { 872.8f, 708.4f }, { 872.8f, 724.0f }, { 933.0f, 724.0f }, { 933.0f, 700.0f } }, C::cpuClock);
         cpu.addTrace({ { 863.2f, 708.4f }, { 863.2f, 730.0f }, { 947.0f, 730.0f }, { 947.0f, 700.0f } }, C::cpuPower);
-        cpu.addPart('D', { 700.0f, 700.0f }, 21.0f, C::cpuScan, "IC11", 14, "MC14001");
-        for (int i = 0; i < 3; ++i)
-        {
-            // nested, the outermost the deepest, so none crosses another
-            const float from = 707.0f + 7.0f * static_cast<float>(i), to = 783.0f - 7.0f * static_cast<float>(i), y = 752.0f - 4.0f * static_cast<float>(i);
-            cpu.addTrace({ { from, 714.0f }, { from, y }, { to, y }, { to, 714.0f } }, C::cpuScan + i, true);
-        }
-        // the chips' decoupling capacitors, each beside its chip's supply pin
-        const std::array<std::pair<P, const char*>, 6> decoupling { { { { 222.0f, 470.0f }, "C1" }, { { 375.0f, 640.0f }, "C2" },
-                                                                    { { 525.0f, 520.0f }, "C3" }, { { 815.0f, 480.0f }, "C4" },
-                                                                    { { 1070.0f, 590.0f }, "C5" }, { { 985.0f, 700.0f }, "C6" } } };
-        for (const auto& [at, name] : decoupling)
-            cpu.addPart('C', at, 6.0f, C::cpuPower, name);
+        // IC11, an AN6912 (page 8, D339): its comparators make the cowbell's and the accent's trigger outputs (CB, AC)
+        // for the jack board, JACK-A; lit with the cowbell and the accent.
+        cpu.addPart('D', { 700.0f, 700.0f }, 21.0f, 8, "IC11", 14, "AN6912");
+        cpu.addPart('J', { 700.0f, 746.0f }, 7.0f, C::cpuPower, "JACK-A", 2);
+        cpu.addTrace({ { 686.0f, 714.0f }, { 686.0f, 730.0f }, { 696.5f, 730.0f }, { 696.5f, 746.0f } }, 8);
+        cpu.addTrace({ { 714.0f, 714.0f }, { 714.0f, 734.0f }, { 703.5f, 734.0f }, { 703.5f, 746.0f } }, 0);
 
-        // The status gate (IC3) and start/stop (IC2, a TC4013), the scan's inverters (Q18, Q23, Q24), the DIN socket
+        // The keys' gate (IC3, a TC4001BCP's NOR gates, page 8) and start/stop (IC2, a TC4013), the scan's inverters
+        // (Q18, Q23, Q24, with R59, R69, R71), the DIN socket
         // for sync, the backup battery and its switches (Q64, Q75) that keep the memories alive.
         const P gate { 1010.0f, 540.0f }, startStop { 1130.0f, 540.0f };
-        cpu.addPart('D', gate, 21.0f, C::cpuCore, "IC3", 16, "MC14051");
+        cpu.addPart('D', gate, 21.0f, C::cpuCore, "IC3", 14, "TC4001BCP");
         cpu.addPart('D', startStop, 21.0f, C::cpuCore, "IC2", 14, "TC4013BP");
         for (int i = 0; i < 3; ++i)
         {
             const float x = 980.0f + 60.0f * static_cast<float>(i);
             cpu.addPart('Q', { x, 610.0f }, 8.0f, C::cpuScan + i, juce::String(i == 0 ? "Q18" : i == 1 ? "Q23" : "Q24"));
-            cpu.addPart('R', { x + 22.0f, 640.0f }, 6.0f, C::cpuScan + i, "R" + juce::String(60 + i), 0, {}, true);
+            cpu.addPart('R', { x + 22.0f, 640.0f }, 6.0f, C::cpuScan + i, i == 0 ? "R59" : i == 1 ? "R69" : "R71", 0, {}, true);
             cpu.addTrace({ { x, 603.0f }, { x, 558.0f } }, C::cpuScan + i);
             cpu.addTrace({ { x + 3.6f, 610.0f }, { x + 22.0f, 610.0f }, { x + 22.0f, 632.0f } }, C::cpuScan + i);
         }
         for (int i = 0; i < 4; ++i)
-            cpu.addTrace({ { gate.x + 31.5f, 528.0f - 3.0f * static_cast<float>(i) - 4.0f }, { startStop.x - 24.5f, 528.0f - 3.0f * static_cast<float>(i) - 4.0f } }, C::cpuCore, true);
+            cpu.addTrace({ { gate.x + 28.0f, 528.0f - 3.0f * static_cast<float>(i) - 4.0f }, { startStop.x - 24.5f, 528.0f - 3.0f * static_cast<float>(i) - 4.0f } }, C::cpuCore, true);
         cpu.addPart('K', { 1110.0f, 722.0f }, 17.0f, C::cpuClock, "DIN SYNC");
         cpu.addTrace({ { 1110.0f - 10.2f, 722.0f }, { 1070.0f, 722.0f }, { 1070.0f, 680.0f }, { startStop.x - 10.5f, 680.0f }, { startStop.x - 10.5f, startStop.y + 14.0f } }, C::cpuClock);
         cpu.addPart('B', { 1200.0f, 722.0f }, 15.0f, C::cpuPower, "BT1");
