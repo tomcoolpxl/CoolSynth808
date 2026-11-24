@@ -164,6 +164,8 @@ public:
                     hooks.chooseCircuitAnimated = [](bool) {};
                     hooks.circuitShow = [] { return 1; };
                     hooks.chooseCircuitShow = [](int) {};
+                    hooks.drumNotes = [] { return std::array<int, 16> { 36, 38, 43, 47, 50, 37, 39, 56, 49, 46, 42, 64, 63, 62, 75, 70 }; }; // General MIDI (D329)
+                    hooks.learningDrumNote = [] { return 1; }; // the snare being learned
                     auto options = makeOptionsPanelForTesting(std::move(hooks), &devices);
                     const auto image = options->createComponentSnapshot(options->getLocalBounds(), true, 2.0f);
                     juce::FileOutputStream out(folder.getChildFile(juce::String("options-") + themes()[static_cast<std::size_t>(t)].id + ".png"));
