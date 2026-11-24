@@ -41,14 +41,15 @@ juce_add_binary_data(CoolSynth808Library
         resources/fonts/IBMPlexMono-Medium.ttf
         resources/fonts/IBMPlexMono-SemiBold.ttf)
 
-# A JUCE audio plugin built as a standalone app for now (D267): the plugin formats are one line away.
+# A JUCE audio plugin: the standalone app (D267) and a VST3 for a DAW (D311, D324), as CoolSynth 303's.
 juce_add_plugin(CoolSynth808
     COMPANY_NAME "tomcoolpxl"
     PRODUCT_NAME "CoolSynth 808"
     PLUGIN_NAME "CoolSynth 808"
     PLUGIN_MANUFACTURER_CODE Tcpx
     PLUGIN_CODE Cs88
-    FORMATS Standalone
+    FORMATS Standalone VST3
+    VST3_CATEGORIES Instrument Drum
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT TRUE
@@ -137,6 +138,7 @@ if(BUILD_TESTING)
             tests/LibraryTests.cpp
             tests/EditorSnapshotTests.cpp
             tests/ControllerTests.cpp
+            tests/HostingTests.cpp
             ${COOLSYNTH808_SOURCES})
     target_include_directories(CoolSynth808Tests PRIVATE src tests)
     target_compile_features(CoolSynth808Tests PUBLIC cxx_std_20)
@@ -145,7 +147,9 @@ if(BUILD_TESTING)
             JUCE_WEB_BROWSER=0
             JUCE_USE_CURL=0
             JUCE_STANDALONE_APPLICATION=1
-            COOLSYNTH808_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+            COOLSYNTH808_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+            COOLSYNTH808_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+            JUCE_PLUGINHOST_VST3=1)
     target_link_libraries(CoolSynth808Tests
         PRIVATE
             coolsynth_engine

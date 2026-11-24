@@ -306,6 +306,7 @@ namespace cs808
         auto* o = new juce::DynamicObject();
         o->setProperty("project", projectToJson(model));
         o->setProperty("file", file.getFullPathName());
+        o->setProperty("followHostPlay", followsHostPlay()); // the DAW's project keeps it (D324)
         destData.replaceAll(juce::JSON::toString(juce::var(o), true).toRawUTF8(), juce::JSON::toString(juce::var(o), true).getNumBytesAsUTF8());
     }
 
@@ -322,6 +323,7 @@ namespace cs808
         }
         if (const auto path = state.getProperty("file", "").toString(); juce::File::isAbsolutePath(path))
             file = juce::File(path);
+        setFollowHostPlay(static_cast<bool>(state.getProperty("followHostPlay", true)));
     }
 
     // ---- Transport --------------------------------------------------------------------------------------------
@@ -602,23 +604,44 @@ namespace cs808
             else if (m.isSongPositionPointer())
                 clock.songPosition(m.getSongPositionPointerMidiBeat());
         }
-        const bool byClock = followClockOn.load(std::memory_order_relaxed) && clock.present(samplesSoFar);
+        // In a DAW (D311, D324): its transport leads while it plays, from where it is, at its tempo, unless the switch
+        // keeps the pattern to its own Play key; its tempo leads always. A clock leads only the standalone app.
+        bool hostPlays = false;
+        double hostBeat = 0.0, hostBpm = 0.0;
+        if (wrapperType != wrapperType_Standalone)
+            if (auto* head = getPlayHead())
+                if (const auto position = head->getPosition())
+                {
+                    if (const auto b = position->getBpm())
+                        hostBpm = *b;
+                    if (const auto ppq = position->getPpqPosition(); ppq && position->getIsPlaying())
+                    {
+                        hostPlays = true;
+                        hostBeat = std::max(0.0, *ppq);
+                    }
+                }
+        const bool byHost = hostPlays && followHostPlayOn.load(std::memory_order_relaxed);
+        hostFollowed.store(byHost, std::memory_order_release);
+        const bool byClock = ! byHost && followClockOn.load(std::memory_order_relaxed) && clock.present(samplesSoFar);
         clockFollowed.store(byClock, std::memory_order_release);
 
         bool started = false, stopped = false;
         const int request = playRequest.exchange(-1, std::memory_order_acq_rel);
         // Following a clock, it plays while the clock plays; a clock gone while it played stops it, rather than going
         // on from a stale place on its own (the review of D267).
-        bool wantPlay = byClock ? clock.isPlaying() : (request < 0 ? playing : request == 1);
+        bool wantPlay = byHost ? true : byClock ? clock.isPlaying() : (request < 0 ? playing : request == 1);
         if (! byClock && playing && playingByClock)
             wantPlay = false;
-        const bool wasOwnClock = playing && ! playingByClock;
+        if (! byHost && playing && playingByHost)
+            wantPlay = false; // the host stopped
+        const bool wasOwnClock = playing && ! playingByClock && ! playingByHost;
         if (wantPlay && ! playing)
         {
             playing = true;
             started = true;
             playingByClock = byClock;
-            if (! byClock)
+            playingByHost = byHost;
+            if (! byClock && ! byHost)
                 beat = 0.0;
             engine.reseed(); // a defined start (D224)
         }
@@ -626,11 +649,16 @@ namespace cs808
         {
             playing = false;
             stopped = true;
+            playingByHost = false;
         }
 
         double beat0 = beat, bpm = playOnAudio.tempo;
         if (byClock)
             clock.block(samplesSoFar, n, beat0, bpm);
+        if (hostBpm > 0.0)
+            bpm = juce::jlimit(20.0, 400.0, hostBpm); // the host's tempo, whoever leads
+        if (byHost)
+            beat0 = hostBeat;
 
         // Edits waiting for a bar line (an audition in time, D274): stopped or just started, they come in at once;
         // playing, on the first bar line at or after this block's start. In the block, it is split there: the part
@@ -650,7 +678,7 @@ namespace cs808
                 else if (at < static_cast<double>(n))
                     split = static_cast<int>(at);
             }
-            if (! byClock)
+            if (! byClock && hostBpm <= 0.0)
                 bpm = playOnAudio.tempo;
         }
         const double beatsPerSample = bpm / 60.0 / rate;
@@ -667,7 +695,7 @@ namespace cs808
         {
             settingsBeforeSplit = engineSettings;
             pullFromUi(true, cueBar);
-            if (! byClock)
+            if (! byClock && hostBpm <= 0.0)
             {
                 bpmAfter = playOnAudio.tempo;
                 beatsPerSampleAfter = bpmAfter / 60.0 / rate;
@@ -768,7 +796,7 @@ namespace cs808
         const double beatEnd = beatAt(n);
 
         midi.clear();
-        if (! byClock && sendClockOn.load(std::memory_order_relaxed))
+        if (! byClock && ! byHost && ! isPlugin() && sendClockOn.load(std::memory_order_relaxed))
         {
             sendClock(midi, beat0, beatAtSplit, split, started, stopped);
             if (split < n)
@@ -778,10 +806,10 @@ namespace cs808
             midi.addEvent(juce::MidiMessage::midiStop(), 0); // a clock came in while it led: what it led stops too
 
         if (playing && ! byClock)
-            beat = beatEnd;
+            beat = beatEnd; // led by the host, the next block's start comes from it again
         samplesSoFar += n;
         // A chain that does not loop has played through: its own transport stops (D297). A clock leads on its own.
-        if (playing && ! byClock && ! playOnAudio.loop && sequencer.endedAt(beat))
+        if (playing && ! byClock && ! byHost && ! playOnAudio.loop && sequencer.endedAt(beat))
             playRequest.store(0, std::memory_order_release);
 
         if (playing)

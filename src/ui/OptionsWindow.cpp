@@ -201,8 +201,20 @@ namespace cs808
             send.isOn = [this] { return hooks.sendClock(); };
             send.filledWhenOn = false;
             send.onClick = [this](const juce::MouseEvent&) { hooks.chooseSendClock(! hooks.sendClock()); repaint(); };
+            if (inPlugin())
+            {
+                follow.text = "Follow the host's Play";
+                follow.isOn = [this] { return hooks.followHostPlay && hooks.followHostPlay(); };
+                follow.onClick = [this](const juce::MouseEvent&)
+                {
+                    if (hooks.chooseFollowHostPlay)
+                        hooks.chooseFollowHostPlay(! hooks.followHostPlay());
+                    repaint();
+                };
+            }
             addAndMakeVisible(follow);
-            addAndMakeVisible(send);
+            addChildComponent(send);
+            send.setVisible(! inPlugin());
 
             for (const auto& t : themes())
                 themeChoice.options.push_back(t.name);
@@ -334,7 +346,7 @@ namespace cs808
                     row(*inputs[i], i == 0 ? "Inputs" : juce::String());
                 row(midiOut, "Output");
             }
-            labels.push_back({ "Clock", y });
+            labels.push_back({ inPlugin() ? "Host" : "Clock", y });
             follow.setBounds(pad + labelWidth, y, 220, rowHeight);
             send.setBounds(pad + labelWidth + 230, y, 140, rowHeight);
             y += rowHeight + rowGap + sectionGap;
@@ -427,6 +439,7 @@ namespace cs808
         juce::AudioDeviceManager* devices;
         Picker driver, output, rate, buffer, midiOut;
         Chip controlPanel, testTone, follow, send, controller;
+        [[nodiscard]] bool inPlugin() const { return hooks.plugin && hooks.plugin(); }
         juce::OwnedArray<Chip> inputs;
         int knownInputs = -1;
         Choices themeChoice, zoomChoice, showChoice;

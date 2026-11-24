@@ -389,6 +389,61 @@ public:
             logMessage("two seconds of every drum: " + juce::String(off, 0) + " ms without the board, " + juce::String(on, 0) + " ms with it");
         }
 
+        beginTest("in_a_daw_the_pattern_follows_the_host_unless_switched_off");
+        {
+            // D324: under a host's transport the pattern plays while it plays, from where it is, at its tempo; with
+            // the switch off it waits for its own Play key, and plays at the host's tempo still.
+            struct Head final : juce::AudioPlayHead
+            {
+                double ppq = 0.0;
+                bool playing = true;
+                juce::Optional<PositionInfo> getPosition() const override
+                {
+                    PositionInfo info;
+                    info.setIsPlaying(playing);
+                    info.setPpqPosition(ppq);
+                    info.setBpm(125.0);
+                    return info;
+                }
+            } head;
+            auto p = prepared();
+            p->editBank([](SequencerBank& b) { for (int s = 0; s < 16; s += 4) b.pattern[0].lanes[0].a[static_cast<std::size_t>(s)].on = true; }, false);
+            p->setPlayHead(&head);
+            const auto run = [&](int blocks)
+            {
+                juce::AudioBuffer<float> buffer(2, kBlock);
+                double energy = 0.0;
+                for (int b = 0; b < blocks; ++b)
+                {
+                    juce::MidiBuffer midi;
+                    buffer.clear();
+                    p->processBlock(buffer, midi);
+                    if (head.playing)
+                        head.ppq += kBlock / kRate * 125.0 / 60.0;
+                    for (int i = 0; i < kBlock; ++i)
+                        energy += static_cast<double>(buffer.getSample(0, i)) * buffer.getSample(0, i);
+                }
+                return energy;
+            };
+            const int second = static_cast<int>(kRate) / kBlock;
+            expect(run(second) > 1.0e-3, "the host plays: the pattern plays with it");
+            expect(p->isPlaying() && p->followingHost(), "led by the host");
+            expectWithinAbsoluteError(p->tempoNow(), 125.0, 1.0e-6, "at the host's tempo");
+            head.playing = false;
+            (void) run(second);
+            expect(! p->isPlaying(), "the host stops: so does the pattern");
+
+            p->setFollowHostPlay(false);
+            head.playing = true;
+            (void) run(second);
+            expect(! p->isPlaying(), "the switch off: the host's Play does not start the pattern");
+            p->setPlaying(true);
+            expect(run(second) > 1.0e-3, "its own Play key starts it");
+            expect(p->isPlaying() && ! p->followingHost(), "not led by the host");
+            expectWithinAbsoluteError(p->tempoNow(), 125.0, 1.0e-6, "at the host's tempo still");
+            p->setPlayHead(nullptr);
+        }
+
         beginTest("a_switch_strikes_the_other_instrument");
         {
             auto p = prepared();

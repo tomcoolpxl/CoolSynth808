@@ -3087,8 +3087,8 @@ namespace cs808
         auto& i = *impl;
         auto bottom = getLocalBounds().removeFromBottom(24);
         i.sheet.chip.setBounds(bottom.removeFromRight(250).reduced(0, 1));
-        // the CPU sheet has no Play or slider: it follows the sequencer's steps (the user, D323)
-        const bool full = i.showFull && i.full && i.full->rec.samples > 1 && i.full->which != cpuSection;
+        // no sheet has a Play key or a slider: each hit plays in real time as it is struck (the user, D323, D325)
+        const bool full = false;
         i.play.setVisible(full);
         i.time.setVisible(full);
         if (full)
@@ -3138,9 +3138,15 @@ namespace cs808
         // Its drum struck, the hit plays from the start, slowed down; strikes while it plays are held off until it is
         // through, as a scope's trigger holdoff does, or a beat restarts it every step and only the trigger shows.
         // A hit paused or moved on its slider stays where it is.
-        if (impl->showFull && impl->full && impl->full->which != cpuSection && ! impl->full->playing && impl->full->pos <= 0.0
-            && (lanes & ((1u << laneOfDrum[impl->full->which]) | (impl->full->which == hiHats ? 1u << 10 : 0u))) != 0)
-            impl->full->playing = true;
+        // Its drum struck, the sheet runs the hit in real time from the strike (D325; it was slowed down, with a Play
+        // key and a slider). The hi-hats' closed hat is part of the open hat's hit: it does not start it again.
+        if (impl->showFull && impl->full && impl->full->which != cpuSection
+            && (lanes & (1u << laneOfDrum[impl->full->which])) != 0)
+        {
+            impl->full->stepAt = impl->now;
+            impl->full->following = true;
+            impl->full->playing = false;
+        }
         impl->cpuLanes |= lanes; // the CPU sheet's next step (D321)
         const auto& kit = processor.project().kit;
         for (int l = 0; l < laneCount; ++l)
@@ -3174,6 +3180,7 @@ namespace cs808
             p += 1.0;
         f.pos = p;
         f.playing = false;
+        f.following = false;
         return f.live;
     }
 
@@ -3248,15 +3255,17 @@ namespace cs808
         if (impl->showFull && impl->full && impl->full->rec.samples > 1)
         {
             auto& f = *impl->full;
-            if (f.playing)
+            // A drum's hit in real time (D325): through its recording or capture, then at rest again.
+            if (f.which != cpuSection && f.following)
             {
-                f.pos += dt * f.rec.samples / 16.0; // the whole recording in 16 seconds
-                if (f.pos >= f.rec.samples - 1)
+                const double ms = nowMs - f.stepAt;
+                if (ms >= f.rec.ms.back())
                 {
+                    f.following = false;
                     f.pos = 0.0;
-                    f.playing = false;
                 }
-                impl->time.setValue(f.pos, juce::dontSendNotification);
+                else
+                    f.pos = f.posAt(ms);
             }
             for (auto& w : f.wires)
             {
@@ -3425,8 +3434,8 @@ namespace cs808
             }
         }
 
-        // The drum's output over the whole hit, in the sheet's empty foot (D316): where the hit is now marked.
-        if (f.which != cpuSection)
+        // The drum's output over the whole hit is no longer drawn in the foot (the user, D325).
+        if (false)
         {
             static constexpr std::array<const char*, 5> outputs { "vout", "vcy", "voh", "ncbo", "n10" }; // not the j* nodes: those are trigger jacks
             const std::vector<float>* out = nullptr;
@@ -3474,8 +3483,7 @@ namespace cs808
         auto bar = getLocalBounds().withTrimmedBottom(26).removeFromBottom(26).toFloat();
         g.setColour(look.ink);
         g.setFont(uiFont(11.5f));
-        if (f.which != cpuSection)
-            g.drawText(juce::String(ms, ms < 10.0 ? 2 : 0) + " ms, " + phase, bar.removeFromRight(320.0f), juce::Justification::centredLeft);
+        juce::ignoreUnused(phase, bar); // the time line is gone (the user, D325)
         if (impl->selected < 0)
         {
             auto caption = getLocalBounds().removeFromBottom(24).toFloat().withTrimmedRight(260.0f + backHintWidth);

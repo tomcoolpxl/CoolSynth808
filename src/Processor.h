@@ -158,6 +158,15 @@ namespace cs808
         void setFollowClock(bool on) noexcept { followClockOn.store(on, std::memory_order_relaxed); }
         void setSendClock(bool on) noexcept { sendClockOn.store(on, std::memory_order_relaxed); }
         [[nodiscard]] bool followsClock() const noexcept { return followClockOn.load(std::memory_order_relaxed); }
+        /** In a DAW (D311, D324): the pattern plays while the host plays, from where it is, at its tempo; off, it plays
+            only on its own Play key, at the host's tempo still (a hardware unit's Position Lock). On by default; kept
+            with the DAW's project. */
+        void setFollowHostPlay(bool on) noexcept { followHostPlayOn.store(on, std::memory_order_relaxed); }
+        [[nodiscard]] bool followsHostPlay() const noexcept { return followHostPlayOn.load(std::memory_order_relaxed); }
+        /** Whether the host's transport leads the pattern now. */
+        [[nodiscard]] bool followingHost() const noexcept { return hostFollowed.load(std::memory_order_acquire); }
+        /** A plugin in a DAW, not the standalone app nor the tests. */
+        [[nodiscard]] bool isPlugin() const noexcept { return wrapperType != wrapperType_Standalone && wrapperType != wrapperType_Undefined; }
         [[nodiscard]] bool sendsClock() const noexcept { return sendClockOn.load(std::memory_order_relaxed); }
         [[nodiscard]] bool inputsRoutedForTesting() const noexcept { return inputsRouted.load(std::memory_order_relaxed); }
         /** MIDI threads: a linked control's message from the controller's input, for the next block. A note or a
@@ -230,7 +239,7 @@ namespace cs808
         PlaySettings playOnAudio {};
         ClockFollower clock;
         bool playing = false;
-        bool playingByClock = false;
+        bool playingByClock = false, playingByHost = false;
         double beat = 0.0;
         std::int64_t samplesSoFar = 0;
         double rate = 48000.0;
@@ -238,7 +247,7 @@ namespace cs808
         std::vector<coolsynth::synth::EngineMidiEvent> sequencerEvents;
 
         // reported
-        std::atomic<bool> playingNow { false }, variationBNow { false }, clockFollowed { false };
+        std::atomic<bool> playingNow { false }, variationBNow { false }, clockFollowed { false }, hostFollowed { false };
         std::atomic<int> patternNow { 0 };
         std::atomic<std::int64_t> sixteenthNow { 0 };
         std::atomic<double> bpmNow { 120.0 };
@@ -260,7 +269,7 @@ namespace cs808
             double milliseconds = 0.0; // when it came, on the hi-res millisecond counter
         };
         std::atomic<bool> inputsRouted { false };
-        std::atomic<bool> followClockOn { true }, sendClockOn { true };
+        std::atomic<bool> followClockOn { true }, sendClockOn { true }, followHostPlayOn { true };
         juce::SpinLock routedWriters; // one writer at a time: each input may have its own thread
         juce::AbstractFifo routedFifo { 256 };
         std::array<RoutedMessage, 256> routedMessages {};

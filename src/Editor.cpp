@@ -369,6 +369,9 @@ namespace cs808
         hooks.sendClock = [this] { return processor.sendsClock(); };
         hooks.chooseFollowClock = [this](bool on) { processor.setFollowClock(on); settings->setValue("followClock", on); };
         hooks.chooseSendClock = [this](bool on) { processor.setSendClock(on); settings->setValue("sendClock", on); };
+        hooks.plugin = [this] { return processor.isPlugin(); };
+        hooks.followHostPlay = [this] { return processor.followsHostPlay(); };
+        hooks.chooseFollowHostPlay = [this](bool on) { processor.setFollowHostPlay(on); }; // kept with the DAW's project
         hooks.controllerSetup = [this] { openControllerSetup(); };
         hooks.circuitAnimated = [this] { return circuitAnimated; };
         hooks.chooseCircuitAnimated = [this](bool on) { circuitAnimated = on; settings->setValue("circuitAnimated", on); applyCircuitLook(); };
@@ -1019,7 +1022,7 @@ namespace cs808
         taps.push_back(now);
         if (taps.size() > 5)
             taps.erase(taps.begin());
-        if (taps.size() < 2 || processor.followingClock())
+        if (taps.size() < 2 || processor.followingClock() || processor.isPlugin())
             return;
         const double gap = (taps.back() - taps.front()) / static_cast<double>(taps.size() - 1);
         const double tempo = juce::jlimit(30.0, 300.0, std::round(60000.0 / gap * 2.0) / 2.0);
@@ -1128,7 +1131,7 @@ namespace cs808
         fold(beat, processor.playingPattern());
         fold(beat, processor.playingVariationB());
         fold(beat, processor.isRecording());
-        fold(beat, processor.followingClock() ? juce::roundToInt(processor.tempoNow() * 10.0) : -1);
+        fold(beat, processor.followingClock() || processor.isPlugin() ? juce::roundToInt(processor.tempoNow() * 10.0) + (processor.followingHost() ? 100000 : 0) : -1);
         fold(beat, fillAsked);
         fold(beat, chainPlace);
         // A pick that has come in, or a stopped transport, ends the wait (D303).

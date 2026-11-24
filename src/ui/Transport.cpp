@@ -27,7 +27,9 @@ namespace cs808
 
         void paint(juce::Graphics& g) override
         {
-            const double tempo = processor.followingClock() ? processor.tempoNow() : processor.project().play.tempo;
+            // following a clock or in a DAW, theirs; HOST under it while the host's Play leads (D324)
+            const bool led = processor.followingClock() || processor.isPlugin();
+            const double tempo = led ? processor.tempoNow() : processor.project().play.tempo;
             const auto number = juce::String(tempo, 1);
             const auto font = monoFont(13.0f);
             const float numberWidth = shapedWidth(font, number);
@@ -43,7 +45,7 @@ namespace cs808
             // BPM on the same baseline: the label's cap height sits lower than the digits' centre
             g.setColour(juce::Colour(0xffddd5c3));
             g.setFont(labelFont(10.0f));
-            shapedText(g, "BPM", area.withTrimmedLeft(numberWidth + 5.0f).translated(0.0f, 1.0f), juce::Justification::centredLeft, false);
+            shapedText(g, processor.followingHost() ? "HOST" : "BPM", area.withTrimmedLeft(numberWidth + 5.0f).translated(0.0f, 1.0f), juce::Justification::centredLeft, false);
         }
 
         void mouseDown(const juce::MouseEvent&) override
@@ -54,8 +56,8 @@ namespace cs808
 
         void mouseDrag(const juce::MouseEvent& e) override
         {
-            // Following a MIDI clock, the clock sets the tempo: the readout shows it and takes no edits.
-            if (processor.followingClock())
+            // Following a MIDI clock, or in a DAW, the clock or the host sets the tempo: the readout takes no edits.
+            if (processor.followingClock() || processor.isPlugin())
                 return;
             const double steps = std::round(-e.getDistanceFromDragStartY() / 2.0);
             const double v = juce::jlimit(30.0, 300.0, startValue + steps * 0.5);
@@ -67,7 +69,7 @@ namespace cs808
 
         void mouseDoubleClick(const juce::MouseEvent&) override
         {
-            if (! processor.followingClock())
+            if (! processor.followingClock() && ! processor.isPlugin())
                 processor.editPlay([](PlaySettings& p) { p.tempo = 120.0; });
             repaint();
         }
