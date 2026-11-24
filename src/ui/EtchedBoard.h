@@ -155,6 +155,7 @@ namespace cs808
         /** A wire's node, signed -1..1, with the lid lifted (D319): its drum's, the buses' and the master's from the
             drum that moves that role most now. */
         [[nodiscard]] float tintOf(int owner, int role) const;
+        [[nodiscard]] float cpuTintOf(int owner) const; // the CPU board in green and red (D344)
         [[nodiscard]] int columnAt(juce::Point<float> p) const;
         void paintOpenFrames(juce::Graphics& g) const;
         [[nodiscard]] float energyOf(int owner) const noexcept;

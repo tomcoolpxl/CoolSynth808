@@ -21,11 +21,12 @@ namespace cs808
     Processor::Processor(Offline) : Processor(true) {}
 
     Processor::Processor(bool offlineRender)
-        : juce::AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
+        : juce::AudioProcessor(buses()),
           offline(offlineRender)
     {
         events.reserve(maxEvents);
         sequencerEvents.resize(512);
+        createParameters();
         // A beat to start with, until a saved state or a project replaces it: kick, snare, closed hat.
         auto& first = model.currentBank().pattern[0];
         for (const int s : { 0, 8, 10 })
@@ -85,10 +86,23 @@ namespace cs808
             coolsynth::midi::ControllerSetup::instance().shutDown();
     }
 
+    juce::AudioProcessor::BusesProperties Processor::buses()
+    {
+        // The main mix in stereo, then each drum's own mono output (D343), off until the host turns it on.
+        auto b = BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true);
+        for (const auto& in : instruments)
+            b = b.withOutput(in.altCode != nullptr ? juce::String(in.code) + "/" + in.altCode : juce::String(in.code), juce::AudioChannelSet::mono(), false);
+        return b;
+    }
+
     bool Processor::isBusesLayoutSupported(const BusesLayout& layouts) const
     {
-        return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo()
-               && layouts.getMainInputChannelSet().isDisabled();
+        if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo() || ! layouts.getMainInputChannelSet().isDisabled())
+            return false;
+        for (int b = 1; b < layouts.outputBuses.size(); ++b)
+            if (const auto& set = layouts.outputBuses.getReference(b); ! set.isDisabled() && set != juce::AudioChannelSet::mono())
+                return false;
+        return true;
     }
 
     void Processor::takeLights(std::array<float, 12>& byLane) noexcept
@@ -130,6 +144,11 @@ namespace cs808
     {
         rate = sampleRate > 0.0 ? sampleRate : 48000.0;
         preparedBlock = std::max(1, samplesPerBlock);
+        for (std::size_t l = 0; l < taps.size(); ++l)
+        {
+            taps[l].assign(static_cast<std::size_t>(preparedBlock), 0.0f);
+            tapPointers[l] = taps[l].data();
+        }
         prepared = true;
         engine.setCircuitWatch(&watch); // the panel's lights follow the circuits as they play (D313)
         engine.setOversampling(accuracyLevel < 2); // the Lightest accuracy runs the voices at the host's rate (D339)
@@ -145,8 +164,92 @@ namespace cs808
 
     // ---- The project ------------------------------------------------------------------------------------------
 
+    namespace
+    {
+        bool sameKit(const KitValues& a, const KitValues& b) noexcept
+        {
+            for (std::size_t k = 0; k < a.knob.size(); ++k)
+                if (std::abs(a.knob[k] - b.knob[k]) > 1.0e-6f)
+                    return false;
+            return a.alt == b.alt && std::abs(a.volumeDb - b.volumeDb) < 1.0e-4f;
+        }
+    }
+
+    void Processor::createParameters()
+    {
+        // Named as the panel prints them: the drum's code and the knob's name ("BD Decay"), the Accent alone.
+        for (int k = 0; k < knobCount; ++k)
+        {
+            const auto& spec = knobs[static_cast<std::size_t>(k)];
+            const juce::String name = spec.lane < 0 ? juce::String(spec.label)
+                                                    : juce::String(instruments[static_cast<std::size_t>(spec.lane)].code) + " " + spec.label;
+            auto p = std::make_unique<juce::AudioParameterFloat>(juce::ParameterID { spec.id, 1 }, name, 0.0f, 1.0f, knobDefault(k));
+            knobParams[static_cast<std::size_t>(k)] = p.get();
+            addParameter(p.release());
+        }
+        auto volume = std::make_unique<juce::AudioParameterFloat>(juce::ParameterID { "volume", 1 }, "Volume", 0.0f, 1.0f,
+                                                                  volumePosition(KitValues {}.volumeDb));
+        volumeParam = volume.get();
+        addParameter(volume.release());
+        static constexpr std::array<const char*, switchCount> ids { "ltConga", "mtConga", "htConga", "rsClaves", "cpMaracas" };
+        for (int s = 0; s < switchCount; ++s)
+        {
+            static constexpr std::array<const char*, switchCount> names { "LT Conga", "MT Conga", "HT Conga", "RS Claves", "CP Maracas" };
+            auto p = std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ids[static_cast<std::size_t>(s)], 1 },
+                                                                names[static_cast<std::size_t>(s)], false);
+            switchParams[static_cast<std::size_t>(s)] = p.get();
+            addParameter(p.release());
+        }
+        if (! offline)
+            for (auto* p : getParameters())
+                p->addListener(this);
+    }
+
+    KitValues Processor::kitFromParams(const KitValues& base) const noexcept
+    {
+        KitValues k = base;
+        for (std::size_t i = 0; i < knobParams.size(); ++i)
+            k.knob[i] = knobParams[i]->get();
+        k.volumeDb = volumeDbAt(volumeParam->get());
+        for (std::size_t s = 0; s < switchParams.size(); ++s)
+            k.alt[static_cast<std::size_t>(switchLanes[s])] = switchParams[s]->get();
+        return k;
+    }
+
+    void Processor::paramsFromModel()
+    {
+        if (volumeParam == nullptr)
+            return;
+        const auto set = [](juce::RangedAudioParameter& p, float plain)
+        {
+            if (std::abs(p.convertTo0to1(plain) - p.getValue()) < 1.0e-6f)
+                return;
+            p.beginChangeGesture();
+            p.setValueNotifyingHost(p.convertTo0to1(plain));
+            p.endChangeGesture();
+        };
+        for (std::size_t k = 0; k < knobParams.size(); ++k)
+            set(*knobParams[k], model.kit.knob[k]);
+        if (std::abs(volumeDbAt(volumeParam->get()) - model.kit.volumeDb) > 1.0e-4f)
+            set(*volumeParam, volumePosition(model.kit.volumeDb));
+        for (std::size_t s = 0; s < switchParams.size(); ++s)
+            set(*switchParams[s], model.kit.alt[static_cast<std::size_t>(switchLanes[s])] ? 1.0f : 0.0f);
+    }
+
+    void Processor::handleAsyncUpdate()
+    {
+        // The host moved a parameter: the panel follows, no undo step (D343). A change the model made itself is
+        // already there.
+        const auto fromParams = kitFromParams(model.kit);
+        if (sameKit(fromParams, model.kit))
+            return;
+        model.kit = fromParams;
+        ++edits;
+    }
+
     void Processor::pushKit()
     {
+        paramsFromModel(); // the host's parameters say what the model says (D343)
         const juce::SpinLock::ScopedLockType lock(handover);
         pending.kit = model.kit;
         kitDirty.store(true, std::memory_order_release);
@@ -338,6 +441,7 @@ namespace cs808
         o->setProperty("project", projectToJson(model));
         o->setProperty("file", file.getFullPathName());
         o->setProperty("followHostPlay", followsHostPlay()); // the DAW's project keeps it (D325)
+        o->setProperty("ownOutputs", static_cast<int>(ownOutputs.load())); // and the drums on their own outputs (D343)
         destData.replaceAll(juce::JSON::toString(juce::var(o), true).toRawUTF8(), juce::JSON::toString(juce::var(o), true).getNumBytesAsUTF8());
     }
 
@@ -355,6 +459,7 @@ namespace cs808
         if (const auto path = state.getProperty("file", "").toString(); juce::File::isAbsolutePath(path))
             file = juce::File(path);
         setFollowHostPlay(static_cast<bool>(state.getProperty("followHostPlay", true)));
+        ownOutputs.store(static_cast<std::uint32_t>(static_cast<int>(state.getProperty("ownOutputs", 0))) & ((1u << laneCount) - 1u));
     }
 
     // ---- Transport --------------------------------------------------------------------------------------------
@@ -652,6 +757,26 @@ namespace cs808
 
         pullFromUi();
 
+        // The host's parameters (D343): what they say plays (the panel's edits set them too). A kit waiting for a bar
+        // line (an audition, D274) keeps its turn.
+        if (! cueWaiting.load(std::memory_order_acquire))
+        {
+            const auto fromParams = kitFromParams(kitOnAudio);
+            if (! sameKit(fromParams, kitOnAudio))
+            {
+                const bool switched = fromParams.alt != kitOnAudio.alt;
+                kitOnAudio = fromParams;
+                fillEngineSettings(kitOnAudio, engineSettings);
+                if (switched)
+                {
+                    // a switch thrown by the host: its lanes play the other drum's note from here
+                    *notesBank = sequencer.bank();
+                    applyNotes(*notesBank, kitOnAudio);
+                    sequencer.setBank(*notesBank);
+                }
+            }
+        }
+
         // A controller's linked controls go to the panel, not the sound (D211, D268); its pads strike their drums here,
         // without waiting for the message thread. The standalone app sorts its inputs first (D271): the block's MIDI
         // is then the sound's, and the controller's own messages come from its input's queue.
@@ -920,6 +1045,22 @@ namespace cs808
             events[j] = e;
         }
 
+        // The drums on their own outputs (D343): a lane switched to its own output, while the host has that output on,
+        // leaves the main mix and comes out there alone, from the engine's tap.
+        using Watch = coolsynth::synth::v3::CircuitWatch;
+        static constexpr std::array<int, laneCount> lightOfLane { Watch::bassDrum, Watch::snare, Watch::lowTom, Watch::midTom, Watch::highTom,
+                                                                  Watch::rimShot, Watch::clap, Watch::cowbell, Watch::cymbal, Watch::openHat,
+                                                                  Watch::closedHat };
+        std::uint32_t separate = 0;
+        const auto own = ownOutputs.load(std::memory_order_acquire);
+        for (int lane = 0; lane < laneCount; ++lane)
+            if (((own >> lane) & 1u) != 0u && lane + 1 < getBusCount(false) && getBus(false, lane + 1)->isEnabled()
+                && n <= static_cast<int>(taps[static_cast<std::size_t>(lightOfLane[static_cast<std::size_t>(lane)])].size()))
+                separate |= 1u << lightOfLane[static_cast<std::size_t>(lane)];
+        watch.setSeparate(separate);
+        auto mainBus = getBusBuffer(buffer, false, 0);
+        float* const* tapOut = separate != 0 ? tapPointers.data() : nullptr;
+
         coolsynth::synth::EngineTransportInfo transport;
         transport.hostHasTempo = true;
         transport.hostBpm = bpm;
@@ -927,23 +1068,37 @@ namespace cs808
         transport.hostPpqAtBlockStart = beat0;
         transport.hostIsPlaying = playing;
         if (split == n)
-            engine.render(buffer, std::span<const coolsynth::synth::EngineMidiEvent>(events.data(), events.size()), engineSettings, transport);
+            engine.render(mainBus, std::span<const coolsynth::synth::EngineMidiEvent>(events.data(), events.size()), engineSettings, transport, tapOut);
         else
         {
             // The two parts of a split block, each with its own events, kit and tempo.
             std::size_t before = 0;
             while (before < events.size() && events[before].sampleOffset < split)
                 ++before;
-            juce::AudioBuffer<float> first(buffer.getArrayOfWritePointers(), buffer.getNumChannels(), 0, split);
-            engine.render(first, std::span<const coolsynth::synth::EngineMidiEvent>(events.data(), before), settingsBeforeSplit, transport);
+            juce::AudioBuffer<float> first(mainBus.getArrayOfWritePointers(), mainBus.getNumChannels(), 0, split);
+            engine.render(first, std::span<const coolsynth::synth::EngineMidiEvent>(events.data(), before), settingsBeforeSplit, transport, tapOut);
             for (std::size_t i = before; i < events.size(); ++i)
                 events[i].sampleOffset -= split;
             transport.hostBpm = bpmAfter;
             transport.hostPpqAtBlockStart = beatAtSplit;
-            juce::AudioBuffer<float> second(buffer.getArrayOfWritePointers(), buffer.getNumChannels(), split, n - split);
+            juce::AudioBuffer<float> second(mainBus.getArrayOfWritePointers(), mainBus.getNumChannels(), split, n - split);
+            std::array<float*, Watch::lightCount> secondTaps {};
+            for (std::size_t l = 0; l < secondTaps.size(); ++l)
+                secondTaps[l] = tapPointers[l] + split;
             engine.render(second, std::span<const coolsynth::synth::EngineMidiEvent>(events.data() + before, events.size() - before),
-                          engineSettings, transport);
+                          engineSettings, transport, tapOut != nullptr ? secondTaps.data() : nullptr);
         }
+        // each drum's own output: its tap, or silence while it plays in the main
+        for (int lane = 0; lane < laneCount && lane + 1 < getBusCount(false); ++lane)
+            if (getBus(false, lane + 1)->isEnabled())
+            {
+                auto out = getBusBuffer(buffer, false, lane + 1);
+                const auto light = static_cast<std::size_t>(lightOfLane[static_cast<std::size_t>(lane)]);
+                if (((separate >> light) & 1u) != 0u)
+                    out.copyFrom(0, 0, taps[light].data(), n);
+                else
+                    out.clear();
+            }
         const double beatEnd = beatAt(n);
 
         midi.clear();

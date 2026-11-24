@@ -27,6 +27,9 @@ The shared project memory for every AI tool (`CLAUDE.md` points here).
   notes (D271); `src/StandaloneMidiOut` keeps the clock's output thread running.
 - `src/AudioExport` and `ui/ExportPanel`: the WAV export (D331, D334), rendered by an offline `Processor`; a drum's
   file is the same render with only that drum heard (`CircuitWatch::hearOnly`), so the files add up to the mix.
+- The VST3's host parameters (D343) are the 28 panel controls; the audio thread plays what they say, the panel's
+  edits set them (`Processor::paramsFromModel`), the host's moves reach the model without undo. A drum on its own
+  output leaves the main through the engine's tap (`CircuitWatch::setSeparate`), outputs 2 to 12 mono.
 - `tests/`: the app's tests (`CoolSynth808Tests`); the engine's run in the engine's repository.
 - `src/mcp`: the standalone app's MCP server (D333, CoolSynth's and the 303's), on `http://127.0.0.1:47608/mcp`,
   registered with `claude mcp add --transport http coolsynth808 http://127.0.0.1:47608/mcp`. Its tools read and set

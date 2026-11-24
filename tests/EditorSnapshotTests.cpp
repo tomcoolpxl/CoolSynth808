@@ -166,6 +166,21 @@ public:
                     hooks.chooseCircuitShow = [](int) {};
                     hooks.drumNotes = [] { return std::array<int, 16> { 36, 38, 43, 47, 50, 37, 39, 56, 49, 46, 42, 64, 63, 62, 75, 70 }; }; // General MIDI (D329)
                     hooks.learningDrumNote = [] { return 1; }; // the snare being learned
+                    // the plugin's Host page (D343): Play, Accuracy and the drums' own outputs, BD and CH on
+                    if (t == 0)
+                    {
+                        OptionsHooks pluginHooks = hooks;
+                        pluginHooks.plugin = [] { return true; };
+                        pluginHooks.followHostPlay = [] { return true; };
+                        pluginHooks.ownOutput = [](int lane) { return lane == 0 || lane == 10; };
+                        pluginHooks.chooseOwnOutput = [](int, bool) {};
+                        auto host = makeOptionsPanelForTesting(std::move(pluginHooks), nullptr);
+                        const auto image = host->createComponentSnapshot(host->getLocalBounds(), true, 2.0f);
+                        juce::FileOutputStream out(folder.getChildFile("options-host.png"));
+                        out.setPosition(0);
+                        out.truncate();
+                        juce::PNGImageFormat().writeImageToStream(image, out);
+                    }
                     auto options = makeOptionsPanelForTesting(std::move(hooks), &devices);
                     // Each page (D335), as options-<theme>-<page>.png.
                     const int pages = showOptionsPageForTesting(*options, 0);

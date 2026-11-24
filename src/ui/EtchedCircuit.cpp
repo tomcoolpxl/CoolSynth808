@@ -149,7 +149,7 @@ namespace cs808
 
     void EtchedCircuit::addTrace(std::vector<juce::Point<float>> points, int owner, bool busLine)
     {
-        addWire(std::move(points), owner, true);
+        addWire(std::move(points), owner, true, 0); // a role, so the lifted lid tints it too (D344)
         wires.back().bus = busLine;
     }
 

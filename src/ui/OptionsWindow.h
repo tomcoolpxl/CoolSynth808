@@ -35,6 +35,9 @@ namespace cs808
         std::function<void(int)> chooseDrumSet, learnDrumNote;
         std::function<int()> learningDrumNote;
         std::function<void()> controllerSetup;
+        // In a DAW (D343): each drum on its own output (lanes 0 to 10, BD to CH), off the main mix.
+        std::function<bool(int)> ownOutput;
+        std::function<void(int, bool)> chooseOwnOutput;
         // The circuits' accuracy (D339): 0 Best, 1 Lighter, 2 Lightest.
         std::function<int()> accuracy;
         std::function<void(int)> chooseAccuracy;

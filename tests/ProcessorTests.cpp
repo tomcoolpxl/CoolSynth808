@@ -463,6 +463,100 @@ public:
             p->setPlayHead(nullptr);
         }
 
+        beginTest("the_host_automates_every_knob_switch_and_the_volume");
+        {
+            // D343: 28 parameters named as the panel; the host's moves play at once and move the panel without undo
+            // steps; the panel's own edits set them; a switch thrown by the host changes the drum its lane plays.
+            auto p = prepared();
+            const auto& params = p->getParameters();
+            expectEquals(params.size(), 28);
+            juce::StringArray names;
+            for (auto* q : params)
+                names.add(q->getName(64));
+            for (const char* wanted : { "Accent", "BD Decay", "SD Snappy", "LT Tuning", "CH Level", "Volume", "LT Conga", "RS Claves", "CP Maracas" })
+                expect(names.contains(wanted), juce::String("named ") + wanted);
+            const auto byName = [&](const juce::String& n) -> juce::AudioProcessorParameter*
+            {
+                for (auto* q : params)
+                    if (q->getName(64) == n)
+                        return q;
+                return nullptr;
+            };
+            p->editBank([](SequencerBank& b) { b.pattern[0].lanes[0].a[0].on = true; }, false);
+            p->forgetHistory();
+            // the host turns the bass drum's Level down: silent at once
+            byName("BD Level")->setValueNotifyingHost(0.0f);
+            p->setPlaying(true);
+            const auto quiet = render(*p, 4800);
+            expectLessThan(peak(quiet.left, 0, 4800), 1.0e-3f, "BD Level at 0 by the host");
+            p->takeParametersForTesting();
+            expectWithinAbsoluteError(p->project().kit.knob[1], 0.0f, 1.0e-6f, "the panel follows");
+            expect(! p->canUndo(), "no undo step for the host's move");
+            // the panel's own edit sets the parameter
+            p->editKit([](KitValues& k) { k.knob[1] = 0.6f; });
+            expectWithinAbsoluteError(byName("BD Level")->getValue(), 0.6f, 1.0e-6f, "the panel's edit reaches the host");
+            expect(p->canUndo(), "the panel's edit is undoable");
+            // the host throws the low tom's switch to conga
+            byName("LT Conga")->setValueNotifyingHost(1.0f);
+            p->takeParametersForTesting();
+            expect(p->project().kit.alt[2], "the low tom's switch on conga");
+        }
+
+        beginTest("a_drum_on_its_own_output_leaves_the_main");
+        {
+            // D343: every output on, the bass drum switched to its own: the main lacks it and its output has it alone,
+            // so the main and that output add up to the whole mix.
+            const auto play = [this](bool own, std::vector<float>& mainLeft, std::vector<float>& bass, std::vector<float>& snareOut)
+            {
+                auto p = std::make_unique<Processor>();
+                auto layout = p->getBusesLayout();
+                for (int b = 1; b < layout.outputBuses.size(); ++b)
+                    layout.outputBuses.getReference(b) = juce::AudioChannelSet::mono();
+                expect(p->setBusesLayout(layout), "the eleven outputs on");
+                p->setRateAndBufferSizeDetails(48000.0, 480);
+                p->prepareToPlay(48000.0, 480);
+                p->editBank([](SequencerBank& b)
+                {
+                    b.pattern[0] = SequencerPattern {};
+                    b.pattern[0].lanes[0].a[0].on = true;
+                    b.pattern[0].lanes[1].a[4].on = true;
+                }, false);
+                p->editKit([](KitValues& k) { k.volumeDb = -12.0f; }, false); // under the soft clip's knee
+                p->setOwnOutput(0, own);
+                p->setPlaying(true);
+                juce::AudioBuffer<float> buffer(p->getTotalNumOutputChannels(), 480);
+                const int bdChannel = p->getChannelIndexInProcessBlockBuffer(false, 1, 0);
+                const int sdChannel = p->getChannelIndexInProcessBlockBuffer(false, 2, 0);
+                for (int block = 0; block < 100; ++block) // a second: the bass drum, then the snare
+                {
+                    juce::MidiBuffer midi;
+                    p->processBlock(buffer, midi);
+                    for (int i = 0; i < 480; ++i)
+                    {
+                        mainLeft.push_back(buffer.getSample(0, i));
+                        bass.push_back(buffer.getSample(bdChannel, i));
+                        snareOut.push_back(buffer.getSample(sdChannel, i));
+                    }
+                }
+            };
+            std::vector<float> fullMain, noBass, noSnare, sepMain, bass, snareOut;
+            play(false, fullMain, noBass, noSnare);
+            play(true, sepMain, bass, snareOut);
+            expectLessThan(peak(noBass, 0, 48000), 1.0e-7f, "a drum on the main: its own output silent");
+            expectGreaterThan(peak(bass, 0, 4800), 0.01f, "the bass drum on its own output");
+            expectLessThan(peak(sepMain, 0, 4800), 1.0e-3f, "...and not in the main");
+            expectGreaterThan(peak(sepMain, 24000, 28800), 0.01f, "the snare still in the main");
+            expectLessThan(peak(snareOut, 0, 48000), 1.0e-7f, "the snare's own output silent");
+            double rest = 0.0, whole = 0.0;
+            for (std::size_t i = 0; i < fullMain.size(); ++i)
+            {
+                const double d = static_cast<double>(sepMain[i]) + bass[i] - fullMain[i];
+                rest += d * d;
+                whole += static_cast<double>(fullMain[i]) * fullMain[i];
+            }
+            expectLessThan(rest, whole * 1.0e-10, "the main and the bass drum's output add up to the whole mix");
+        }
+
         beginTest("the_drums_answer_the_notes_learned_for_them");
         {
             // D329: from outside each drum comes on its own note: General MIDI's, a set in a row, or one learned from

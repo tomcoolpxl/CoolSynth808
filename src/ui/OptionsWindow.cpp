@@ -388,6 +388,24 @@ namespace cs808
             };
             addChildComponent(accuracyChoice);
 
+            // Each drum on its own output in a DAW (D343): a key a drum, lit when it has left the main mix.
+            static constexpr std::array<const char*, 11> laneCodes { "BD", "SD", "LT", "MT", "HT", "RS", "CP", "CB", "CY", "OH", "CH" };
+            for (int lane = 0; lane < 11; ++lane)
+            {
+                auto* chip = outputChips.add(new Chip());
+                chip->text = laneCodes[static_cast<std::size_t>(lane)];
+                chip->filledWhenOn = false;
+                chip->fontHeight = 10.5f;
+                chip->isOn = [this, lane] { return hooks.ownOutput && hooks.ownOutput(lane); };
+                chip->onClick = [this, lane](const juce::MouseEvent&)
+                {
+                    if (hooks.chooseOwnOutput && hooks.ownOutput)
+                        hooks.chooseOwnOutput(lane, ! hooks.ownOutput(lane));
+                    repaint();
+                };
+                addChildComponent(chip);
+            }
+
             controller.text = "Controller setup...";
             controller.onClick = [this](const juce::MouseEvent&) { hooks.controllerSetup(); };
             addChildComponent(controller);
@@ -591,9 +609,19 @@ namespace cs808
                     break;
                 }
                 case hostPage:
+                {
                     row(follow, "Play");
                     row(accuracyChoice, "Accuracy");
+                    // the drums' own outputs, four to a row (D343)
+                    labels.push_back({ "Own outputs", y });
+                    const int cell = (cw + 4) / 4;
+                    for (int lane = 0; lane < outputChips.size(); ++lane)
+                    {
+                        outputChips[lane]->setBounds(x + labelWidth + (lane % 4) * cell, y + (lane / 4) * (rowHeight + 6), cell - 4, rowHeight);
+                        outputChips[lane]->setVisible(true);
+                    }
                     break;
+                }
                 case drumsPage:
                 {
                     // A ready set, then the sixteen drums four to a row; a click learns its note (D329).
@@ -701,6 +729,7 @@ namespace cs808
         Choices themeChoice, showChoice, animateChoice, accuracyChoice;
         Choices drumSet;
         juce::OwnedArray<Chip> drumChips;
+        juce::OwnedArray<Chip> outputChips; // the drums' own outputs (D343)
         /** A ready set's note for a slot, as Kit.h's drumNoteSet. */
         static int setNote(int set, int slot)
         {

@@ -93,10 +93,21 @@ namespace cs808
         {
             juce::Graphics::ScopedSaveState cpuState(g);
             g.reduceClipRegion(juce::Rectangle<int>(14, juce::roundToInt(glassTop), 1252, 442));
-            cpu.paintLit(g, now, [this](int owner) { return energyOf(owner); });
+            // in green and red as the drums' copper (D344): a line rising from its rest green, one falling below it red
+            cpu.paintLit(g, now, [this](int owner) { return energyOf(owner); }, 1.0f,
+                         EtchedCircuit::Tint([this](int owner, int) { return cpuTintOf(owner); }));
         }
         if (lifted)
             paintOpenFrames(g);
+    }
+
+    float EtchedBoard::cpuTintOf(int owner) const
+    {
+        // The CPU board's lines swing as they are lit: most rest low and rise (the clocks, the CPU's ports, the lamps,
+        // the trigger, the drums' data lines); the memories' selects and the keys' scan rest high and are pulled low.
+        const float e = std::min(1.0f, energyOf(owner));
+        const bool restsHigh = owner == EtchedCircuit::cpuMemory || (owner >= EtchedCircuit::cpuScan && owner < EtchedCircuit::cpuScan + 4);
+        return restsHigh ? -e : e;
     }
 
     float EtchedBoard::tintOf(int owner, int role) const

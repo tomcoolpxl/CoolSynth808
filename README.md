@@ -57,6 +57,8 @@ To come.
   Ctrl+Y undo and redo any edit.
 - It is also a VST3 for a DAW: the pattern plays with the host's transport and tempo, and the host's notes play the
   drums. Options has "Follow the host's Play": off, the pattern waits for its own Play key, at the host's tempo.
+  Every knob, the Volume and the five voice switches can be automated in the DAW. Each drum can leave the main mix
+  for its own mono output (outputs 2 to 12, BD to CH): switch it on in Options, Host, and turn the output on in the DAW.
 - Options' Drum notes set which note plays which drum from a DAW or a MIDI input: General MIDI, in a row from 36
   or from 60, or each learned from a note played. Drag MIDI writes the same notes.
 

@@ -38,7 +38,7 @@ namespace cs808
         bool alt = false;
     };
 
-    class Processor final : public juce::AudioProcessor
+    class Processor final : public juce::AudioProcessor, private juce::AudioProcessorParameter::Listener, private juce::AsyncUpdater
     {
     public:
         Processor();
@@ -209,6 +209,22 @@ namespace cs808
             rings on, every random number from its seed again. The WAV export's seamless loop (D331). Any thread. */
         void jumpTo(double beatPosition) noexcept { jumpRequest.store(beatPosition, std::memory_order_release); }
 
+        // ---- The host's parameters (D343) -----------------------------------------------------------------------
+        /** The panel's five voice switches as parameters: the lanes whose switch each is (tom or conga on the three
+            toms, rim shot or claves, clap or maracas). */
+        static constexpr int switchCount = 5;
+        static constexpr std::array<int, switchCount> switchLanes { 2, 3, 4, 5, 6 };
+        /** A drum on its own output (D343): in a DAW, each drum may leave the main mix for its own mono output (outputs
+            2 to 12, BD to CH), while the host has that output on. Kept with the DAW's project. Any thread. */
+        void setOwnOutput(int lane, bool on) noexcept
+        {
+            if (lane >= 0 && lane < laneCount)
+                ownOutputs.fetch_xor((ownOutput(lane) != on ? 1u : 0u) << lane, std::memory_order_acq_rel);
+        }
+        [[nodiscard]] bool ownOutput(int lane) const noexcept { return ((ownOutputs.load(std::memory_order_acquire) >> lane) & 1u) != 0u; }
+        /** For the tests: the host's moves taken into the model now, as the message thread would. */
+        void takeParametersForTesting() { handleUpdateNowIfNeeded(); }
+
         // ---- Rendering without a device (tests, the MIDI file) -----------------------------------------------
         [[nodiscard]] coolsynth::synth::v3::EngineV3& engineForTesting() noexcept { return engine; }
 
@@ -221,6 +237,24 @@ namespace cs808
         };
 
         void pushKit();
+        // The host's parameters (D343): the 22 knobs, the Volume and the five voice switches. The audio thread plays what
+        // they say; the panel's edits set them (each its own gesture); the host's automation moves the panel through the
+        // message thread, writing no undo steps.
+        std::array<juce::AudioParameterFloat*, knobCount> knobParams {};
+        juce::AudioParameterFloat* volumeParam = nullptr;
+        std::array<juce::AudioParameterBool*, switchCount> switchParams {};
+        void createParameters();
+        void paramsFromModel();                                                 // message thread
+        [[nodiscard]] KitValues kitFromParams(const KitValues& base) const noexcept; // any thread
+        void parameterValueChanged(int, float) override { triggerAsyncUpdate(); }
+        void parameterGestureChanged(int, bool) override {}
+        void handleAsyncUpdate() override;                                      // the host's moves into the model
+        std::unique_ptr<SequencerBank> notesBank = std::make_unique<SequencerBank>(); // audio thread: a switch's new notes
+        // The drums' own outputs (D343): which lanes leave the main, and the engine's taps for them (audio thread).
+        std::atomic<std::uint32_t> ownOutputs { 0 };
+        std::array<std::vector<float>, coolsynth::synth::v3::CircuitWatch::lightCount> taps;
+        std::array<float*, coolsynth::synth::v3::CircuitWatch::lightCount> tapPointers {};
+        static BusesProperties buses();
         void pushPlay();
         void pushBank();
         void pushUndo();

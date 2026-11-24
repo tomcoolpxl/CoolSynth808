@@ -391,6 +391,8 @@ namespace cs808
         hooks.learnDrumNote = [this](int slot) { processor.learnDrumNote(slot); };
         hooks.learningDrumNote = [this] { return processor.learningDrumNote(); };
         hooks.controllerSetup = [this] { openControllerSetup(); };
+        hooks.ownOutput = [this](int lane) { return processor.ownOutput(lane); };
+        hooks.chooseOwnOutput = [this](int lane, bool on) { processor.setOwnOutput(lane, on); }; // kept with the DAW's project
         hooks.accuracy = [this] { return processor.accuracy(); };
         hooks.chooseAccuracy = [this](int level)
         {
