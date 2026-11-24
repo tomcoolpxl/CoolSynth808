@@ -165,7 +165,7 @@ namespace cs808
         int themeIndex = 0;
         int zoomPercent = 100;
         bool circuitAnimated = true;
-        int circuitShow = 0; // full, faint, hidden (D314)
+        int circuitShow = 1; // full, faint (the default, the user), hidden (D314)
         void applyCircuitLook();
         std::unique_ptr<OptionsWindow> optionsWindow;
         juce::Component* watchedWindow = nullptr; // the window the options stay above

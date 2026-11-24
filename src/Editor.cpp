@@ -174,7 +174,7 @@ namespace cs808
         sequencer->setBounds(SequencerGlass::boardArea());
         updateKeepOuts();
         circuitAnimated = settings->getBoolValue("circuitAnimated", true);
-        circuitShow = juce::jlimit(0, 2, settings->getIntValue("circuitShow", 0));
+        circuitShow = juce::jlimit(0, 2, settings->getIntValue("circuitShow", 1)); // faint unless chosen otherwise (the user)
         board->setCircuitLook(circuitAnimated, static_cast<EtchedBoard::CircuitShow>(circuitShow));
 
         lid = std::make_unique<LidView>(p);
