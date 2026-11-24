@@ -41,7 +41,7 @@ juce_add_binary_data(CoolSynth808Library
         resources/fonts/IBMPlexMono-Medium.ttf
         resources/fonts/IBMPlexMono-SemiBold.ttf)
 
-# A JUCE audio plugin: the standalone app (D267) and a VST3 for a DAW (D311, D324), as CoolSynth 303's.
+# A JUCE audio plugin: the standalone app (D267) and a VST3 for a DAW (D311, D325), as CoolSynth 303's.
 juce_add_plugin(CoolSynth808
     COMPANY_NAME "tomcoolpxl"
     PRODUCT_NAME "CoolSynth 808"

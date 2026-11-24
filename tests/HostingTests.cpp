@@ -1,4 +1,4 @@
-// The VST3 as a DAW loads it (D324): found in its bundle, made, prepared, played from the host's transport, its state
+// The VST3 as a DAW loads it (D325): found in its bundle, made, prepared, played from the host's transport, its state
 // saved and given back, stopping with the host, and the host's notes playing the drums. (The switch that keeps the
 // pattern to its own Play key is tested on the processor: ProcessorTests.) Skipped when the VST3 has not been built
 // (the CI builds the tests only). After CoolSynth 303's.

@@ -25,7 +25,7 @@ namespace cs808
         std::function<void(int)> chooseZoom;
         std::function<bool()> followClock, sendClock;
         std::function<void(bool)> chooseFollowClock, chooseSendClock;
-        // In a DAW (D324): the host's Play leads the pattern, or not; the clock switches make way for it.
+        // In a DAW (D325): the host's Play leads the pattern, or not; the clock switches make way for it.
         std::function<bool()> plugin, followHostPlay;
         std::function<void(bool)> chooseFollowHostPlay;
         std::function<void()> controllerSetup;

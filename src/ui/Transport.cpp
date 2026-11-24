@@ -27,7 +27,7 @@ namespace cs808
 
         void paint(juce::Graphics& g) override
         {
-            // following a clock or in a DAW, theirs; HOST under it while the host's Play leads (D324)
+            // following a clock or in a DAW, theirs; HOST under it while the host's Play leads (D325)
             const bool led = processor.followingClock() || processor.isPlugin();
             const double tempo = led ? processor.tempoNow() : processor.project().play.tempo;
             const auto number = juce::String(tempo, 1);

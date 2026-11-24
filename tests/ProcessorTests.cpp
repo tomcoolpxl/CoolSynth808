@@ -391,7 +391,7 @@ public:
 
         beginTest("in_a_daw_the_pattern_follows_the_host_unless_switched_off");
         {
-            // D324: under a host's transport the pattern plays while it plays, from where it is, at its tempo; with
+            // D325: under a host's transport the pattern plays while it plays, from where it is, at its tempo; with
             // the switch off it waits for its own Play key, and plays at the host's tempo still.
             struct Head final : juce::AudioPlayHead
             {

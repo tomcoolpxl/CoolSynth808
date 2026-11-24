@@ -158,7 +158,7 @@ namespace cs808
         void setFollowClock(bool on) noexcept { followClockOn.store(on, std::memory_order_relaxed); }
         void setSendClock(bool on) noexcept { sendClockOn.store(on, std::memory_order_relaxed); }
         [[nodiscard]] bool followsClock() const noexcept { return followClockOn.load(std::memory_order_relaxed); }
-        /** In a DAW (D311, D324): the pattern plays while the host plays, from where it is, at its tempo; off, it plays
+        /** In a DAW (D311, D325): the pattern plays while the host plays, from where it is, at its tempo; off, it plays
             only on its own Play key, at the host's tempo still (a hardware unit's Position Lock). On by default; kept
             with the DAW's project. */
         void setFollowHostPlay(bool on) noexcept { followHostPlayOn.store(on, std::memory_order_relaxed); }

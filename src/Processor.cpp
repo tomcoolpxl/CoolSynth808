@@ -306,7 +306,7 @@ namespace cs808
         auto* o = new juce::DynamicObject();
         o->setProperty("project", projectToJson(model));
         o->setProperty("file", file.getFullPathName());
-        o->setProperty("followHostPlay", followsHostPlay()); // the DAW's project keeps it (D324)
+        o->setProperty("followHostPlay", followsHostPlay()); // the DAW's project keeps it (D325)
         destData.replaceAll(juce::JSON::toString(juce::var(o), true).toRawUTF8(), juce::JSON::toString(juce::var(o), true).getNumBytesAsUTF8());
     }
 
@@ -604,7 +604,7 @@ namespace cs808
             else if (m.isSongPositionPointer())
                 clock.songPosition(m.getSongPositionPointerMidiBeat());
         }
-        // In a DAW (D311, D324): its transport leads while it plays, from where it is, at its tempo, unless the switch
+        // In a DAW (D311, D325): its transport leads while it plays, from where it is, at its tempo, unless the switch
         // keeps the pattern to its own Play key; its tempo leads always. A clock leads only the standalone app.
         bool hostPlays = false;
         double hostBeat = 0.0, hostBpm = 0.0;

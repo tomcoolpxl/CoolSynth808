@@ -3087,7 +3087,7 @@ namespace cs808
         auto& i = *impl;
         auto bottom = getLocalBounds().removeFromBottom(24);
         i.sheet.chip.setBounds(bottom.removeFromRight(250).reduced(0, 1));
-        // no sheet has a Play key or a slider: each hit plays in real time as it is struck (the user, D323, D325)
+        // no sheet has a Play key or a slider: each hit plays in real time as it is struck (the user, D323, D326)
         const bool full = false;
         i.play.setVisible(full);
         i.time.setVisible(full);
@@ -3138,7 +3138,7 @@ namespace cs808
         // Its drum struck, the hit plays from the start, slowed down; strikes while it plays are held off until it is
         // through, as a scope's trigger holdoff does, or a beat restarts it every step and only the trigger shows.
         // A hit paused or moved on its slider stays where it is.
-        // Its drum struck, the sheet runs the hit in real time from the strike (D325; it was slowed down, with a Play
+        // Its drum struck, the sheet runs the hit in real time from the strike (D326; it was slowed down, with a Play
         // key and a slider). The hi-hats' closed hat is part of the open hat's hit: it does not start it again.
         if (impl->showFull && impl->full && impl->full->which != cpuSection
             && (lanes & (1u << laneOfDrum[impl->full->which])) != 0)
@@ -3255,7 +3255,7 @@ namespace cs808
         if (impl->showFull && impl->full && impl->full->rec.samples > 1)
         {
             auto& f = *impl->full;
-            // A drum's hit in real time (D325): through its recording or capture, then at rest again.
+            // A drum's hit in real time (D326): through its recording or capture, then at rest again.
             if (f.which != cpuSection && f.following)
             {
                 const double ms = nowMs - f.stepAt;
@@ -3434,7 +3434,7 @@ namespace cs808
             }
         }
 
-        // The drum's output over the whole hit is no longer drawn in the foot (the user, D325).
+        // The drum's output over the whole hit is no longer drawn in the foot (the user, D326).
         if (false)
         {
             static constexpr std::array<const char*, 5> outputs { "vout", "vcy", "voh", "ncbo", "n10" }; // not the j* nodes: those are trigger jacks
@@ -3483,7 +3483,7 @@ namespace cs808
         auto bar = getLocalBounds().withTrimmedBottom(26).removeFromBottom(26).toFloat();
         g.setColour(look.ink);
         g.setFont(uiFont(11.5f));
-        juce::ignoreUnused(phase, bar); // the time line is gone (the user, D325)
+        juce::ignoreUnused(phase, bar); // the time line is gone (the user, D326)
         if (impl->selected < 0)
         {
             auto caption = getLocalBounds().removeFromBottom(24).toFloat().withTrimmedRight(260.0f + backHintWidth);
