@@ -52,6 +52,9 @@ namespace cs808
         void struck(std::uint32_t lanes, double nowMs);
         /** Each frame: redraws the circuit while anything on it is lit or glowing. */
         void tick(double nowMs);
+        /** The sequencer as the CPU section under the glass shows it (D312): the sixteenth playing (-1 stopped) and a
+            count of the edits, each a write to the pattern memory. */
+        void sequencerState(std::int64_t sixteenth, std::uint64_t edits, double nowMs);
 
         /** A trace through its points, its corners cut at 45 degrees as an etched board's are. */
         static juce::Path tracePath(const std::vector<juce::Point<float>>& points);
@@ -64,6 +67,18 @@ namespace cs808
         void paintShadows(juce::Graphics& g) const;
         /** The etched circuit unlit (D298), under the keep-outs' clip; its light is drawn over it in paint. */
         void paintCircuit(juce::Graphics& g) const;
+        /** The 808's CPU section under the glass (D312, docs/design/COOLSYNTH_808_CPU.md in CoolSynth's repository):
+            the uPD650C, its four uPD444C RAMs, the clock's Schmitt trigger and coil, the lamp lines and the trigger
+            lines up to the trigger bus. Still into the cache; its light is drawn on the glass (paintCpuGlow). */
+        void paintCpu(juce::Graphics& g) const;
+
+    public:
+        /** The CPU section's light as it shows on the smoked glass over it (D312): the glass passes little, but light
+            under it spreads in it as a soft glow. Drawn by the glass after its smoke; `origin` is the glass's place on
+            the board. */
+        void paintCpuGlow(juce::Graphics& g, juce::Point<float> origin) const;
+
+    private:
 
         std::vector<KeepOut> keeps;
         juce::Rectangle<float> stripArea;
@@ -78,6 +93,10 @@ namespace cs808
         std::array<double, 12> hitAt {}; // per column: when its drum was last struck (ms)
         double stepAt = -1.0e9, now = 0.0;
         bool glowing = false;
+        std::int64_t sixteenthNow = -1;
+        std::uint64_t editsSeen = 0;
+        double clockAt = -1.0e9, memoryAt = -1.0e9;
+        bool cpuLit = false;
         [[nodiscard]] float energyOf(int owner) const noexcept;
     };
 }

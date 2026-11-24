@@ -235,6 +235,11 @@ public:
             editor->boardForTesting().struck((1u << 0) | (1u << 1) | (1u << 10), 50000.0);
             editor->boardForTesting().tick(50030.0);
             shoot("panel-struck");
+            // The CPU section under the glass lit (D312): the clock's tick on step 6 and an edit written to the memory.
+            editor->boardForTesting().sequencerState(-1, 1, 50000.0);
+            editor->boardForTesting().sequencerState(5, 2, 50010.0);
+            editor->boardForTesting().tick(50030.0);
+            shoot("panel-cpu");
             setTheme(1); // the same in the Silver theme (D307)
             editor->boardForTesting().themeChanged();
             editor->boardForTesting().struck((1u << 0) | (1u << 1) | (1u << 10), 51000.0);

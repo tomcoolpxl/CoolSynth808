@@ -956,6 +956,9 @@ namespace cs808
     void SequencerGlass::paint(juce::Graphics& g)
     {
         drawSmokedGlass(g, getLocalBounds().toFloat(), 6.0f, false);
+        // The CPU section's light under the glass, spread in the smoke (D312).
+        if (auto* board = dynamic_cast<EtchedBoard*>(getParentComponent()))
+            board->paintCpuGlow(g, getPosition().toFloat());
         // The pane is held to the board by four polished pins at its corners (D303).
         const float w = static_cast<float>(getWidth()), h = static_cast<float>(getHeight()), in = 9.0f;
         for (const auto c : { juce::Point<float>(in, in), { w - in, in }, { in, h - in }, { w - in, h - in } })
