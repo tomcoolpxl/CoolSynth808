@@ -148,7 +148,8 @@ namespace cs808
         bool lifted = false;
         void buildCpu(const std::vector<float>& columnCentres);
         std::vector<juce::Range<float>> columnSpans; // each column's x, for a click with the lid lifted
-        int hovered = -1; // the column under the mouse with the lid lifted (D319)
+        int hovered = -1; // the column under the mouse with the lid lifted (D319), or the CPU board
+        static constexpr int cpuArea = 12; // the CPU board as an area that opens (D321)
         PanelSwings swings;
         const LiveBoard* liveBoard = nullptr;
         /** A wire's node, signed -1..1, with the lid lifted (D319): its drum's, the buses' and the master's from the

@@ -132,6 +132,8 @@ namespace cs808
 
     juce::Rectangle<float> EtchedBoard::openArea(int column) const
     {
+        if (column == cpuArea) // the CPU board, under where the glass was (D321)
+            return { 17.0f, glassTop + 22.0f, 1246.0f, 412.0f };
         const auto& span = columnSpans[static_cast<std::size_t>(column)];
         return { span.getStart() + 3.0f, 40.0f, span.getLength() - 6.0f, glassTop - 40.0f };
     }
@@ -141,7 +143,7 @@ namespace cs808
         for (int c = 0; c < static_cast<int>(columnSpans.size()); ++c)
             if (openArea(c).contains(p))
                 return c;
-        return -1;
+        return openArea(cpuArea).contains(p) ? cpuArea : -1;
     }
 
     void EtchedBoard::paintOpenFrames(juce::Graphics& g) const
@@ -149,7 +151,7 @@ namespace cs808
         // What opens (D319): each column (the master's opens the whole board) in a faint frame, bright under the
         // mouse; most people never click when the only hint is a hover.
         const auto& look = boardLook();
-        for (int c = 0; c < static_cast<int>(columnSpans.size()); ++c)
+        for (const int c : { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, cpuArea })
         {
             const bool over = c == hovered;
             g.setColour(look.ink.withAlpha(over ? 0.75f : 0.16f));
@@ -569,13 +571,8 @@ namespace cs808
     {
         if (! lifted || ! onPartClicked || ! e.mouseWasClicked())
             return;
-        if (e.position.y >= glassTop)
-        {
-            onPartClicked(-1); // the CPU board
-            return;
-        }
         if (const int c = columnAt(e.position); c >= 0)
-            onPartClicked(c);
+            onPartClicked(c == cpuArea ? -1 : c); // -1 the CPU board
     }
 
     void EtchedBoard::paintFootprints(juce::Graphics& g) const

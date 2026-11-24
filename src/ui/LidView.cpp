@@ -49,6 +49,7 @@ namespace cs808
             int lane = -1;
             // Its label on the complete drum, worked out once (Board::prepareLabels), not at every frame.
             juce::String label;
+            bool titled = false; // a chip whose name is printed inside its box: no label beside it (D321)
             Pt labelAt;
             bool labelTall = false;
             juce::Rectangle<float> labelBox; // where it is printed, clear of every other part and label (D316)
@@ -60,6 +61,7 @@ namespace cs808
             juce::String text;
             juce::Justification justification = juce::Justification::centred;
             bool strong = false;
+            bool fixed = false; // printed inside a chip's box: kept where it is (D321)
         };
 
         struct Flow
@@ -543,7 +545,7 @@ namespace cs808
                     auto label = part.name.upToFirstOccurrenceOf(" ~ ", false, false);
                     if (label.startsWith("The first op-amp") || label.startsWith("The second op-amp"))
                         label = "IC";
-                    if (label.startsWith("The step"))
+                    if (label.startsWith("The step") || part.titled)
                         label = {};
                     part.label = label;
                     auto bounds = part.stroke.getBounds();
@@ -833,14 +835,174 @@ namespace cs808
         };
 
         // The drums drawn complete: the bass drum, then the snare (D278).
-        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, rimShot = 3, handClap = 4, cowbell = 5, metalShared = 6, cymbal = 7, hiHats = 8, drumsDrawn = 9 };
+        enum DrumDrawn { bassDrum = 0, snareDrum = 1, lowTom = 2, rimShot = 3, handClap = 4, cowbell = 5, metalShared = 6, cymbal = 7, hiHats = 8,
+                         cpuSection = 9, drumsDrawn = 10 }; // the CPU section's sheet (D321): our sequencer's step, not a recording
         /** The lane each drum drawn complete plays in. */
-        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5, 6, 7, 8, 8, 9 }; // the hi-hats: the open one, and the closed (10) too
+        constexpr int laneOfDrum[drumsDrawn] { 0, 1, 2, 5, 6, 7, 8, 8, 9, -1 }; // the hi-hats: the open one, and the closed (10) too
 
         Recording parseRecording(const juce::var& root, int which);
 
+        /** A step of our sequencer, as the CPU section's sheet shows it (D321). */
+        struct CpuStep
+        {
+            std::uint32_t lanes = (1u << 0) | (1u << 10) | (1u << 11); // the drums struck (bits as the panel's lanes), bit 11 the accent
+            float accentKnob = 0.5f;
+            double bpm = 120.0;
+            int step = 0;
+            bool running = true, wrote = false;
+        };
+
+        /**
+            The CPU section over one step (D321), as the service notes describe it; Roland's program is not public, so the
+            order and the times are equivalent, not cycle exact. Every 1.9 ms an interrupt: for 150 us all four PH lines
+            high and the status read through IC3 on PA, then one PH line low for its keys to answer, the lamps latched on
+            PG. At the step: the rhythm's step count read from IC7, then the step's instrument data from IC10, IC9 and IC8
+            (IC5 decoding PE-2/3, PI-1 enabling it), the data left standing on PD, PE and PF for the drums' gates, PI-2's
+            10 us pulse, turned over by Q27 and widened by IC6 to 1 ms (R100 with C23, then R102 with C27), and Q31 to
+            Q34 raising it to the common trigger, 4 V, or 4 to 14 V with the accent as VR3 sets it.
+        */
+        Recording cpuStepRecording(const CpuStep& s)
+        {
+            Recording r;
+            const double span = 15000.0 / std::clamp(s.bpm, 30.0, 300.0); // a sixteenth
+            for (double ms = 0.0; ms < 0.2; ms += 0.002)
+                r.ms.push_back(ms);
+            for (double ms = 0.2; ms < 1.6; ms += 0.01)
+                r.ms.push_back(ms);
+            const double coarse = span > 200.0 ? 0.05 : 0.025;
+            for (double ms = 1.6; ms <= span; ms += coarse)
+                r.ms.push_back(ms);
+            r.samples = static_cast<int>(r.ms.size());
+            const auto bit = [&](int lane) { return ((s.lanes >> lane) & 1u) != 0; };
+            const auto count = [&](std::initializer_list<int> lanes) { int n = 0; for (const int l : lanes) n += bit(l) ? 1 : 0; return n; };
+            const bool accent = bit(11);
+            const double accentVolts = 5.0 + 10.0 * juce::jlimit(0.0, 1.0, static_cast<double>(s.accentKnob));
+            const int group = (s.step % 16) / 4;
+            const int addressBits = [&] { int n = 0; for (int b = 0; b < 4; ++b) n += ((s.step >> b) & 1) != 0 ? 1 : 0; return n + 1; }();
+            // the reads, one RAM at a time: IC7 the step count, IC10 AC BD SD LT, IC9 MT HT RS CP, IC8 CB CY OH CH
+            struct Read { double from, to; const char* ce; int bits; };
+            const std::array<Read, 4> reads { { { 0.0, 0.015, "nce7", 1 + (s.step % 16 != 0 ? 1 : 0) },
+                                                { 0.02, 0.035, "nce10", count({ 11, 0, 1, 2 }) },
+                                                { 0.04, 0.055, "nce9", count({ 3, 4, 5, 6 }) },
+                                                { 0.06, 0.075, "nce8", count({ 7, 8, 9, 10 }) } } };
+            const char* const nets[] { "v5", "vcc", "0", "ncl", "nint", "nrc1", "ntrc", "ntm2", "ntosc", "ntempo", "nss", "nfill", "nand",
+                                       "ngate", "bus_pa", "bus_pb", "bus_ph", "bus_pg", "bus_pc", "bus_d", "bus_a", "nwe", "nce", "nce7",
+                                       "nce8", "nce9", "nce10", "bus_pd", "bus_pe", "bus_pf", "npf3", "npi2", "nq27", "nic6a", "nrc23",
+                                       "nic6b", "nrc27", "n6", "nb31", "nb32", "nx", "nq33", "vt", "ph0", "ph1", "ph2", "ph3", "data" };
+            const char* const currents[] { "r117.i", "r120.i", "r113.i", "q31.ic", "q31.ib", "q31.ie", "q32.ic", "q32.ib", "q32.ie",
+                                           "q27.ic", "q27.ib", "q27.ie", "q34.ic", "q34.ib", "q34.ie", "q18.ic", "q18.ib", "q18.ie",
+                                           "r100.i", "r102.i", "c23.i", "c27.i", "r85.i", "tm1.i", "tempo.i", "tm2.i", "vr3.i" };
+            for (const auto* n : nets)
+                r.series[n].assign(static_cast<std::size_t>(r.samples), 0.0f);
+            for (const auto* n : currents)
+                r.series[n].assign(static_cast<std::size_t>(r.samples), 0.0f);
+            for (std::size_t i = 0; i < r.ms.size(); ++i)
+            {
+                const double ms = r.ms[i];
+                const auto set = [&](const char* name, double v) { r.series[name][i] = static_cast<float>(v); };
+                set("v5", 5.0);
+                set("vcc", 15.0);
+                set("ncl", 2.5); // 500 kHz, far past the frames: its mean
+                // the interrupt clock (IC1 pin 6) and its timing capacitor between the Schmitt thresholds
+                const double w = std::fmod(ms, 1.9), phase = w / 1.9;
+                set("nint", w < 0.95 ? 5.0 : 0.0);
+                set("nrc1", phase < 0.5 ? 3.2 - 2.8 * phase : 1.8 + 2.8 * (phase - 0.5));
+                // the tempo: IC1's oscillator at twelve a step, IC2A halving it to six (24 a quarter note)
+                const double osc = span / 12.0, op = std::fmod(ms, osc) / osc;
+                set("ntosc", op < 0.5 ? 5.0 : 0.0);
+                set("ntrc", op < 0.5 ? 3.2 - 2.8 * op : 1.8 + 2.8 * (op - 0.5));
+                set("ntm2", 0.4 * r.series["ntrc"][i]);
+                const bool tempoHigh = std::fmod(ms, span / 6.0) < span / 12.0;
+                set("ntempo", tempoHigh ? 5.0 : 0.0);
+                // the interrupt's routine: the status for 150 us, then one PH line low for its keys until 600 us
+                const bool status = w < 0.15, scanning = w >= 0.15 && w < 0.6;
+                const int line = static_cast<int>(std::floor(ms / 1.9)) % 4;
+                for (int k = 0; k < 4; ++k)
+                    set((juce::String("ph") + juce::String(k)).toRawUTF8(), scanning && k == line ? 0.0 : 5.0);
+                set("bus_ph", scanning ? 3.75 : 5.0);
+                const bool allHigh = ! scanning;
+                set("nand", allHigh ? 5.0 : 0.6);
+                set("ngate", allHigh ? 0.1 : 5.0);
+                set("bus_pa", status ? 5.0 * ((tempoHigh ? 1 : 0) + (s.running ? 1 : 0)) / 4.0 : 0.0);
+                set("bus_pg", line == group && w >= 0.15 ? 1.25 : 0.0); // the playing step's lamp, latched until the next interrupt
+                // the memory
+                double data = 0.0;
+                bool reading = false;
+                for (const auto& rd : reads)
+                {
+                    const bool on = ms >= rd.from && ms < rd.to;
+                    set(rd.ce, on ? 0.0 : 5.0);
+                    if (on)
+                    {
+                        reading = true;
+                        data = 5.0 * rd.bits / 4.0;
+                    }
+                }
+                set("nce", reading ? 0.0 : 5.0);
+                set("bus_pc", data);
+                set("bus_d", data);
+                set("bus_a", ms < 0.075 ? 5.0 * addressBits / 5.0 : 0.0);
+                set("nwe", s.wrote && ms >= 0.3 && ms < 0.32 ? 0.0 : 5.0);
+                // the step's data on PD, PE and PF: the address while reading, then each drum's line
+                const bool stands = ms >= 0.08;
+                set("bus_pd", stands ? 5.0 * count({ 10, 9, 8, 7 }) / 4.0 : ms < 0.075 ? 5.0 * addressBits / 5.0 : 0.0);
+                set("bus_pe", stands ? 5.0 * count({ 6, 5, 4, 3 }) / 4.0 : ms < 0.075 ? 5.0 * addressBits / 5.0 : 0.0);
+                set("bus_pf", stands ? 5.0 * count({ 2, 1, 0 }) / 3.0 : ms < 0.075 ? 5.0 * addressBits / 5.0 : 0.0);
+                set("data", stands && (s.lanes & 0x7ffu) != 0 ? 5.0 : 0.0);
+                const bool accented = stands && accent;
+                set("npf3", accented ? 5.0 : 0.0);
+                set("nq33", accented ? 0.1 : 5.0); // Q33 turns PF-3 over: Q34 shunts VR3 unless the step is accented
+                const double nx = accented ? accentVolts : 5.0;
+                set("nx", nx);
+                // the trigger: PI-2's 10 us pulse, Q27 turning it over, IC6's two halves timing 1 ms from its end
+                const bool pulse = ms >= 0.1 && ms < 0.11;
+                set("npi2", pulse ? 5.0 : 0.0);
+                set("nq27", pulse ? 0.1 : 5.0);
+                const auto charge = [](double since) { return since < 0.0 ? 5.0 : 5.0 * (1.0 - std::exp(-since / 0.72)); };
+                set("nic6a", ms >= 0.11 && ms < 0.61 ? 0.0 : 5.0);
+                set("nrc23", charge(ms - 0.11));
+                set("nic6b", ms >= 0.61 && ms < 1.11 ? 0.0 : 5.0);
+                set("nrc27", charge(ms - 0.61));
+                const bool trig = ms >= 0.11 && ms < 1.11;
+                set("n6", trig ? 0.0 : 5.0); // IC6 pin 10, low for the pulse
+                set("nb31", trig ? 0.0 : 0.7);
+                const double vt = trig ? std::max(0.0, nx - 0.7) : 0.0;
+                set("nb32", trig ? vt + 0.7 : 0.1);
+                set("vt", vt);
+                // the trigger's currents, where the parts' values are known (the drums' sheets carry the same)
+                const double i117 = trig ? 0.0 : (5.0 - 0.7) / 47000.0, i113 = vt / 4700.0;
+                const double ib32 = trig ? i113 / 100.0 : 0.0, i120 = trig ? ib32 : (nx - 0.1) / 4700.0;
+                set("r117.i", i117);
+                set("q31.ib", i117);
+                set("r120.i", i120);
+                set("q31.ic", trig ? 0.0 : i120);
+                set("q31.ie", -(trig ? 0.0 : i120) - i117);
+                set("r113.i", i113);
+                set("q32.ib", ib32);
+                set("q32.ie", -i113);
+                set("q32.ic", i113 - ib32);
+            }
+            // the netlist, typed from the service notes; each part's nodes as the sheet draws its leads
+            r.parts = { { "r117", { "n6", "nb31" } }, { "q31", { "nb32", "nb31", "0" } }, { "r120", { "nx", "nb32" } },
+                        { "q32", { "vcc", "nb32", "vt" } }, { "r113", { "vt", "0" } }, { "q27", { "nq27", "npi2", "0" } },
+                        { "c23", { "nic6a", "nrc23" } }, { "r100", { "v5", "nrc23" } }, { "c27", { "nic6b", "nrc27" } },
+                        { "r102", { "v5", "nrc27" } }, { "r85", { "bus_pc", "bus_d" } }, { "tm1", { "nrc1", "0" } },
+                        { "tempo", { "ntrc", "ntm2" } }, { "tm2", { "ntm2", "0" } }, { "vr3", { "vcc", "nx" } },
+                        { "q34", { "nx", "nq33", "v5" } }, { "q18", { "ngate", "nand", "0" } } };
+            juce::StringArray drums;
+            static constexpr std::array<const char*, 11> codes { "BD", "SD", "LT", "MT", "HT", "RS", "CP", "CB", "CY", "OH", "CH" };
+            for (int l = 0; l < 11; ++l)
+                if (bit(l))
+                    drums.add(codes[static_cast<std::size_t>(l)]);
+            r.setting << "step " << (s.step % 16 + 1) << " at " << juce::String(s.bpm, 1) << " BPM, "
+                      << (drums.isEmpty() ? juce::String("no drum") : drums.joinIntoString(" ")) << (accent ? ", accented" : "");
+            return r;
+        }
+
         Recording loadRecording(int which)
         {
+            if (which == cpuSection)
+                return cpuStepRecording({});
             const auto root = which == snareDrum ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::snare_currents_json, LibraryData::snare_currents_jsonSize))
                               : which == lowTom  ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::tom_currents_json, LibraryData::tom_currents_jsonSize))
                               : which == rimShot ? juce::JSON::parse(juce::String::fromUTF8(LibraryData::rimshot_currents_json, LibraryData::rimshot_currents_jsonSize))
@@ -1053,6 +1215,25 @@ namespace cs808
             /** What the circuit does at this moment of the hit, for the time bar. */
             [[nodiscard]] juce::String phaseAt(double ms) const
             {
+                if (which == cpuSection)
+                {
+                    if (ms < 0.015)
+                        return "IC7 read: the rhythm's step";
+                    if (ms < 0.075)
+                        return "the step's data read: IC10, IC9, IC8 in turn";
+                    if (ms < 0.1)
+                        return "the data stands on PD, PE and PF for the gates";
+                    if (ms < 0.11)
+                        return "PI-2's pulse, 10 us";
+                    if (ms < 1.11)
+                        return "IC6 holds it 1 ms: the common trigger";
+                    const double w = std::fmod(ms, 1.9);
+                    if (w < 0.15)
+                        return "an interrupt: the status read through IC3";
+                    if (w < 0.6)
+                        return "the scan: PH" + juce::String(static_cast<int>(std::floor(ms / 1.9)) % 4) + " low, its keys answer on PB";
+                    return "the main program; the lamps latched on PG";
+                }
                 if (pos < 0.3)
                     return "at rest: only the standing currents flow";
                 if (ms <= 1.05)
@@ -1182,6 +1363,14 @@ namespace cs808
                     w.fill.addTriangle({ x + 3.5f, y }, { x + 8.5f, y - 2.5f }, { x + 8.5f, y + 2.5f });
                 };
 
+                if (which == cpuSection)
+                {
+                    buildCpuSection(a, W, R, C, POT, Q, pin, open, gnd, supply);
+                    buildGraph();
+                    nudgeTexts();
+                    drawing.prepareLabels();
+                    return;
+                }
                 if (which == snareDrum || which == lowTom || which == rimShot || which == handClap || which == cowbell || which == metalShared || which == cymbal || which == hiHats)
                 {
                     if (which == snareDrum)
@@ -1283,6 +1472,178 @@ namespace cs808
                 buildGraph();
                 nudgeTexts();
                 drawing.prepareLabels();
+            }
+
+            /*
+                The CPU section (D321): the main board's, as the service notes draw and describe it (pages 3 to 5, 14 to 16),
+                its chips as boxes with the pins the notes name. The clocks on the left (IFT-1, IC1's interrupt and tempo,
+                IC2A, the status gate IC3 with Q18); the CPU in the middle, its scan and keys below; the memory on the right
+                (IC7 to IC10, R85 to R88, the decoder IC5); along the top the step's instrument data to the drums' gates;
+                along the bottom the trigger: Q27, IC6's monostable and the accent's Q31 to Q34 with VR3. Where the notes
+                name no part (the pull-ups, Q33's resistors, IC5's type) none is drawn.
+            */
+            void buildCpuSection(Board::Sheet& a, auto& W, auto& R, auto& C, auto& POT, auto& Q, auto& pin, auto& open, auto& gnd, auto& supply)
+            {
+                width = 760.0f;
+                height = 320.0f;
+                const auto L = juce::Justification::centredLeft;
+                const auto Rj = juce::Justification::centredRight;
+                const auto M = juce::Justification::centred;
+                struct ChipPin { char side; float at; const char* name; const char* node; };
+                // A chip: its box, its title inside, each pin a short lead out of the box with its name inside.
+                const auto chip = [&](const juce::String& label, float x, float y, float w, float h, std::initializer_list<const char*> title,
+                                      std::initializer_list<ChipPin> pins)
+                {
+                    auto& part = a.add(label);
+                    part.box = { x, y, w, h };
+                    part.titled = true;
+                    const auto fixedText = [&](float tx, float ty, const juce::String& s, juce::Justification j, bool strong)
+                    {
+                        a.tx(tx, ty, s, j, strong);
+                        drawing.texts.back().fixed = true;
+                    };
+                    float ty = y + h / 2.0f - 4.0f * static_cast<float>(title.size() - 1);
+                    for (const auto* line : title)
+                    {
+                        fixedText(x + w / 2.0f, ty + 2.0f, line, M, true);
+                        ty += 8.0f;
+                    }
+                    for (const auto& p : pins)
+                    {
+                        Pt edge, end, name;
+                        auto j = M;
+                        switch (p.side)
+                        {
+                            case 'l': edge = Pt(x, p.at); end = Pt(x - 10.0f, p.at); name = Pt(x + 2.5f, p.at + 2.0f); j = L; break;
+                            case 'r': edge = Pt(x + w, p.at); end = Pt(x + w + 10.0f, p.at); name = Pt(x + w - 2.5f, p.at + 2.0f); j = Rj; break;
+                            case 't': edge = Pt(p.at, y); end = Pt(p.at, y - 10.0f); name = Pt(p.at, y + 7.0f); break;
+                            default:  edge = Pt(p.at, y + h); end = Pt(p.at, y + h + 10.0f); name = Pt(p.at, y + h - 3.0f); break;
+                        }
+                        W({ edge, end });
+                        open(end.x, end.y, p.node);
+                        if (p.name[0] != 0)
+                            fixedText(name.x, name.y, p.name, j, false);
+                    }
+                };
+                const auto arrow = [&](float x, float y)
+                {
+                    auto& head = a.add({});
+                    head.fill.addTriangle({ x + 8.0f, y }, { x, y - 3.5f }, { x, y + 3.5f });
+                };
+
+                // ---- The clocks, the status gate and the scan's AND (left) ----
+                chip("IFT-1 ~ the CPU's clock: a coil-tuned oscillator, 2 us a cycle (500 kHz), set at TP-1", 150, 42, 50, 16, { "IFT-1 500 kHz" },
+                     { { 'r', 50, "", "ncl" } });
+                chip("IC1 ~ an HD14584, six Schmitt triggers: the 1.9 ms interrupt at pin 6 (TM-1, TP-2), and with Q14 to Q16 and C10 the tempo's oscillator at pin 12 (TM-2, TP-3)",
+                     140, 64, 60, 36, { "IC1 HD14584" }, { { 'r', 80, "6", "nint" }, { 'l', 74, "", "nrc1" }, { 'l', 92, "", "ntrc" }, { 'b', 170, "12", "ntosc" } });
+                W({ { 130, 74 }, { 60, 74 } });
+                POT("tm1", 60, 74, 'v', 16, "TM-1 ~ trims the interrupt to 1.9 ms a cycle");
+                gnd(60, 90);
+                W({ { 130, 92 }, { 90, 92 } });
+                POT("tempo", 90, 92, 'v', 18, "TEMPO ~ the panel's knob: 8.3 to 65 ms a cycle of the tempo clock");
+                POT("tm2", 90, 110, 'v', 18, "TM-2 ~ trims the fastest tempo to 8.53 ms a cycle");
+                gnd(90, 128);
+                chip("IC2A ~ a flip-flop toggling: it halves the tempo's oscillator, 24 clocks a quarter note; IC2B starts and stops it", 140, 120, 60, 20,
+                     { "IC2A  /2" }, { { 't', 170, "", "ntosc" }, { 'b', 170, "", "ntempo" } });
+                chip("IC3 ~ the status gate: while all four PH lines are high, Q18 opens it and the tempo clock, start/stop and fill in reach PA",
+                     140, 160, 60, 84, { "IC3", "STATUS", "GATE" },
+                     { { 't', 170, "TEMPO", "ntempo" }, { 'l', 175, "", "nss" }, { 'l', 195, "", "nfill" }, { 'l', 232, "", "ngate" }, { 'r', 230, "", "bus_pa" } });
+                pin(130, 175, "nss", "START/STOP", 126, 175, Rj);
+                pin(130, 195, "nfill", "FILL IN", 126, 195, Rj);
+                W({ { 130, 232 }, { 112, 232 } });
+                Q("q18", 112, 244, false, "Q18 ~ an AND gate: its collector goes low while all four PH lines are high, for the status's 150 us");
+                gnd(112, 256);
+                pin(96, 244, "nand", "PH0-3", 92, 244, Rj);
+
+                // ---- The CPU ----
+                chip("IC4 ~ the uPD650C-085: NEC's 4-bit CMOS microcontroller (uCOM-43) with Roland's program in its ROM, which is not public: this sheet's signals are our sequencer's",
+                     220, 30, 100, 220, { "IC4", "uPD650C-085", "4-BIT CPU" },
+                     { { 'l', 50, "CL", "ncl" }, { 'l', 80, "INT", "nint" }, { 'l', 110, "RESET", "nrst" }, { 'l', 230, "PA", "bus_pa" },
+                       { 'b', 240, "PH", "bus_ph" }, { 'b', 265, "PB", "bus_pb" }, { 'b', 300, "PG", "bus_pg" },
+                       { 't', 240, "PD", "bus_pd" }, { 't', 260, "PE", "bus_pe" }, { 't', 280, "PF", "bus_pf" }, { 't', 300, "PF3", "npf3" },
+                       { 'r', 50, "PC", "bus_pc" }, { 'r', 120, "PI-0 WE", "nwe" }, { 'r', 200, "PI-1 CE", "nce" }, { 'r', 230, "PI-2", "npi2" } });
+                pin(210, 110, "nrst", "", 206, 110, Rj);
+                chip("CN2 ~ the switch board: the sixteen step keys, Mode, Clear and the rest, scanned four groups at a time by PH (through Q23, Q24 and their like), answering on PB and PA; and the step lamps PG drives",
+                     225, 270, 90, 28, { "KEYS AND LAMPS (CN2)" }, { { 't', 240, "", "bus_ph" }, { 't', 265, "", "bus_pb" }, { 't', 300, "", "bus_pg" } });
+
+                // ---- The step's data, to the drums' gates (top) ----
+                W({ { 240, 20 }, { 240, 4 }, { 750, 4 } });
+                W({ { 260, 20 }, { 260, 9 }, { 750, 9 } });
+                W({ { 280, 20 }, { 280, 14 }, { 750, 14 } });
+                arrow(750, 4);
+                arrow(750, 9);
+                arrow(750, 14);
+                a.tx(756, 24, "INSTRUMENT DATA, TO THE DRUMS' GATES", Rj);
+                pin(300, 20, "npf3", "ACCENT", 304, 24, L);
+
+                // ---- The memory (right) ----
+                R("r85", 330, 50, 'h', 22, "R85 to R88 ~ one on each data line, so PC and a RAM writing at once do not fight");
+                W({ { 352, 50 }, { 380, 50 } });
+                W({ { 380, 38 }, { 380, 176 } });
+                W({ { 330, 120 }, { 350, 120 } });
+                W({ { 350, 58 }, { 350, 196 } });
+                W({ { 365, 40 }, { 365, 186 } });
+                pin(365, 40, "bus_a", "ADDRESS", 361, 36, Rj);
+                const std::array<const char*, 4> ram { "IC7", "IC8", "IC9", "IC10" };
+                const std::array<const char*, 4> holds { "RHYTHM", "CB CY OH CH", "MT HT RS CP", "AC BD SD LT" };
+                const std::array<const char*, 4> ce { "nce7", "nce8", "nce9", "nce10" };
+                for (int k = 0; k < 4; ++k)
+                {
+                    const float y = 30.0f + 46.0f * static_cast<float>(k);
+                    chip(juce::String(ram[static_cast<std::size_t>(k)]) + " ~ a uPD444C, 1K x 4 bits of static CMOS memory on the backup battery: "
+                             + (k == 0 ? juce::String("the rhythm's track, prescale and steps") : juce::String("the steps of ") + holds[static_cast<std::size_t>(k)]),
+                         400, y, 70, 36, { ram[static_cast<std::size_t>(k)], holds[static_cast<std::size_t>(k)] },
+                         { { 'l', y + 8, "D", "bus_d" }, { 'l', y + 18, "A", "bus_a" }, { 'l', y + 28, "WE", "nwe" }, { 'r', y + 18, "CE", ce[static_cast<std::size_t>(k)] } });
+                    W({ { 390, y + 8 }, { 380, y + 8 } });
+                    W({ { 390, y + 18 }, { 365, y + 18 } });
+                    W({ { 390, y + 28 }, { 350, y + 28 } });
+                }
+                chip("IC5 ~ the decoder: PE-2 and PE-3 pick one of the four RAMs, enabled by PI-1 (its type is not given)", 490, 40, 50, 156, { "IC5", "DECODER" },
+                     { { 'l', 48, "", "nce7" }, { 'l', 94, "", "nce8" }, { 'l', 140, "", "nce9" }, { 'l', 186, "", "nce10" },
+                       { 'r', 100, "", "bus_pe" }, { 'b', 530, "CE", "nce" } });
+                pin(550, 100, "bus_pe", "PE-2/3", 554, 100, L);
+                W({ { 330, 200 }, { 370, 200 }, { 370, 212 }, { 530, 212 }, { 530, 206 } });
+
+                // ---- The trigger (bottom) ----
+                W({ { 330, 230 }, { 346, 230 }, { 346, 282 }, { 354, 282 } });
+                Q("q27", 370, 282, false, "Q27 ~ turns PI-2's 10 us pulse over");
+                gnd(370, 294);
+                W({ { 370, 270 }, { 400, 270 } });
+                chip("IC6 ~ a TC4011BP, four NAND gates: a monostable that widens the pulse to about 1 ms, from the rising edge of Q27's, R100 with C23 and R102 with C27 timing it",
+                     410, 250, 70, 56, { "IC6 TC4011BP", "1 ms" },
+                     { { 'l', 270, "1", "nq27" }, { 't', 420, "3", "nic6a" }, { 't', 436, "5", "nrc23" }, { 't', 452, "4", "nic6b" }, { 't', 468, "8", "nrc27" },
+                       { 'r', 270, "10", "n6" } });
+                W({ { 420, 240 }, { 420, 236 } });
+                C("c23", 420, 236, 'h', 16, "C23 ~ with R100, the first half of the 1 ms");
+                W({ { 436, 236 }, { 436, 240 } });
+                R("r100", 436, 220, 'v', 16, "R100");
+                W({ { 452, 240 }, { 452, 236 } });
+                C("c27", 452, 236, 'h', 16, "C27 ~ with R102, the second half");
+                W({ { 468, 236 }, { 468, 240 } });
+                R("r102", 468, 220, 'v', 16, "R102");
+                W({ { 436, 220 }, { 468, 220 } });
+                pin(436, 220, "v5", "+5 V", 432, 220, Rj);
+                R("r117", 490, 270, 'h', 22, "R117 ~ 47 k");
+                Q("q31", 528, 270, false, "Q31 ~ on between the steps, holding Q32's base down; off for the pulse");
+                gnd(528, 282);
+                W({ { 528, 258 }, { 528, 250 }, { 670, 250 } });
+                // the accent: VR3 from +15 V, shunted by Q34 to about 5 V unless the step is accented
+                supply(650, 120, true);
+                POT("vr3", 650, 120, 'v', 24, "VR3 ~ the accent's level: 5 to 15 V on Q32's base, 4 to 14 V on the trigger");
+                W({ { 650, 144 }, { 650, 210 } });
+                W({ { 610, 144 }, { 650, 144 } });
+                Q("q34", 610, 156, false, "Q34 ~ shunts VR3 to about 5 V while PF-3 is low: no accent, a 4 V trigger");
+                pin(594, 156, "nq33", "PF3 / Q33", 590, 156, Rj);
+                pin(610, 168, "v5", "+5 V", 614, 172, L);
+                R("r120", 650, 210, 'v', 22, "R120 ~ 4.7 k");
+                W({ { 650, 232 }, { 650, 250 } });
+                Q("q32", 686, 250, false, "Q32 ~ the follower onto the common trigger");
+                supply(686, 238, true);
+                W({ { 686, 262 }, { 686, 290 }, { 750, 290 } });
+                arrow(750, 290);
+                R("r113", 716, 290, 'v', 18, "R113 ~ 4.7 k, holds the line down");
+                gnd(716, 308);
+                a.tx(706, 306, "COMMON TRIGGER, TO EVERY DRUM'S GATE", Rj);
             }
 
             /*
@@ -2286,6 +2647,8 @@ namespace cs808
                 }
                 for (auto& text : drawing.texts)
                 {
+                    if (text.fixed)
+                        continue; // inside a chip's box, where it was put
                     const float w = static_cast<float>(text.text.length()) * 3.6f, h = 7.0f;
                     const auto boxAt = [&](Pt at)
                     {
@@ -2390,11 +2753,12 @@ namespace cs808
                 for (const auto& net : nets)
                     ++count[net.name];
                 // Ground and the supplies may be drawn as symbols in many places, each piece with its own (D278).
+                // The CPU sheet joins a net's pieces by their pins' names, as schematics label a bus (D321).
                 for (const auto& [name, c] : count)
-                    if (c > 1 && name != "0" && name != "vcc" && name != "vee")
+                    if (c > 1 && name != "0" && name != "vcc" && name != "vee" && which != cpuSection)
                         errors.add(juce::String(name) + " is drawn in " + juce::String(c) + " pieces");
                 for (const auto& net : nets)
-                    if ((net.name == "0" || net.name == "vcc" || net.name == "vee") && count[net.name] > 1)
+                    if ((net.name == "0" || net.name == "vcc" || net.name == "vee" || (which == cpuSection && net.name == "v5")) && count[net.name] > 1)
                     {
                         bool rooted = false;
                         for (const int n : net.nodes)
@@ -2482,6 +2846,30 @@ namespace cs808
             Recording recorded;
             bool live = false;
             unsigned int liveHits = 0;
+            // The CPU sheet live (D321): the step it shows began at stepAt; while following, it runs at the real pace.
+            double stepAt = 0.0;
+            bool following = false, held = false; // held: Play or the slider taken, until the sequencer stops
+            /** The frame at this many ms. */
+            [[nodiscard]] double posAt(double ms) const
+            {
+                if (rec.ms.size() < 2)
+                    return 0.0;
+                const auto it = std::upper_bound(rec.ms.begin(), rec.ms.end(), ms);
+                const auto i = std::clamp<std::ptrdiff_t>(std::distance(rec.ms.begin(), it) - 1, 0, static_cast<std::ptrdiff_t>(rec.ms.size()) - 2);
+                const double a = rec.ms[static_cast<std::size_t>(i)], b = rec.ms[static_cast<std::size_t>(i) + 1];
+                return static_cast<double>(i) + std::clamp((ms - a) / std::max(1.0e-9, b - a), 0.0, 1.0);
+            }
+            /** A series' largest swing, signed, over the frames between two times: what a glance at the real pace sees. */
+            [[nodiscard]] float peakBetween(const std::vector<float>& s, double fromMs, double toMs) const
+            {
+                const auto a = static_cast<std::size_t>(std::max(0.0, std::floor(posAt(fromMs))));
+                const auto b = std::min(s.size(), static_cast<std::size_t>(std::ceil(posAt(toMs))) + 1);
+                float best = 0.0f;
+                for (std::size_t i = a; i < b; ++i)
+                    if (std::abs(s[i]) > std::abs(best))
+                        best = s[i];
+                return best;
+            }
 
             /** The data the sheet shows from now on: each wire's current made again from its parts' (D317). */
             void show(Recording r, bool isLive)
@@ -2603,6 +2991,10 @@ namespace cs808
             return *d;
         }
         double now = 0.0, last = 0.0;
+        // the CPU sheet's live step (D321): the drums struck since the last step, and the sequencer's place
+        std::uint32_t cpuLanes = 0;
+        std::int64_t lastSixteenth = -1;
+        std::uint64_t lastEdits = 0;
         const LiveBoard* liveBoard = nullptr; // the editor's (D320)
         int selected = -1;
         juce::Random random { 1980 };
@@ -2622,7 +3014,7 @@ namespace cs808
     {
         auto& i = *impl;
         i.boardUnbound = bindBoard(i.board);
-        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete", "Hand clap, complete", "Cowbell, complete", "Metal oscillators", "Cymbal, complete", "Hi-hats, complete" };
+        i.sheet.options = { "Whole board", "Bass drum, complete", "Snare, complete", "Low tom, complete", "Rim shot, complete", "Hand clap, complete", "Cowbell, complete", "Metal oscillators", "Cymbal, complete", "Hi-hats, complete", "CPU section" };
         i.sheet.chip.fontHeight = 10.5f;
         i.sheet.chip.text = "Sheet: Whole board";
         i.sheet.get = [this] { return impl->showFull && impl->full ? 1 + impl->full->which : 0; };
@@ -2663,6 +3055,8 @@ namespace cs808
             if (! f.playing && f.pos >= f.rec.samples - 2)
                 f.pos = 0.0;
             f.playing = ! f.playing;
+            f.following = false;
+            f.held = true;
         };
         addChildComponent(i.play);
         i.time.onValueChange = [this]
@@ -2671,6 +3065,8 @@ namespace cs808
             {
                 impl->full->pos = impl->time.getValue();
                 impl->full->playing = false;
+                impl->full->following = false;
+                impl->full->held = true;
             }
         };
         addChildComponent(i.time);
@@ -2684,7 +3080,7 @@ namespace cs808
         juce::StringArray all;
         for (int d = 0; d < drumsDrawn; ++d)
             for (const auto& e : impl->drum(d).errors)
-                all.add(juce::String(d == hiHats ? "the hi-hats: " : d == cymbal ? "the cymbal: " : d == metalShared ? "the metal oscillators: " : d == cowbell ? "the cowbell: " : d == handClap ? "the hand clap: " : d == rimShot ? "the rim shot: " : d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
+                all.add(juce::String(d == cpuSection ? "the CPU section: " : d == hiHats ? "the hi-hats: " : d == cymbal ? "the cymbal: " : d == metalShared ? "the metal oscillators: " : d == cowbell ? "the cowbell: " : d == handClap ? "the hand clap: " : d == rimShot ? "the rim shot: " : d == lowTom ? "the low tom: " : d == snareDrum ? "the snare: " : "the bass drum: ") + e);
         return all;
     }
 
@@ -2743,9 +3139,10 @@ namespace cs808
         // Its drum struck, the hit plays from the start, slowed down; strikes while it plays are held off until it is
         // through, as a scope's trigger holdoff does, or a beat restarts it every step and only the trigger shows.
         // A hit paused or moved on its slider stays where it is.
-        if (impl->showFull && impl->full && ! impl->full->playing && impl->full->pos <= 0.0
+        if (impl->showFull && impl->full && impl->full->which != cpuSection && ! impl->full->playing && impl->full->pos <= 0.0
             && (lanes & ((1u << laneOfDrum[impl->full->which]) | (impl->full->which == hiHats ? 1u << 10 : 0u))) != 0)
             impl->full->playing = true;
+        impl->cpuLanes |= lanes; // the CPU sheet's next step (D321)
         const auto& kit = processor.project().kit;
         for (int l = 0; l < laneCount; ++l)
         {
@@ -2790,8 +3187,8 @@ namespace cs808
         // oscillators' the bank; a capture runs as long as the sheet's recording.
         using W = coolsynth::synth::v3::CircuitWatch;
         static constexpr std::array<int, drumsDrawn> watchOf { W::bassDrum, W::snare, W::lowTom, W::rimShot, W::clap, W::cowbell,
-                                                               W::metalBankSheet, W::cymbal, W::openHat };
-        static constexpr std::array<float, drumsDrawn> lengthOf { 300.0f, 300.0f, 600.0f, 150.0f, 300.0f, 250.0f, 30.0f, 600.0f, 400.0f }; // each recording's length
+                                                               W::metalBankSheet, W::cymbal, W::openHat, -1 };
+        static constexpr std::array<float, drumsDrawn> lengthOf { 300.0f, 300.0f, 600.0f, 150.0f, 300.0f, 250.0f, 30.0f, 600.0f, 400.0f, 0.0f }; // each recording's length
         auto& watch = processor.circuitWatch();
         const bool liveSheet = isVisible() && impl->showFull && impl->full != nullptr;
         watch.watchCircuit(liveSheet ? watchOf[static_cast<std::size_t>(impl->full->which)] : -1);
@@ -2809,6 +3206,42 @@ namespace cs808
                 f.liveHits = hits;
                 f.show(std::move(captured), true);
                 resized(); // the time slider's range
+            }
+        }
+        // The CPU sheet live (D321): at each step of the playing sequencer, the step made again from what it struck,
+        // and run at the real pace until the next; Play or the slider hold it until the sequencer stops.
+        if (liveSheet && impl->full->which == cpuSection)
+        {
+            auto& f = *impl->full;
+            const std::int64_t sixteenth = processor.isPlaying() ? processor.playingSixteenth() : -1;
+            if (sixteenth != impl->lastSixteenth)
+            {
+                if (sixteenth >= 0 && ! f.held)
+                {
+                    CpuStep step;
+                    step.lanes = impl->cpuLanes & 0xfffu;
+                    step.accentKnob = processor.project().kit.knob[0];
+                    step.bpm = processor.tempoNow();
+                    step.step = static_cast<int>(sixteenth % 16);
+                    step.wrote = processor.editCount() != impl->lastEdits;
+                    f.show(cpuStepRecording(step), true);
+                    f.stepAt = nowMs;
+                    f.following = true;
+                    resized(); // the slider's range
+                }
+                if (sixteenth < 0)
+                {
+                    f.following = false;
+                    f.held = false;
+                }
+                impl->lastSixteenth = sixteenth;
+                impl->cpuLanes = 0;
+                impl->lastEdits = processor.editCount();
+            }
+            if (f.following && ! f.playing)
+            {
+                f.pos = f.posAt(nowMs - f.stepAt);
+                impl->time.setValue(f.pos, juce::dontSendNotification);
             }
         }
         if (! isVisible())
@@ -2928,8 +3361,11 @@ namespace cs808
 
         // The wires as the board's copper, a pad at every joint (D316), and their voltage.
         g.setColour(look.copper.withAlpha(0.85f));
+        // a bus of four lines (the CPU sheet's PA, PB, PC and the rest: D321) drawn as one, thicker
+        const auto isBus = [&f](int net) { return net >= 0 && f.nets[static_cast<std::size_t>(net)].name.rfind("bus_", 0) == 0; };
         for (const auto& e : f.edges)
-            g.drawLine(juce::Line<float>(f.nodes[static_cast<std::size_t>(e.a)].p.transformedBy(t), f.nodes[static_cast<std::size_t>(e.b)].p.transformedBy(t)), 1.5f * scale);
+            g.drawLine(juce::Line<float>(f.nodes[static_cast<std::size_t>(e.a)].p.transformedBy(t), f.nodes[static_cast<std::size_t>(e.b)].p.transformedBy(t)),
+                       (isBus(e.net) ? 3.2f : 1.5f) * scale);
         for (const auto& n : f.nodes)
             if (n.edges.size() + n.terms.size() >= 3)
             {
@@ -2944,14 +3380,17 @@ namespace cs808
             const auto it = f.rec.series.find(net.name);
             if (it == f.rec.series.end())
                 continue;
-            const float v = f.valueAt(it->second);
+            // following the steps at the real pace (D321), what the last 30 ms held: a 1 ms pulse is seen at the screen's rate
+            const double nowMs = f.msAt(f.pos);
+            const float v = f.following ? f.peakBetween(it->second, nowMs - 30.0, nowMs) : f.valueAt(it->second);
             const float m = std::min(1.0f, std::sqrt(std::abs(v) / 15.0f));
             if (m < 0.08f)
                 continue;
             g.setColour((v > 0 ? th.vpos : th.vneg).withAlpha(m * 0.9f));
+            const float width = (net.name.rfind("bus_", 0) == 0 ? 4.5f : 2.8f) * scale;
             for (const int e : net.edges)
                 g.drawLine(juce::Line<float>(f.nodes[static_cast<std::size_t>(f.edges[static_cast<std::size_t>(e)].a)].p.transformedBy(t),
-                                             f.nodes[static_cast<std::size_t>(f.edges[static_cast<std::size_t>(e)].b)].p.transformedBy(t)), 2.8f * scale);
+                                             f.nodes[static_cast<std::size_t>(f.edges[static_cast<std::size_t>(e)].b)].p.transformedBy(t)), width);
         }
         paintParts(g, f.drawing, t, scale, impl->selected, true);
         for (const auto& [c, r] : f.pins)
@@ -2987,7 +3426,60 @@ namespace cs808
             }
         }
 
+        // The CPU's step as a timing diagram in the foot (D321), as a logic analyser draws one: each line's level
+        // over the step, its first 1.5 ms drawn wide (the memory read, PI-2's 10 us, the 1 ms trigger), the time marked.
+        if (f.which == cpuSection && f.rec.ms.size() > 1)
+        {
+            struct Row { const char* series; const char* name; float full; };
+            static constexpr std::array<Row, 11> rows { { { "nint", "INT", 5.0f }, { "ph0", "PH0", 5.0f }, { "ph1", "PH1", 5.0f }, { "ph2", "PH2", 5.0f },
+                                                          { "ph3", "PH3", 5.0f }, { "nce", "PI-1 CE", 5.0f }, { "data", "DATA", 5.0f }, { "npi2", "PI-2", 5.0f },
+                                                          { "n6", "IC6 OUT", 5.0f }, { "vt", "TRIGGER", 14.0f }, { "npf3", "ACCENT", 5.0f } } };
+            const float top = Pt(0.0f, f.height).transformedBy(t).y + 16.0f, bottom = static_cast<float>(getHeight()) - 58.0f;
+            const float rowH = std::min(14.0f, (bottom - top) / static_cast<float>(rows.size()));
+            if (rowH > 6.0f)
+            {
+                const auto area = juce::Rectangle<float>(84.0f, top, static_cast<float>(getWidth()) - 108.0f, rowH * static_cast<float>(rows.size()));
+                const double span = f.rec.ms.back(), zoom = 1.5;
+                const float split = area.getX() + area.getWidth() * 0.35f;
+                const auto xOf = [&](double ms)
+                {
+                    return ms < zoom ? area.getX() + static_cast<float>(ms / zoom) * (split - area.getX())
+                                     : split + static_cast<float>((ms - zoom) / std::max(1.0e-6, span - zoom)) * (area.getRight() - split);
+                };
+                g.setColour(look.dim);
+                g.setFont(labelFont(9.0f));
+                shapedText(g, "THE STEP, ITS FIRST 1.5 MS WIDE", area.withHeight(12.0f).translated(0.0f, -14.0f), juce::Justification::centredLeft, false);
+                g.setColour(look.ink.withAlpha(0.18f));
+                g.drawLine(split, area.getY() - 2.0f, split, area.getBottom() + 2.0f, 1.0f);
+                for (std::size_t r = 0; r < rows.size(); ++r)
+                {
+                    const float y0 = area.getY() + rowH * static_cast<float>(r), yLow = y0 + rowH * 0.8f, yHigh = y0 + rowH * 0.2f;
+                    g.setColour(look.dim);
+                    g.setFont(labelFont(8.5f));
+                    shapedText(g, rows[r].name, juce::Rectangle<float>(16.0f, y0, 64.0f, rowH), juce::Justification::centredRight, false);
+                    const auto it = f.rec.series.find(rows[r].series);
+                    if (it == f.rec.series.end())
+                        continue;
+                    juce::Path trace;
+                    for (std::size_t i = 0; i < it->second.size() && i < f.rec.ms.size(); ++i)
+                    {
+                        const float x = xOf(f.rec.ms[i]);
+                        const float y = yLow - (yLow - yHigh) * std::clamp(it->second[i] / rows[r].full, 0.0f, 1.0f);
+                        i == 0 ? trace.startNewSubPath(x, y) : trace.lineTo(x, y);
+                    }
+                    g.setColour(th.vpos.withAlpha(0.35f));
+                    g.strokePath(trace, juce::PathStrokeType(2.6f));
+                    g.setColour(th.vpos.withAlpha(0.95f));
+                    g.strokePath(trace, juce::PathStrokeType(1.1f));
+                }
+                const float nowX = xOf(f.msAt(f.pos));
+                g.setColour(look.ink.withAlpha(0.55f));
+                g.drawLine(nowX, area.getY() - 2.0f, nowX, area.getBottom() + 2.0f, 1.0f);
+            }
+        }
+
         // The drum's output over the whole hit, in the sheet's empty foot (D316): where the hit is now marked.
+        if (f.which != cpuSection)
         {
             static constexpr std::array<const char*, 5> outputs { "vout", "vcy", "voh", "ncbo", "n10" }; // not the j* nodes: those are trigger jacks
             const std::vector<float>* out = nullptr;
@@ -3041,7 +3533,9 @@ namespace cs808
             auto caption = getLocalBounds().removeFromBottom(24).toFloat().withTrimmedRight(260.0f + backHintWidth);
             g.setColour(look.dim);
             g.setFont(uiFont(10.5f));
-            g.drawFittedText((f.live ? juce::String("Live from the engine's circuit at ") + f.rec.setting + "; the parts it leaves out from ngspice. "
+            g.drawFittedText((f.which == cpuSection ? juce::String("From our sequencer, as the service notes describe the section (Roland's program is not public, so not cycle exact): ")
+                                                          + f.rec.setting + ". "
+                              : f.live ? juce::String("Live from the engine's circuit at ") + f.rec.setting + "; the parts it leaves out from ngspice. "
                                      : juce::String("Recorded from ngspice, the reference the engine is checked against: ") + f.rec.setting + ". ")
                                  + (f.errors.isEmpty() ? "Checked against the netlist: " + juce::String(static_cast<int>(f.nets.size())) + " nets and "
                                                              + juce::String(static_cast<int>(f.rec.parts.size())) + " parts, all matching."

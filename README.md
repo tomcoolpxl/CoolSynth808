@@ -42,7 +42,8 @@ To come.
   board is drawn below it. The drums' copper and the whole board light green as a node rises and red as it falls, as
   the engine plays. Each column that opens is framed; a click opens its schematic, MASTER's the whole board. A
   drum's shows the engine's own voltages and currents from its last hit, with the ngspice recording until it is
-  struck. A click on the sheet's empty space, or Escape, goes back.
+  struck. The CPU board opens the CPU section's: our sequencer's step as the service notes describe it, with a
+  timing diagram. A click on the sheet's empty space, or Escape, goes back.
 - Options opens a window of its own: the audio driver (Windows Audio, or ASIO), the MIDI ports, the theme (Roland,
   Silver, Steel, Olive), the panel's circuit (full, faint or hidden) and its electricity (animated or still), the
   window's size and a MIDI controller's setup.

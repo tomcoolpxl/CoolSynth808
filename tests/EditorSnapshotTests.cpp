@@ -279,6 +279,18 @@ public:
             shoot("lid-cymbal");
             editor->lidForTesting().showSheet(9);
             shoot("lid-hi-hats");
+            // The CPU section (D321): a step of our sequencer, 0.5 ms in, IC6 holding the common trigger.
+            editor->lidForTesting().showSheet(10);
+            editor->layOut();
+            (void) editor->lidForTesting().showMomentForTesting(0.5);
+            shoot("lid-cpu");
+            (void) editor->lidForTesting().showMomentForTesting(2.2);
+            shoot("lid-cpu-scan");
+            // Live (D321): the sequencer playing, the sheet following its step.
+            editor->frameForTesting();
+            playTo(static_cast<int>(p->playingSixteenth()) + 1);
+            editor->frameForTesting();
+            shoot("lid-cpu-live");
             editor->lidForTesting().showSheet(0);
             editor->lidView = false;
             // The panel's etched circuit lit (D298): the bass drum, the snare and the closed hat struck, 30 ms on.
