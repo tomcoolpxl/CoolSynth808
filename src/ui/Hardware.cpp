@@ -1,4 +1,5 @@
 #include "Hardware.h"
+#include "Text.h"
 
 namespace cs808
 {
@@ -21,6 +22,32 @@ namespace cs808
             g.setGradientFill(grad);
             g.fillEllipse(juce::Rectangle<float>(radius * 2.0f, radius * 2.0f).withCentre(c));
         }
+
+        /** A round thing's soft shadow, offset: full under it, fading out over 'blur' px past its edge (D306: a
+            pattern key's press took 150 ms to show, much of it shadows). A DropShadow blurs an image on every paint. */
+        void ellipseShadow(juce::Graphics& g, juce::Rectangle<float> shape, float blur, juce::Point<float> offset, juce::Colour colour)
+        {
+            // Stacked solid discs, widest first: gradients cost far more than solid fills in the window's renderer.
+            const int layers = juce::jlimit(2, 6, juce::roundToInt(blur));
+            const auto base = shape.translated(offset.x, offset.y).reduced(blur * 0.5f);
+            g.setColour(colour.withMultipliedAlpha(1.0f / static_cast<float>(layers)));
+            for (int i = layers; i >= 1; --i)
+                g.fillEllipse(base.expanded(blur * static_cast<float>(i) / static_cast<float>(layers)));
+        }
+
+        /** A rounded box's soft shadow (D306): stacked solid boxes, widest first, as a blur looks; the DropShadow it
+            replaces draws eight gradient pieces, which cost close to a millisecond a key in the window's renderer. */
+        void boxShadow(juce::Graphics& g, juce::Rectangle<float> box, float corner, float blur, juce::Point<float> offset, juce::Colour colour)
+        {
+            const int layers = juce::jlimit(2, 8, juce::roundToInt(blur * 0.75f));
+            const auto base = box.translated(offset.x, offset.y).reduced(blur * 0.5f);
+            g.setColour(colour.withMultipliedAlpha(1.0f / static_cast<float>(layers)));
+            for (int i = layers; i >= 1; --i)
+            {
+                const float e = blur * static_cast<float>(i) / static_cast<float>(layers);
+                g.fillRoundedRectangle(base.expanded(e), corner + e);
+            }
+        }
     }
 
     // ---- Keys -------------------------------------------------------------------------------------------------
@@ -32,9 +59,9 @@ namespace cs808
             r = r.translated(0.0f, 1.0f);
         // the drop shadow under a raised key, and the glow round a lit one
         if (cap == Cap::backlit)
-            juce::DropShadow(rgb(0xff8228, 0.55f), 12, {}).drawForRectangle(g, r.toNearestInt());
+            boxShadow(g, r, radius, 12.0f, {}, rgb(0xff8228, 0.55f));
         else if (! pressed)
-            juce::DropShadow(juce::Colours::black.withAlpha(0.55f), 4, { 0, 2 }).drawForRectangle(g, r.toNearestInt());
+            boxShadow(g, r, radius, 4.0f, { 0.0f, 2.0f }, juce::Colours::black.withAlpha(0.55f));
         // the dark surround
         g.setColour(rgb(0x0b0a09));
         g.fillRoundedRectangle(r.expanded(1.0f), radius + 1.0f);
@@ -86,10 +113,10 @@ namespace cs808
         if (! lit)
         {
             g.setColour(juce::Colours::black.withAlpha(0.6f));
-            g.drawText(text, area.translated(0.0f, -1.0f), juce::Justification::centred, false);
+            shapedText(g, text, area.translated(0.0f, -1.0f), juce::Justification::centred, false);
         }
         g.setColour(lit ? rgb(cap == Cap::backlit ? 0x2a1408 : 0x1a120c) : rgb(0xf1ebde));
-        g.drawText(text, area, juce::Justification::centred, false);
+        shapedText(g, text, area, juce::Justification::centred, false);
     }
 
     // ---- Lenses -----------------------------------------------------------------------------------------------
@@ -171,7 +198,7 @@ namespace cs808
         // its shadow
         g.setColour(juce::Colours::black.withAlpha(0.55f));
         g.fillEllipse(capArea.translated(0.0f, 1.5f));
-        juce::DropShadow(juce::Colours::black.withAlpha(0.6f), 4, { 0, 2 }).drawForPath(g, [&] { juce::Path p; p.addEllipse(capArea); return p; }());
+        ellipseShadow(g, capArea, 4.0f, { 0.0f, 2.0f }, juce::Colours::black.withAlpha(0.6f));
         // the cap, lit from the upper left
         // a silver cap on the silver board (D303), lit from the upper left as the dark ones are
         juce::ColourGradient grad(accent ? rgb(0xf3a066) : silver ? rgb(0xf6f6f6) : rgb(0x4d4943), capArea.getX() + capArea.getWidth() * 0.4f, capArea.getY() + capArea.getHeight() * 0.3f,
@@ -197,7 +224,7 @@ namespace cs808
         const auto box = [&](float x, float y, float w, float h) { return juce::Rectangle<float>(o.x + x * k, o.y + y * k, w * k, h * k); };
         // the plate: bevelled, lit from above
         const auto plate = box(0.5f, 0.5f, 27.0f, 45.0f);
-        juce::DropShadow(juce::Colours::black.withAlpha(0.6f), 4, { 0, 2 }).drawForRectangle(g, plate.toNearestInt());
+        boxShadow(g, plate, 3.5f * k, 4.0f, { 0.0f, 2.0f }, juce::Colours::black.withAlpha(0.6f));
         g.setGradientFill(vertical(plate, rgb(0xe4e6e8), rgb(0xc2c5c8), 0.5f, rgb(0xa2a6aa)) /* the silver board's plate (D303) */);
         g.fillRoundedRectangle(plate, 3.5f * k);
         g.setColour(rgb(0x0b0a09));
@@ -238,10 +265,11 @@ namespace cs808
         juce::Path shape;
         shape.addRoundedRectangle(area, radius);
         // its shadow on the board
+        // (drawn with gradients, not a blurred image: D306)
         if (strip)
-            juce::DropShadow(juce::Colours::black.withAlpha(0.5f), 6, { 0, 2 }).drawForPath(g, shape);
+            boxShadow(g, area, radius, 6.0f, { 0.0f, 2.0f }, juce::Colours::black.withAlpha(0.5f));
         else
-            juce::DropShadow(juce::Colours::black.withAlpha(0.6f), 12, { 0, 3 }).drawForPath(g, shape);
+            boxShadow(g, area, radius, 12.0f, { 0.0f, 3.0f }, juce::Colours::black.withAlpha(0.6f));
         // the smoke: the board shows through it a little
         g.setGradientFill(juce::ColourGradient(rgb(0x100f0d, strip ? 0.85f : 0.80f), area.getX(), area.getY(),
                                                rgb(0x0c0b0a, strip ? 0.90f : 0.86f), area.getX(), area.getBottom(), false));
@@ -268,7 +296,7 @@ namespace cs808
     {
         juce::Path shape;
         shape.addRoundedRectangle(area, radius);
-        juce::DropShadow(juce::Colours::black.withAlpha(0.5f), 3, { 0, 2 }).drawForPath(g, shape);
+        boxShadow(g, area, radius, 3.0f, { 0.0f, 2.0f }, juce::Colours::black.withAlpha(0.5f)); // no gradients (D306)
         g.setColour(rgb(0x0b0a09));
         g.fillRoundedRectangle(area.expanded(1.0f), radius + 1.0f);
         g.setGradientFill(has ? vertical(area, rgb(0x4a4640), rgb(0x3f3b36), 0.5f, rgb(0x34312d))
@@ -301,7 +329,7 @@ namespace cs808
         g.setColour(juce::Colours::black.withAlpha(0.6f * opacity));
         g.fillRoundedRectangle(area.translated(0.0f, 1.0f), 3.0f);
         if (sounding)
-            juce::DropShadow(rgb(0xffa046, 0.95f * opacity), 18, {}).drawForPath(g, shape);
+            boxShadow(g, area, 3.0f, 18.0f, {}, rgb(0xffa046, 0.95f * opacity)); // no gradients (D306)
         juce::ColourGradient face;
         if (sounding)
         {
@@ -401,9 +429,7 @@ namespace cs808
         // on the glass, a chamfered edge bright on the upper left, a flat face turned on a lathe, and a soft
         // reflection of the light across it.
         const auto cap = juce::Rectangle<float>(diameter, diameter).withCentre(c);
-        juce::Path round;
-        round.addEllipse(cap);
-        juce::DropShadow(juce::Colours::black.withAlpha(0.75f), 5, { 1, 2 }).drawForPath(g, round);
+        ellipseShadow(g, cap, 5.0f, { 1.0f, 2.0f }, juce::Colours::black.withAlpha(0.75f));
         // the barrel's side, seen just below the face
         g.setColour(rgb(0x3c4146));
         g.fillEllipse(cap.translated(0.0f, 0.9f));

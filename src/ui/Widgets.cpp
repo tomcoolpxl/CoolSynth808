@@ -1,4 +1,5 @@
 #include "Widgets.h"
+#include "Text.h"
 
 namespace cs808
 {
@@ -50,14 +51,14 @@ namespace cs808
                 g.setColour(dragging || isMouseOver() ? (silver ? juce::Colours::black : juce::Colours::white) : labelColour);
                 g.setFont(labelFont(10.0f));
                 const auto shown = dragging && get && ! valueText ? juce::String(get() * 10.0f, 1) : label.toUpperCase();
-                g.drawText(shown, juce::Rectangle<float>(-20.0f, y, w + 40.0f, 10.0f), juce::Justification::centred, false);
+                shapedText(g, shown, juce::Rectangle<float>(-20.0f, y, w + 40.0f, 10.0f), juce::Justification::centred, false);
                 y += 10.0f + 3.0f;
             }
             if (valueText)
             {
                 g.setColour(theme().lit);
                 g.setFont(monoFont(11.0f));
-                g.drawText(valueText(), juce::Rectangle<float>(0.0f, y, w, 13.0f), juce::Justification::centred, false);
+                shapedText(g, valueText(), juce::Rectangle<float>(0.0f, y, w, 13.0f), juce::Justification::centred, false);
             }
             return;
         }
@@ -123,20 +124,20 @@ namespace cs808
         {
             g.setColour(th.ink);
             g.setFont(uiFont(valueHeight));
-            g.drawText(shown, area.removeFromTop(valueHeight + 4.0f), juce::Justification::centredLeft);
+            shapedText(g, shown, area.removeFromTop(valueHeight + 4.0f), juce::Justification::centredLeft);
             g.setColour(th.dim);
             g.setFont(uiFont(9.5f));
-            g.drawText(label.toUpperCase(), area, juce::Justification::topLeft);
+            shapedText(g, label.toUpperCase(), area, juce::Justification::topLeft);
         }
         else
         {
             g.setColour(th.dim);
             g.setFont(uiFont(9.5f));
             const float labelWidth = label.isEmpty() ? 0.0f : static_cast<float>(juce::GlyphArrangement::getStringWidthInt(uiFont(9.5f), label.toUpperCase())) + 6.0f;
-            g.drawText(label.toUpperCase(), area.removeFromLeft(labelWidth), juce::Justification::centredLeft);
+            shapedText(g, label.toUpperCase(), area.removeFromLeft(labelWidth), juce::Justification::centredLeft);
             g.setColour(th.ink);
             g.setFont(uiFont(valueHeight, true));
-            g.drawText(shown, area, juce::Justification::centredLeft);
+            shapedText(g, shown, area, juce::Justification::centredLeft);
         }
     }
 
@@ -193,7 +194,7 @@ namespace cs808
             }
             g.setColour(juce::Colour(0xfff1ebde));
             g.setFont(font);
-            g.drawText(word, area.reduced(10.0f, 0.0f), juce::Justification::centredLeft, false);
+            shapedText(g, word, area.reduced(10.0f, 0.0f), juce::Justification::centredLeft, false);
             return;
         }
         const Cap cap = on && filledWhenOn ? Cap::hot : (on ? Cap::selected : Cap::plain);
@@ -204,7 +205,7 @@ namespace cs808
         if (toggle)
         {
             // the lens and the word centred together, 6 px apart, as the mockup's keys
-            const float w = juce::GlyphArrangement::getStringWidth(font, word);
+            const float w = shapedWidth(font, word);
             const float x = area.getCentreX() - (w + 12.0f) * 0.5f;
             drawLens(g, { x + 3.0f, textArea.getCentreY() }, 6.0f, on ? onLens : Lens::off);
             textArea = juce::Rectangle<float>(x + 12.0f, textArea.getY(), w + 2.0f, textArea.getHeight());
@@ -230,7 +231,7 @@ namespace cs808
             const bool on = i == chosen;
             drawKeyCap(g, cell, on ? Cap::selected : Cap::plain, false, false);
             const auto& word = options[static_cast<std::size_t>(i)];
-            const float tw = juce::GlyphArrangement::getStringWidth(font, word.toUpperCase());
+            const float tw = shapedWidth(font, word.toUpperCase());
             const float x = cell.getCentreX() - (tw + 12.0f) * 0.5f;
             drawLens(g, { x + 3.0f, cell.getCentreY() }, 6.0f, on ? Lens::orange : Lens::off);
             drawKeyText(g, word.toUpperCase(), juce::Rectangle<float>(x + 12.0f, cell.getY(), tw + 2.0f, cell.getHeight()), on ? Cap::selected : Cap::plain, font);
@@ -248,7 +249,7 @@ namespace cs808
         const auto word = [&](const juce::String& text, float y, bool lit)
         {
             g.setColour(lit ? boardInk::label : boardInk::dim); // printed on the silver board (D303)
-            g.drawText(text.toUpperCase(), juce::Rectangle<float>(-20.0f, y, w + 40.0f, static_cast<float>(wordHeight)), juce::Justification::centred, false);
+            shapedText(g, text.toUpperCase(), juce::Rectangle<float>(-20.0f, y, w + 40.0f, static_cast<float>(wordHeight)), juce::Justification::centred, false);
         };
         word(first, 0.0f, ! down);
         drawSlideSwitch(g, juce::Rectangle<float>(static_cast<float>(switchWidth), static_cast<float>(switchHeight))

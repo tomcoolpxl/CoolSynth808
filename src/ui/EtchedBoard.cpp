@@ -203,9 +203,12 @@ namespace cs808
     {
         // The sequencer's glass floats a little above the board on its four pins: its shadow falls on the metal,
         // offset down and soft; the transport strip, closer to the board, casts a smaller one (D303).
+        // The user (D306): the first shade did not show. It falls down and to the right, away from the light on the
+        // upper left, dark close to the glass and soft further out; the glass draws none of its own, as that is cut
+        // at its edge.
         const juce::Rectangle<int> glass { 14, 344, 1252, 442 };
-        juce::DropShadow(juce::Colours::black.withAlpha(0.42f), 22, { 0, 9 }).drawForRectangle(g, glass);
-        juce::DropShadow(juce::Colours::black.withAlpha(0.25f), 6, { 0, 2 }).drawForRectangle(g, glass);
+        juce::DropShadow(juce::Colours::black.withAlpha(0.55f), 18, { 4, 9 }).drawForRectangle(g, glass);
+        juce::DropShadow(juce::Colours::black.withAlpha(0.6f), 6, { 2, 3 }).drawForRectangle(g, glass);
         if (! stripArea.isEmpty())
             juce::DropShadow(juce::Colours::black.withAlpha(0.3f), 8, { 0, 3 }).drawForRectangle(g, stripArea.toNearestInt());
     }

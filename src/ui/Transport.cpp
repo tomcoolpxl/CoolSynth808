@@ -1,6 +1,7 @@
 #include "Transport.h"
 
 #include "Editor.h"
+#include "Text.h"
 
 namespace cs808
 {
@@ -10,7 +11,7 @@ namespace cs808
 
         float wordWidth(const juce::String& text, float height = 10.0f)
         {
-            return juce::GlyphArrangement::getStringWidth(labelFont(height), text.toUpperCase());
+            return shapedWidth(labelFont(height), text.toUpperCase());
         }
     }
 
@@ -22,27 +23,27 @@ namespace cs808
     public:
         explicit TempoReadout(Processor& p) : processor(p) {}
 
-        static int width() { return juce::roundToInt(juce::GlyphArrangement::getStringWidth(monoFont(13.0f), "120.0") + 5.0f + wordWidth("BPM") + 12.0f); }
+        static int width() { return juce::roundToInt(shapedWidth(monoFont(13.0f), "120.0") + 5.0f + wordWidth("BPM") + 12.0f); }
 
         void paint(juce::Graphics& g) override
         {
             const double tempo = processor.followingClock() ? processor.tempoNow() : processor.project().play.tempo;
             const auto number = juce::String(tempo, 1);
             const auto font = monoFont(13.0f);
-            const float numberWidth = juce::GlyphArrangement::getStringWidth(font, number);
+            const float numberWidth = shapedWidth(font, number);
             const auto area = getLocalBounds().toFloat().reduced(6.0f, 0.0f);
             const auto numberArea = area.withWidth(numberWidth + 2.0f);
             g.setFont(font);
             // its glow, as a lit display's
             g.setColour(juce::Colour(0xffffa04a).withAlpha(0.16f));
             for (const auto d : { juce::Point<float>(-1.0f, 0.0f), { 1.0f, 0.0f }, { 0.0f, -1.0f }, { 0.0f, 1.0f } })
-                g.drawText(number, numberArea.translated(d.x, d.y), juce::Justification::centredLeft, false);
+                shapedText(g, number, numberArea.translated(d.x, d.y), juce::Justification::centredLeft, false);
             g.setColour(theme().lit);
-            g.drawText(number, numberArea, juce::Justification::centredLeft, false);
+            shapedText(g, number, numberArea, juce::Justification::centredLeft, false);
             // BPM on the same baseline: the label's cap height sits lower than the digits' centre
             g.setColour(juce::Colour(0xffddd5c3));
             g.setFont(labelFont(10.0f));
-            g.drawText("BPM", area.withTrimmedLeft(numberWidth + 5.0f).translated(0.0f, 1.0f), juce::Justification::centredLeft, false);
+            shapedText(g, "BPM", area.withTrimmedLeft(numberWidth + 5.0f).translated(0.0f, 1.0f), juce::Justification::centredLeft, false);
         }
 
         void mouseDown(const juce::MouseEvent&) override
@@ -167,7 +168,7 @@ namespace cs808
         const auto* swing = items[swingLabelAfter];
         g.setColour(juce::Colour(0xfff4efe4));
         g.setFont(labelFont(10.0f));
-        g.drawText("SWING", juce::Rectangle<float>(static_cast<float>(swing->getX() - 4 + 8 + 18 + 10), 0.0f, static_cast<float>(swingWordWidth) + 10.0f, static_cast<float>(height)),
+        shapedText(g, "SWING", juce::Rectangle<float>(static_cast<float>(swing->getX() - 4 + 8 + 18 + 10), 0.0f, static_cast<float>(swingWordWidth) + 10.0f, static_cast<float>(height)),
                    juce::Justification::centredLeft, false);
     }
 }

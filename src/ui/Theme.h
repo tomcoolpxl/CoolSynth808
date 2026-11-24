@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <map>
+#include <tuple>
 
 #include <juce_graphics/juce_graphics.h>
 
@@ -93,9 +95,22 @@ namespace cs808
         return faces[static_cast<std::size_t>(face)];
     }
 
+    /** The fonts made, deleted with JUCE's shutdown (a plain static outlived JUCE's fonts and hung the quit). */
+    struct MadeFonts final : public juce::DeletedAtShutdown
+    {
+        std::map<std::tuple<int, int, int>, juce::Font> map;
+        ~MadeFonts() override { clearSingletonInstance(); }
+        JUCE_DECLARE_SINGLETON_SINGLETHREADED_INLINE(MadeFonts, false)
+    };
+
     inline juce::Font fontOf(Face face, float pointHeight, float tracking = 0.0f)
     {
-        return juce::Font(juce::FontOptions().withTypeface(typefaceOf(face)).withPointHeight(pointHeight).withKerningFactor(tracking));
+        // Made once per face, size and tracking and copied after: making one took 22 us, many times a paint (D306).
+        auto& made = MadeFonts::getInstance()->map;
+        const auto key = std::make_tuple(static_cast<int>(face), juce::roundToInt(pointHeight * 100.0f), juce::roundToInt(tracking * 10000.0f));
+        if (const auto found = made.find(key); found != made.end())
+            return found->second;
+        return made.emplace(key, juce::Font(juce::FontOptions().withTypeface(typefaceOf(face)).withPointHeight(pointHeight).withKerningFactor(tracking))).first->second;
     }
 
     /** Small capitals printed on the panel: condensed, spaced. */

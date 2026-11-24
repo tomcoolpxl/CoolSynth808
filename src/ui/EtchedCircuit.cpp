@@ -2,6 +2,7 @@
 
 #include "LibraryData.h"
 #include "Theme.h"
+#include "Text.h"
 
 namespace cs808
 {
@@ -350,7 +351,7 @@ namespace cs808
                 const auto r = juce::Rectangle<float>(s.x, s.y, w, fs + 1.0f);
                 if (! hits(r))
                 {
-                    g.drawText(p.name, r, juce::Justification::centredLeft, false);
+                    shapedText(g, p.name, r, juce::Justification::centredLeft, false);
                     used.push_back(r);
                     break;
                 }

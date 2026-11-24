@@ -8,6 +8,7 @@
 #include "ui/LidView.h"
 #include "ui/Sequencer.h"
 #include "ui/Transport.h"
+#include "ui/Text.h"
 
 namespace cs808
 {
@@ -30,7 +31,7 @@ namespace cs808
         /** A word's box on the board, 5 px of clearance each side, for the copper to keep off. */
         KeepOut wordKeepOut(const juce::String& text, const juce::Font& font, float centreX, float top, float height)
         {
-            const float w = juce::GlyphArrangement::getStringWidth(font, text) + 10.0f;
+            const float w = shapedWidth(font, text) + 10.0f;
             return { { centreX - w * 0.5f, top, w, height } };
         }
     }
@@ -57,15 +58,15 @@ namespace cs808
             {
                 g.setColour(juce::Colour(0xffffa04a).withAlpha(0.18f));
                 for (const auto d : { juce::Point<float>(-1.0f, 0.0f), { 1.0f, 0.0f }, { 0.0f, -1.0f }, { 0.0f, 1.0f } })
-                    g.drawText(id, idArea.translated(d.x, d.y), juce::Justification::centred, false);
+                    shapedText(g, id, idArea.translated(d.x, d.y), juce::Justification::centred, false);
             }
             g.setColour(sel ? boardInk::accent : idInk);
-            g.drawText(id, idArea, juce::Justification::centred, false);
+            shapedText(g, id, idArea, juce::Justification::centred, false);
             if (column > 0)
             {
                 g.setColour(nameInk);
                 g.setFont(labelFont(10.0f));
-                g.drawText(laneName(column, kit).toUpperCase(), juce::Rectangle<float>(0.0f, 18.0f, w, 10.0f), juce::Justification::centred, false);
+                shapedText(g, laneName(column, kit).toUpperCase(), juce::Rectangle<float>(0.0f, 18.0f, w, 10.0f), juce::Justification::centred, false);
             }
         }
 
@@ -90,16 +91,16 @@ namespace cs808
         {
             const auto light = logoFont(17.0f, false), bold = logoFont(17.0f, true);
             const juce::String first = "CoolSynth ";
-            const float w1 = juce::GlyphArrangement::getStringWidth(light, first), w2 = juce::GlyphArrangement::getStringWidth(bold, "808");
+            const float w1 = shapedWidth(light, first), w2 = shapedWidth(bold, "808");
             const juce::Rectangle<float> line(14.0f, 5.0f, 300.0f, 20.0f);
             g.setColour(boardInk::ink);
             g.setFont(light);
-            g.drawText(first, line, juce::Justification::centredLeft, false);
+            shapedText(g, first, line, juce::Justification::centredLeft, false);
             g.setFont(bold);
-            g.drawText("808", line.withTrimmedLeft(w1), juce::Justification::centredLeft, false);
+            shapedText(g, "808", line.withTrimmedLeft(w1), juce::Justification::centredLeft, false);
             g.setColour(boardInk::label);
             g.setFont(labelFont(10.0f));
-            g.drawText("BEAT COMPOSER", line.withTrimmedLeft(w1 + w2 + 4.0f + 10.0f).translated(0.0f, 1.0f), juce::Justification::centredLeft, false);
+            shapedText(g, "BEAT COMPOSER", line.withTrimmedLeft(w1 + w2 + 4.0f + 10.0f).translated(0.0f, 1.0f), juce::Justification::centredLeft, false);
         }
     };
 
@@ -121,7 +122,7 @@ namespace cs808
             g.fillAll(th.panel);
             g.setColour(th.ink);
             g.setFont(headFont(13.0f));
-            g.drawText("UNDER THE LID", juce::Rectangle<int>(16, 0, 300, 44), juce::Justification::centredLeft, false);
+            shapedText(g, "UNDER THE LID", juce::Rectangle<int>(16, 0, 300, 44), juce::Justification::centredLeft, false);
         }
 
         void resized() override
@@ -204,7 +205,7 @@ namespace cs808
             auto& p = pattern < 0 ? bank.fill : bank.pattern[static_cast<std::size_t>(pattern)];
             edit(panelLane <= 0 ? p.accent : p.lanes[static_cast<std::size_t>(panelLane - 1)]);
         }, undoable);
-        refresh();
+        refreshGlass();
     }
 
     int Editor::playheadStep(int panelLane) const
@@ -238,6 +239,13 @@ namespace cs808
     }
 
     void Editor::refresh() { board->repaint(); } // its children with it
+
+    void Editor::refreshGlass()
+    {
+        // What a pattern key or a step changes is under the glass: the board and its knobs stay as drawn (D306).
+        sequencer->repaint();
+        transport->repaint();
+    }
 
     void Editor::layOut()
     {
@@ -412,7 +420,7 @@ namespace cs808
         }
         pickedPattern = processor.isPlaying() && ! extend ? index : -1;
         editPattern = index;
-        refresh();
+        refreshGlass();
     }
 
     void Editor::editFill()
@@ -425,7 +433,7 @@ namespace cs808
             patternBeforeFill = editPattern;
             editPattern = -1;
         }
-        refresh();
+        refreshGlass();
     }
 
     void Editor::queueFill()
@@ -435,7 +443,7 @@ namespace cs808
             return;
         processor.requestFill();
         fillAsked = true;
-        refresh();
+        refreshGlass();
     }
 
     void Editor::addToChain(int pattern)
@@ -917,14 +925,24 @@ namespace cs808
         followTransport();
         // The panel is drawn again only when something it shows changed (the review of D267: it was drawn whole 30
         // times a second); what only moves with the beat redraws the glass and the strip, not the board.
-        std::uint64_t look = processor.editCount();
+        // The board shows the kit (its knobs, its switches, the volume) and the lane selected; everything else of the
+        // project is under the glass. An edit of the steps, patterns or chain redraws the glass alone, not the board
+        // with its knobs (D306: a whole redraw is what made a press show late).
         const auto fold = [](std::uint64_t& h, std::int64_t v) { h = h * 1000003u ^ static_cast<std::uint64_t>(v); };
+        std::uint64_t look = 0;
+        const auto& kit = processor.project().kit;
+        for (const float v : kit.knob)
+            fold(look, juce::roundToInt(v * 100000.0f));
+        for (const bool a : kit.alt)
+            fold(look, a);
+        fold(look, juce::roundToInt(kit.volumeDb * 1000.0f));
         fold(look, selectedLane);
-        fold(look, editPattern);
-        fold(look, editB);
-        fold(look, static_cast<std::int64_t>(processor.project().bank));
+        std::uint64_t glassLook = processor.editCount();
+        fold(glassLook, editPattern);
+        fold(glassLook, editB);
+        fold(glassLook, static_cast<std::int64_t>(processor.project().bank));
         for (const int c : processor.chain())
-            fold(look, c);
+            fold(glassLook, c);
         std::uint64_t beat = 0;
         fold(beat, processor.isPlaying() ? processor.playingSixteenth() : -1);
         fold(beat, processor.playingPattern());
@@ -940,8 +958,16 @@ namespace cs808
         if (edited || look != lastLook)
         {
             lastLook = look;
+            lastGlassLook = glassLook;
             lastBeat = beat;
             refresh();
+        }
+        else if (glassLook != lastGlassLook)
+        {
+            lastGlassLook = glassLook;
+            lastBeat = beat;
+            sequencer->repaint();
+            transport->repaint();
         }
         else if (beat != lastBeat)
         {

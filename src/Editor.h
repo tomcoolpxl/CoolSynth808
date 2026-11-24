@@ -65,6 +65,8 @@ namespace cs808
         [[nodiscard]] int playheadStep(int panelLane) const;
         /** Draws the panel again. */
         void refresh();
+        /** Draws the glass again (the patterns, chain and lanes) and the transport strip, not the board (D306). */
+        void refreshGlass();
         /** Lays the panel out for the window and brings what it shows up to date (the tests call it before a shot). */
         void layOut();
         [[nodiscard]] LidView& lidForTesting() noexcept { return *lid; }
@@ -152,6 +154,7 @@ namespace cs808
         bool midiDragging = false;
         std::uint64_t lastLook = 0; // what the panel showed when last drawn (timerCallback)
         std::uint64_t lastBeat = 0; // and what moves with the beat
+        std::uint64_t lastGlassLook = 0; // and what only the glass shows (D306)
         int patternBeforeFill = 0;
         int firstChainKey = -1; // the pattern key held for a chain
         int pickedPattern = -1; // picked while playing, waiting for its bar line (D303)

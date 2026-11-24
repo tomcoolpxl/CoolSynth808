@@ -1,6 +1,7 @@
 #include "Sequencer.h"
 
 #include "Editor.h"
+#include "Text.h"
 
 namespace cs808
 {
@@ -40,7 +41,7 @@ namespace cs808
         {
             g.setColour(colour);
             g.setFont(font);
-            g.drawText(text, area, just, false);
+            shapedText(g, text, area, just, false);
         }
 
         /** A slot as the patterns row draws it: a key, backlit while it plays, ringed while edited (D292). */
@@ -187,7 +188,7 @@ namespace cs808
 
         void resized() override
         {
-            const int fillWidth = juce::roundToInt(juce::GlyphArrangement::getStringWidth(labelFont(10.0f), "FILL") + 34.0f);
+            const int fillWidth = juce::roundToInt(shapedWidth(labelFont(10.0f), "FILL") + 34.0f);
             fillKey.setBounds(935, 2 + static_cast<int>(rowMargin), fillWidth, 26);
             variation.setBounds(getWidth() - 128, 2 + static_cast<int>(rowMargin), 128, 26);
         }
@@ -330,7 +331,7 @@ namespace cs808
                     g.drawRoundedRectangle(block.box.expanded(1.5f), 4.5f, 1.0f);
                 }
                 const auto number = patternLabel(block.pattern);
-                const float nw = juce::GlyphArrangement::getStringWidth(mono, number);
+                const float nw = shapedWidth(mono, number);
                 word(g, number, block.box.withTrimmedLeft(8.0f).withWidth(nw + 2.0f), cur ? backlitInk : keyInk, mono);
                 if (block.count > 1)
                     word(g, juce::String(juce::CharPointer_UTF8("\xc3\x97")) + juce::String(block.count), block.box.withTrimmedLeft(8.0f + nw + 4.0f),
@@ -346,7 +347,7 @@ namespace cs808
             {
                 drawKeyCap(g, box, on ? Cap::selected : Cap::plain, false, false);
                 const auto font = labelFont(10.5f);
-                const float w = juce::GlyphArrangement::getStringWidth(font, text);
+                const float w = shapedWidth(font, text);
                 const float x = box.getCentreX() - (w + 12.0f) * 0.5f;
                 // the step lights' own lamp: their size, their glass, their glow, in orange (the user, D291)
                 drawLens(g, { x + 3.0f, box.getCentreY() }, 5.0f, on ? Lens::orangeBright : Lens::off);
@@ -426,9 +427,9 @@ namespace cs808
                 while (i < static_cast<int>(list.size()) && list[static_cast<std::size_t>(i)] == b.pattern)
                     ++i;
                 b.count = i - b.first;
-                float w = 16.0f + juce::GlyphArrangement::getStringWidth(mono, patternLabel(b.pattern));
+                float w = 16.0f + shapedWidth(mono, patternLabel(b.pattern));
                 if (b.count > 1)
-                    w += 4.0f + juce::GlyphArrangement::getStringWidth(mono, juce::String(juce::CharPointer_UTF8("\xc3\x97")) + juce::String(b.count));
+                    w += 4.0f + shapedWidth(mono, juce::String(juce::CharPointer_UTF8("\xc3\x97")) + juce::String(b.count));
                 b.box = { x, rowMargin, std::max(44.0f, std::ceil(w)), 26.0f };
                 x = b.box.getRight() + 3.0f;
                 blocks.push_back(b);
@@ -478,12 +479,12 @@ namespace cs808
                 pieces.push_back({ dot + "stopped", labelInk });
             float total = 0.0f;
             for (const auto& piece : pieces)
-                total += juce::GlyphArrangement::getStringWidth(monoFont(11.0f, piece.strong), piece.text);
+                total += shapedWidth(monoFont(11.0f, piece.strong), piece.text);
             float x = changeLabel.getX() - 14.0f - total; // right-aligned before the Change keys
             for (const auto& piece : pieces)
             {
                 const auto font = monoFont(11.0f, piece.strong);
-                const float w = juce::GlyphArrangement::getStringWidth(font, piece.text);
+                const float w = shapedWidth(font, piece.text);
                 word(g, piece.text, { x, rowMargin, w + 4.0f, 26.0f }, piece.colour, font);
                 x += w;
             }
@@ -517,7 +518,7 @@ namespace cs808
                 const auto box = stepBox(i, lampTop, lampsHeight);
                 const auto number = juce::String(i + 1);
                 const auto font = monoFont(9.0f);
-                const float nw = juce::GlyphArrangement::getStringWidth(font, number);
+                const float nw = shapedWidth(font, number);
                 const float x = box.getCentreX() - (5.0f + 4.0f + nw) * 0.5f;
                 drawLens(g, { x + 2.5f, box.getCentreY() }, 5.0f, i == now ? Lens::redBright : Lens::off);
                 word(g, number, { x + 9.0f, box.getY(), nw + 2.0f, lampsHeight }, i == now ? headInk : rgb(0x8f8877), font);
@@ -684,7 +685,7 @@ namespace cs808
         {
             drawKeyCap(g, r, on ? Cap::selected : Cap::plain, false, false);
             const auto font = labelFont(10.0f);
-            const float w = juce::GlyphArrangement::getStringWidth(font, text);
+            const float w = shapedWidth(font, text);
             const float x = r.getCentreX() - (w + 11.0f) * 0.5f;
             drawLens(g, { x + 3.0f, r.getCentreY() }, 6.0f, on ? lens : Lens::off);
             drawKeyText(g, text, { x + 11.0f, r.getY(), w + 2.0f, r.getHeight() }, on ? Cap::selected : Cap::plain, font);

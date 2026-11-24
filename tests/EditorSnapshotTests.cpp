@@ -5,6 +5,8 @@
 #include "Editor.h"
 #include "ui/LibraryShelf.h"
 #include "ui/LidView.h"
+#include "ui/Text.h"
+#include "ui/Theme.h"
 #include "Library.h"
 #include "Processor.h"
 
@@ -49,6 +51,17 @@ public:
             expect(problems.isEmpty(), problems.joinIntoString("; "));
             // D280: every wire a strike lights on the whole board is driven by its drum's recording.
             expectEquals(dynamic_cast<Editor*>(e.get())->lidForTesting().boardFlowsUnbound(), 0);
+        }
+
+        beginTest("text_kept_shaped_measures_as_juce_measures_it");
+        {
+            // D306: the panel's words are shaped once and kept; they must measure as JUCE shapes them each time.
+            for (const auto& font : { labelFont(10.0f), monoFont(11.0f), monoFont(9.0f, true), headFont(13.0f) })
+                for (const juce::String text : { "BASS DRUM", "16", "01", "CLOSED HAT", "LOOP" })
+                {
+                    expectWithinAbsoluteError(shapedWidth(font, text), juce::GlyphArrangement::getStringWidth(font, text), 0.01f);
+                    expectWithinAbsoluteError(shapedWidth(font, text), juce::GlyphArrangement::getStringWidth(font, text), 0.01f); // kept
+                }
         }
 
         beginTest("a_pattern_key_picked_while_playing_lights_at_once_not_at_the_bar_line");
