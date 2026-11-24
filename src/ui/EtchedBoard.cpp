@@ -399,7 +399,8 @@ namespace cs808
         }
         juce::Graphics::ScopedSaveState state(g);
         g.addTransform(juce::AffineTransform::translation(-origin.x, -origin.y));
-        const float fade = circuitShow == CircuitShow::faint ? 0.5f : 1.0f;
+        // half as bright as it was (the user: under the frosted glass, with the lid closed)
+        const float fade = (circuitShow == CircuitShow::faint ? 0.5f : 1.0f) * 0.5f;
         g.setOpacity(0.07f * fade);
         g.drawImageTransformed(cpuImage, juce::AffineTransform::scale(1.0f / cpuImageScale).translated(14.0f, glassTop));
         g.setOpacity(1.0f);

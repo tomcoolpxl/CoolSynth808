@@ -865,12 +865,13 @@ namespace cs808
         {
             Recording r;
             const double span = 15000.0 / std::clamp(s.bpm, 30.0, 300.0); // a sixteenth
-            for (double ms = 0.0; ms < 0.2; ms += 0.002)
+            // fine where the step's fast events are (the reads, PI-2's 10 us, the 1 ms trigger), then 0.1 ms: the scan's
+            // 150 us and 450 us still seen, and some 1300 frames a step at 120 BPM, light enough to make again each step
+            for (double ms = 0.0; ms < 0.2; ms += 0.005)
                 r.ms.push_back(ms);
-            for (double ms = 0.2; ms < 1.6; ms += 0.01)
+            for (double ms = 0.2; ms < 1.6; ms += 0.02)
                 r.ms.push_back(ms);
-            const double coarse = span > 200.0 ? 0.05 : 0.025;
-            for (double ms = 1.6; ms <= span; ms += coarse)
+            for (double ms = 1.6; ms <= span; ms += 0.1)
                 r.ms.push_back(ms);
             r.samples = static_cast<int>(r.ms.size());
             const auto bit = [&](int lane) { return ((s.lanes >> lane) & 1u) != 0; };
@@ -888,7 +889,7 @@ namespace cs808
             const char* const nets[] { "v5", "vcc", "0", "ncl", "nint", "nrc1", "ntrc", "ntm2", "ntosc", "ntempo", "nss", "nfill", "nand",
                                        "ngate", "bus_pa", "bus_pb", "bus_ph", "bus_pg", "bus_pc", "bus_d", "bus_a", "nwe", "nce", "nce7",
                                        "nce8", "nce9", "nce10", "bus_pd", "bus_pe", "bus_pf", "npf3", "npi2", "nq27", "nic6a", "nrc23",
-                                       "nic6b", "nrc27", "n6", "nb31", "nb32", "nx", "nq33", "vt", "ph0", "ph1", "ph2", "ph3", "data" };
+                                       "nic6b", "nrc27", "n6", "nb31", "nb32", "nx", "nq33", "vt" };
             const char* const currents[] { "r117.i", "r120.i", "r113.i", "q31.ic", "q31.ib", "q31.ie", "q32.ic", "q32.ib", "q32.ie",
                                            "q27.ic", "q27.ib", "q27.ie", "q34.ic", "q34.ib", "q34.ie", "q18.ic", "q18.ib", "q18.ie",
                                            "r100.i", "r102.i", "c23.i", "c27.i", "r85.i", "tm1.i", "tempo.i", "tm2.i", "vr3.i" };
@@ -917,8 +918,6 @@ namespace cs808
                 // the interrupt's routine: the status for 150 us, then one PH line low for its keys until 600 us
                 const bool status = w < 0.15, scanning = w >= 0.15 && w < 0.6;
                 const int line = static_cast<int>(std::floor(ms / 1.9)) % 4;
-                for (int k = 0; k < 4; ++k)
-                    set((juce::String("ph") + juce::String(k)).toRawUTF8(), scanning && k == line ? 0.0 : 5.0);
                 set("bus_ph", scanning ? 3.75 : 5.0);
                 const bool allHigh = ! scanning;
                 set("nand", allHigh ? 5.0 : 0.6);
@@ -948,7 +947,6 @@ namespace cs808
                 set("bus_pd", stands ? 5.0 * count({ 10, 9, 8, 7 }) / 4.0 : ms < 0.075 ? 5.0 * addressBits / 5.0 : 0.0);
                 set("bus_pe", stands ? 5.0 * count({ 6, 5, 4, 3 }) / 4.0 : ms < 0.075 ? 5.0 * addressBits / 5.0 : 0.0);
                 set("bus_pf", stands ? 5.0 * count({ 2, 1, 0 }) / 3.0 : ms < 0.075 ? 5.0 * addressBits / 5.0 : 0.0);
-                set("data", stands && (s.lanes & 0x7ffu) != 0 ? 5.0 : 0.0);
                 const bool accented = stands && accent;
                 set("npf3", accented ? 5.0 : 0.0);
                 set("nq33", accented ? 0.1 : 5.0); // Q33 turns PF-3 over: Q34 shunts VR3 unless the step is accented
@@ -3423,58 +3421,6 @@ namespace cs808
                 g.fillEllipse(p.x - r * 2.6f, p.y - r * 2.6f, r * 5.2f, r * 5.2f);
                 g.setColour(core);
                 g.fillEllipse(p.x - r, p.y - r, 2 * r, 2 * r);
-            }
-        }
-
-        // The CPU's step as a timing diagram in the foot (D321), as a logic analyser draws one: each line's level
-        // over the step, its first 1.5 ms drawn wide (the memory read, PI-2's 10 us, the 1 ms trigger), the time marked.
-        if (f.which == cpuSection && f.rec.ms.size() > 1)
-        {
-            struct Row { const char* series; const char* name; float full; };
-            static constexpr std::array<Row, 11> rows { { { "nint", "INT", 5.0f }, { "ph0", "PH0", 5.0f }, { "ph1", "PH1", 5.0f }, { "ph2", "PH2", 5.0f },
-                                                          { "ph3", "PH3", 5.0f }, { "nce", "PI-1 CE", 5.0f }, { "data", "DATA", 5.0f }, { "npi2", "PI-2", 5.0f },
-                                                          { "n6", "IC6 OUT", 5.0f }, { "vt", "TRIGGER", 14.0f }, { "npf3", "ACCENT", 5.0f } } };
-            const float top = Pt(0.0f, f.height).transformedBy(t).y + 16.0f, bottom = static_cast<float>(getHeight()) - 58.0f;
-            const float rowH = std::min(14.0f, (bottom - top) / static_cast<float>(rows.size()));
-            if (rowH > 6.0f)
-            {
-                const auto area = juce::Rectangle<float>(84.0f, top, static_cast<float>(getWidth()) - 108.0f, rowH * static_cast<float>(rows.size()));
-                const double span = f.rec.ms.back(), zoom = 1.5;
-                const float split = area.getX() + area.getWidth() * 0.35f;
-                const auto xOf = [&](double ms)
-                {
-                    return ms < zoom ? area.getX() + static_cast<float>(ms / zoom) * (split - area.getX())
-                                     : split + static_cast<float>((ms - zoom) / std::max(1.0e-6, span - zoom)) * (area.getRight() - split);
-                };
-                g.setColour(look.dim);
-                g.setFont(labelFont(9.0f));
-                shapedText(g, "THE STEP, ITS FIRST 1.5 MS WIDE", area.withHeight(12.0f).translated(0.0f, -14.0f), juce::Justification::centredLeft, false);
-                g.setColour(look.ink.withAlpha(0.18f));
-                g.drawLine(split, area.getY() - 2.0f, split, area.getBottom() + 2.0f, 1.0f);
-                for (std::size_t r = 0; r < rows.size(); ++r)
-                {
-                    const float y0 = area.getY() + rowH * static_cast<float>(r), yLow = y0 + rowH * 0.8f, yHigh = y0 + rowH * 0.2f;
-                    g.setColour(look.dim);
-                    g.setFont(labelFont(8.5f));
-                    shapedText(g, rows[r].name, juce::Rectangle<float>(16.0f, y0, 64.0f, rowH), juce::Justification::centredRight, false);
-                    const auto it = f.rec.series.find(rows[r].series);
-                    if (it == f.rec.series.end())
-                        continue;
-                    juce::Path trace;
-                    for (std::size_t i = 0; i < it->second.size() && i < f.rec.ms.size(); ++i)
-                    {
-                        const float x = xOf(f.rec.ms[i]);
-                        const float y = yLow - (yLow - yHigh) * std::clamp(it->second[i] / rows[r].full, 0.0f, 1.0f);
-                        i == 0 ? trace.startNewSubPath(x, y) : trace.lineTo(x, y);
-                    }
-                    g.setColour(th.vpos.withAlpha(0.35f));
-                    g.strokePath(trace, juce::PathStrokeType(2.6f));
-                    g.setColour(th.vpos.withAlpha(0.95f));
-                    g.strokePath(trace, juce::PathStrokeType(1.1f));
-                }
-                const float nowX = xOf(f.msAt(f.pos));
-                g.setColour(look.ink.withAlpha(0.55f));
-                g.drawLine(nowX, area.getY() - 2.0f, nowX, area.getBottom() + 2.0f, 1.0f);
             }
         }
 
