@@ -15,7 +15,9 @@ TR-808's eleven drum circuits, solved in real time as wave digital filters with 
   recordings.
 - The devices use SPICE-style models, the same as the ngspice references: the op-amps with their bandwidth and output
   swing, the transistors and diodes by their junctions, the metal voices' oscillators by their thresholds, the noise
-  at the service notes' level. Each circuit's file in the engine lists them.
+  at the service notes' level. Each circuit's file in the engine lists them. Fuller models (a measured transistor
+  card, the op-amps' slew) were rendered in ngspice and compared with both real units; today's matched them as well
+  or better, so they stay.
 
 TR-808 is a trademark of Roland Corporation. CoolSynth 808 is not made, approved or endorsed by Roland.
 
@@ -76,6 +78,8 @@ ASIO comes in when Steinberg's ASIO SDK is found: set `ASIO_SDK_DIR` to its `ASI
 - The research on each voice and the accent:
   [docs/research](https://github.com/tomcoolpxl/CoolSynth/tree/main/docs/research) in CoolSynth (`tr-808-voices.md`,
   `808-accent.md` and one file per family).
+- What fuller device models change, against both units:
+  [808-device-models.md](https://github.com/tomcoolpxl/CoolSynth/blob/main/docs/research/808-device-models.md).
 - Kurt James Werner, [Virtual Analog Modeling of Audio Circuitry Using Wave Digital Filters](https://purl.stanford.edu/jy057cz8322),
   Stanford University, 2016.
 - The code's layout: [GEMINI.md](GEMINI.md).
