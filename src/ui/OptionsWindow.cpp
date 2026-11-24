@@ -580,8 +580,6 @@ namespace cs808
                 }
                 case hostPage:
                     row(follow, "Play");
-                    hint = "Off, the pattern waits for its own Play key, at the host's tempo.";
-                    hintY = y;
                     break;
                 case drumsPage:
                 {
@@ -607,8 +605,6 @@ namespace cs808
                     break;
                 case controllerPage:
                     row(controller, "Setup", 190);
-                    hint = "Link a MIDI controller's knobs, keys and pads to the panel.";
-                    hintY = y;
                     break;
             }
         }
