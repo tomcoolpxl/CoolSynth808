@@ -122,9 +122,25 @@ namespace cs808
 
         void paint(juce::Graphics& g) override
         {
-            const auto& th = theme();
-            g.fillAll(th.panel);
-            g.setColour(th.ink);
+            // The board's own metal behind the sheets (D316): its gradient, brushed, made once per size and theme.
+            const auto& look = boardLook();
+            if (! metal.isValid() || metal.getWidth() != getWidth() || metal.getHeight() != getHeight() || metalTheme != &theme())
+            {
+                metalTheme = &theme();
+                metal = juce::Image(juce::Image::RGB, std::max(1, getWidth()), std::max(1, getHeight()), false);
+                juce::Graphics m(metal);
+                m.setGradientFill(juce::ColourGradient(look.metalTop, 0.0f, 0.0f, look.metalBottom, 0.0f, static_cast<float>(getHeight()), false));
+                m.fillAll();
+                for (int x = 0; x < getWidth(); x += 3)
+                {
+                    m.setColour(juce::Colours::white.withAlpha(look.brushLight));
+                    m.fillRect(static_cast<float>(x), 0.0f, 1.0f, static_cast<float>(getHeight()));
+                    m.setColour(juce::Colours::black.withAlpha(look.brushDark));
+                    m.fillRect(static_cast<float>(x + 1), 0.0f, 2.0f, static_cast<float>(getHeight()));
+                }
+            }
+            g.drawImageAt(metal, 0, 0);
+            g.setColour(look.ink);
             g.setFont(headFont(13.0f));
             shapedText(g, "UNDER THE LID", juce::Rectangle<int>(16, 0, 300, 44), juce::Justification::centredLeft, false);
         }
@@ -139,6 +155,8 @@ namespace cs808
     private:
         LidView& lid;
         Chip back;
+        juce::Image metal;
+        const Theme* metalTheme = nullptr;
     };
 
     // =============================================================================================================

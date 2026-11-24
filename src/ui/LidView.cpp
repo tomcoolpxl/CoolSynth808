@@ -10,6 +10,7 @@
 #include "../Kit.h"
 #include "../Processor.h"
 #include "LibraryData.h"
+#include "Text.h"
 #include "Theme.h"
 #include "Widgets.h"
 
@@ -48,6 +49,7 @@ namespace cs808
             juce::String label;
             Pt labelAt;
             bool labelTall = false;
+            juce::Rectangle<float> labelBox; // where it is printed, clear of every other part and label (D316)
         };
 
         struct Text
@@ -547,6 +549,56 @@ namespace cs808
                     part.labelTall = bounds.getHeight() > bounds.getWidth() + 2.0f;
                     part.labelAt = part.labelTall ? Pt(bounds.getRight() + 2.0f, bounds.getCentreY() + 2.0f)
                                                   : Pt(bounds.getCentreX(), bounds.getY() - 1.5f);
+                }
+                // Each label where it touches no other part, label or printed word (D316, the user: they overlapped):
+                // above, below, right or left of its part (a tall part's right and left first), else where it was.
+                const auto boundsOf = [](const Part& part)
+                {
+                    auto b = part.stroke.getBounds().getUnion(part.box);
+                    for (const auto& [c, r] : part.circles)
+                        b = b.getUnion({ c.x - r, c.y - r, 2 * r, 2 * r });
+                    return b;
+                };
+                std::vector<juce::Rectangle<float>> taken;
+                for (const auto& part : parts)
+                    taken.push_back(boundsOf(part).expanded(0.4f));
+                for (const auto& text : texts)
+                {
+                    const float w = static_cast<float>(text.text.length()) * 3.6f, h = 8.0f;
+                    const float x = text.justification == juce::Justification::centredLeft ? text.at.x
+                                  : text.justification == juce::Justification::centredRight ? text.at.x - w : text.at.x - w / 2;
+                    taken.push_back({ x, text.at.y - h * 0.75f, w, h });
+                }
+                constexpr float charW = 5.6f * 0.6f, lineH = 6.6f; // the mono type the labels are printed in
+                for (std::size_t i = 0; i < parts.size(); ++i)
+                {
+                    auto& part = parts[i];
+                    if (part.label.isEmpty())
+                        continue;
+                    const auto b = boundsOf(part);
+                    const float w = static_cast<float>(part.label.length()) * charW + 1.0f;
+                    const juce::Rectangle<float> above { b.getCentreX() - w / 2, b.getY() - 1.2f - lineH, w, lineH };
+                    const juce::Rectangle<float> below { b.getCentreX() - w / 2, b.getBottom() + 1.2f, w, lineH };
+                    const juce::Rectangle<float> right { b.getRight() + 1.5f, b.getCentreY() - lineH / 2, w, lineH };
+                    const juce::Rectangle<float> left { b.getX() - 1.5f - w, b.getCentreY() - lineH / 2, w, lineH };
+                    const std::array<juce::Rectangle<float>, 4> order = part.labelTall ? std::array<juce::Rectangle<float>, 4> { right, left, above, below }
+                                                                                       : std::array<juce::Rectangle<float>, 4> { above, below, right, left };
+                    const auto own = taken[i];
+                    const auto clear = [&](juce::Rectangle<float> r)
+                    {
+                        for (std::size_t k = 0; k < taken.size(); ++k)
+                            if (taken[k] != own && taken[k].intersects(r))
+                                return false;
+                        return true;
+                    };
+                    part.labelBox = order[0];
+                    for (const auto& r : order)
+                        if (clear(r))
+                        {
+                            part.labelBox = r;
+                            break;
+                        }
+                    taken.push_back(part.labelBox);
                 }
             }
 
@@ -1172,6 +1224,7 @@ namespace cs808
                     else
                         buildTom(a, W, term, R, C, POT, DI, Q, pin, open, wiperAt, two);
                     buildGraph();
+                    nudgeTexts();
                     drawing.prepareLabels();
                     return;
                 }
@@ -1251,6 +1304,7 @@ namespace cs808
                 a.tx(676, 160, "OUT", Rj);
 
                 buildGraph();
+                nudgeTexts();
                 drawing.prepareLabels();
             }
 
@@ -2238,6 +2292,46 @@ namespace cs808
                 W({ { 746, 380 }, { 760, 380 }, { 760, 320 } }); W({ { 760, 380 }, { 780, 380 } }); outArrow(780, 380, "CH");
             }
 
+            /** The printed words (the rails, the inputs, the pots' names) moved clear of the copper and the parts
+                (D316, the user: they lay on wires): each tried where it was drawn, then a little up, down, left or right. */
+            void nudgeTexts()
+            {
+                std::vector<juce::Rectangle<float>> solid;
+                for (const auto& s : segs)
+                    for (std::size_t i = 1; i < s.size(); ++i)
+                        solid.push_back(juce::Rectangle<float>(s[i - 1], s[i]).expanded(0.9f));
+                for (const auto& part : drawing.parts)
+                {
+                    auto b = part.stroke.getBounds().getUnion(part.box);
+                    for (const auto& [c, r] : part.circles)
+                        b = b.getUnion({ c.x - r, c.y - r, 2 * r, 2 * r });
+                    solid.push_back(b);
+                }
+                for (auto& text : drawing.texts)
+                {
+                    const float w = static_cast<float>(text.text.length()) * 3.6f, h = 7.0f;
+                    const auto boxAt = [&](Pt at)
+                    {
+                        const float x = text.justification == juce::Justification::centredLeft ? at.x
+                                      : text.justification == juce::Justification::centredRight ? at.x - w : at.x - w / 2;
+                        return juce::Rectangle<float>(x, at.y - h * 0.75f, w, h);
+                    };
+                    static constexpr std::array<std::pair<float, float>, 21> tries { { { 0, 0 }, { 0, -5 }, { 0, 5 }, { 0, -9 }, { 0, 9 }, { -6, 0 },
+                                                                                      { 6, 0 }, { 0, -13 }, { 0, 13 }, { -12, 0 }, { 12, 0 }, { 20, 0 }, { -20, 0 }, { 30, 0 }, { -30, 0 },
+                                                                                      { 12, -6 }, { -12, -6 }, { 20, -6 }, { -20, -6 }, { 30, -6 }, { -30, -6 } } };
+                    for (const auto& [dx, dy] : tries)
+                    {
+                        const auto r = boxAt({ text.at.x + dx, text.at.y + dy });
+                        if (std::none_of(solid.begin(), solid.end(), [&](const auto& s) { return s.intersects(r); }))
+                        {
+                            text.at = { text.at.x + dx, text.at.y + dy };
+                            break;
+                        }
+                    }
+                    solid.push_back(boxAt(text.at));
+                }
+            }
+
             void buildGraph()
             {
                 // Every wire corner, junction and part lead is a point; a wire is split where a point lies on it.
@@ -2646,15 +2740,16 @@ namespace cs808
     {
         void paintParts(juce::Graphics& g, const Board& b, const juce::AffineTransform& t, float scale, int selected, bool names)
         {
-            const auto& th = theme();
+            // Etched as the board is (D316): the parts printed in its silkscreen on the metal, the chosen one in its light.
+            const auto& look = boardLook();
             for (std::size_t i = 0; i < b.parts.size(); ++i)
             {
                 const auto& part = b.parts[i];
-                const auto colour = static_cast<int>(i) == selected ? th.flow : th.ink;
+                const auto colour = static_cast<int>(i) == selected ? look.flowDot : look.silkText.withMultipliedAlpha(1.2f);
                 if (! part.box.isEmpty())
                 {
                     const auto r = part.box.transformedBy(t);
-                    g.setColour(th.panel);
+                    g.setColour(look.metalBottom);
                     g.fillRoundedRectangle(r, 1.5f * scale);
                     g.setColour(colour);
                     g.drawRoundedRectangle(r, 1.5f * scale, 1.2f * scale);
@@ -2669,25 +2764,20 @@ namespace cs808
                 }
                 if (names && part.label.isNotEmpty())
                 {
-                    // Each part's name beside it, as the mockup writes them (worked out in prepareLabels).
-                    const bool tall = part.labelTall;
-                    const auto& label = part.label;
-                    const auto p = part.labelAt.transformedBy(t);
-                    g.setColour(th.dim);
-                    g.setFont(uiFont(5.6f * scale));
-                    const float w = 60.0f * scale, h = 8.0f * scale;
-                    g.drawText(label, tall ? juce::Rectangle<float>(p.x, p.y - h * 0.75f, w, h) : juce::Rectangle<float>(p.x - w / 2, p.y - h * 0.75f, w, h),
-                               tall ? juce::Justification::centredLeft : juce::Justification::centred, false);
+                    // Each part's name where prepareLabels found it room, in the board's mono type.
+                    g.setColour(look.silkText);
+                    g.setFont(monoFont(5.6f * scale));
+                    shapedText(g, part.label, part.labelBox.transformedBy(t), juce::Justification::centredLeft, false);
                 }
             }
         }
 
         void paintTexts(juce::Graphics& g, const Board& b, const juce::AffineTransform& t, float scale)
         {
-            const auto& th = theme();
+            const auto& look = boardLook();
             for (const auto& text : b.texts)
             {
-                g.setColour(text.strong ? th.ink : th.dim);
+                g.setColour(text.strong ? look.ink : look.dim);
                 g.setFont(uiFont(6.5f * scale, text.strong));
                 const auto p = text.at.transformedBy(t);
                 const float w = 200.0f * scale, h = 10.0f * scale;
@@ -2715,19 +2805,23 @@ namespace cs808
     void LidView::paintFull(juce::Graphics& g)
     {
         const auto& th = theme();
+        const auto& look = boardLook();
         auto& f = *impl->full;
         const auto t = sheetTransform();
         const float scale = std::sqrt(std::abs(t.getDeterminant()));
 
-        // The wires and their voltage.
-        g.setColour(th.dim);
+        // The wires as the board's copper, a pad at every joint (D316), and their voltage.
+        g.setColour(look.copper.withAlpha(0.85f));
         for (const auto& e : f.edges)
-            g.drawLine(juce::Line<float>(f.nodes[static_cast<std::size_t>(e.a)].p.transformedBy(t), f.nodes[static_cast<std::size_t>(e.b)].p.transformedBy(t)), 1.0f * scale);
+            g.drawLine(juce::Line<float>(f.nodes[static_cast<std::size_t>(e.a)].p.transformedBy(t), f.nodes[static_cast<std::size_t>(e.b)].p.transformedBy(t)), 1.5f * scale);
         for (const auto& n : f.nodes)
             if (n.edges.size() + n.terms.size() >= 3)
             {
                 const auto p = n.p.transformedBy(t);
-                g.fillEllipse(p.x - 1.7f * scale, p.y - 1.7f * scale, 3.4f * scale, 3.4f * scale);
+                g.setColour(look.pad.withAlpha(1.0f));
+                g.fillEllipse(p.x - 2.1f * scale, p.y - 2.1f * scale, 4.2f * scale, 4.2f * scale);
+                g.setColour(juce::Colour(0xe6141210));
+                g.fillEllipse(p.x - 0.8f * scale, p.y - 0.8f * scale, 1.6f * scale, 1.6f * scale);
             }
         for (const auto& net : f.nets)
         {
@@ -2747,7 +2841,7 @@ namespace cs808
         for (const auto& [c, r] : f.pins)
         {
             const auto p = c.transformedBy(t);
-            g.setColour(th.ink);
+            g.setColour(look.ink);
             g.drawEllipse(p.x - r * scale, p.y - r * scale, 2 * r * scale, 2 * r * scale, 1.0f * scale);
         }
         paintTexts(g, f.drawing, t, scale);
@@ -2759,7 +2853,9 @@ namespace cs808
             const float gl = std::min(1.0f, std::log10(1.0f + std::abs(current) / 1.0e-6f) / 3.5f);
             if (gl < 0.04f)
                 continue;
-            g.setColour(th.flow.withAlpha(0.45f + 0.55f * gl));
+            // the board's light (D316): each dot with a soft halo of its own colour
+            const float alpha = 0.45f + 0.55f * gl;
+            const auto halo = look.flowDot.withAlpha(0.16f * alpha), core = look.flowDot.withAlpha(alpha);
             const float length = w.a.getDistanceFrom(w.b);
             const float r = (0.8f + 2.4f * gl) * 0.5f * scale;
             float s = std::fmod(-w.offset, 6.5f);
@@ -2768,7 +2864,52 @@ namespace cs808
             for (; s < length; s += 6.5f)
             {
                 const auto p = (w.a + (w.b - w.a) * (length > 0.0f ? s / length : 0.0f)).transformedBy(t);
+                g.setColour(halo);
+                g.fillEllipse(p.x - r * 2.6f, p.y - r * 2.6f, r * 5.2f, r * 5.2f);
+                g.setColour(core);
                 g.fillEllipse(p.x - r, p.y - r, 2 * r, 2 * r);
+            }
+        }
+
+        // The drum's output over the whole hit, in the sheet's empty foot (D316): where the hit is now marked.
+        {
+            static constexpr std::array<const char*, 5> outputs { "vout", "vcy", "voh", "ncbo", "n10" }; // not the j* nodes: those are trigger jacks
+            const std::vector<float>* out = nullptr;
+            juce::String outName;
+            for (const auto* name : outputs)
+                if (const auto it = f.rec.series.find(name); it != f.rec.series.end())
+                {
+                    out = &it->second;
+                    outName = name;
+                    break;
+                }
+            const float top = Pt(0.0f, f.height).transformedBy(t).y + 10.0f, bottom = static_cast<float>(getHeight()) - 60.0f;
+            if (out != nullptr && bottom - top > 36.0f && f.rec.ms.size() > 1)
+            {
+                const auto area = juce::Rectangle<float>(24.0f, top, static_cast<float>(getWidth()) - 48.0f, std::min(120.0f, bottom - top));
+                float peak = 1.0e-6f;
+                for (const float v : *out)
+                    peak = std::max(peak, std::abs(v));
+                const double span = f.rec.ms.back();
+                g.setColour(look.ink.withAlpha(0.08f));
+                g.drawLine(area.getX(), area.getCentreY(), area.getRight(), area.getCentreY(), 1.0f);
+                juce::Path trace;
+                for (std::size_t i = 0; i < out->size() && i < f.rec.ms.size(); ++i)
+                {
+                    const float x = area.getX() + area.getWidth() * static_cast<float>(f.rec.ms[i] / span);
+                    const float y = area.getCentreY() - (*out)[i] / peak * (area.getHeight() * 0.45f);
+                    i == 0 ? trace.startNewSubPath(x, y) : trace.lineTo(x, y);
+                }
+                g.setColour(look.flowWire.withAlpha(0.35f));
+                g.strokePath(trace, juce::PathStrokeType(3.0f));
+                g.setColour(look.flowDot.withAlpha(0.9f));
+                g.strokePath(trace, juce::PathStrokeType(1.2f));
+                const float nowX = area.getX() + area.getWidth() * static_cast<float>(f.msAt(f.pos) / span);
+                g.setColour(look.ink.withAlpha(0.5f));
+                g.drawLine(nowX, area.getY(), nowX, area.getBottom(), 1.0f);
+                g.setColour(look.dim);
+                g.setFont(labelFont(10.0f));
+                shapedText(g, "THE OUTPUT (" + outName.toUpperCase() + ") OVER THE HIT", area.withHeight(12.0f).translated(0.0f, -12.0f), juce::Justification::centredLeft, false);
             }
         }
 
@@ -2776,13 +2917,13 @@ namespace cs808
         const double ms = f.msAt(f.pos);
         const juce::String phase = f.phaseAt(ms);
         auto bar = getLocalBounds().withTrimmedBottom(26).removeFromBottom(26).toFloat();
-        g.setColour(th.ink);
+        g.setColour(look.ink);
         g.setFont(uiFont(11.5f));
         g.drawText(juce::String(ms, ms < 10.0 ? 2 : 0) + " ms, " + phase, bar.removeFromRight(320.0f), juce::Justification::centredLeft);
         if (impl->selected < 0)
         {
             auto caption = getLocalBounds().removeFromBottom(24).toFloat().withTrimmedRight(260.0f);
-            g.setColour(th.dim);
+            g.setColour(look.dim);
             g.setFont(uiFont(10.5f));
             g.drawFittedText("Recorded from ngspice, the reference the engine is checked against: " + f.rec.setting + ". "
                                  + (f.errors.isEmpty() ? "Checked against the netlist: " + juce::String(static_cast<int>(f.nets.size())) + " nets and "
@@ -2795,6 +2936,16 @@ namespace cs808
     void LidView::paint(juce::Graphics& g)
     {
         const auto& th = theme();
+        {
+            // the time slider in the board's light and ink (D316), set only when the theme changed
+            const auto& look = boardLook();
+            if (impl->time.findColour(juce::Slider::thumbColourId) != look.flowDot)
+            {
+                impl->time.setColour(juce::Slider::thumbColourId, look.flowDot);
+                impl->time.setColour(juce::Slider::trackColourId, look.flowWire.withAlpha(0.6f));
+                impl->time.setColour(juce::Slider::backgroundColourId, look.ink.withAlpha(0.12f));
+            }
+        }
         if (impl->showFull && impl->full && impl->full->rec.samples > 1)
         {
             paintFull(g);
@@ -2806,14 +2957,18 @@ namespace cs808
         const auto& b = impl->board;
         const double now = impl->now;
 
-        // The wires.
-        g.setColour(th.dim);
+        // The wires as the board's copper, a pad at every joint (D316).
+        const auto& look = boardLook();
+        g.setColour(look.copper.withAlpha(0.85f));
         for (const auto& w : b.wires)
-            g.strokePath(w, juce::PathStrokeType(1.0f * scale), t);
+            g.strokePath(w, juce::PathStrokeType(1.5f * scale), t);
         for (const auto& d : b.dots)
         {
             const auto p = d.transformedBy(t);
-            g.fillEllipse(p.x - 1.7f * scale, p.y - 1.7f * scale, 3.4f * scale, 3.4f * scale);
+            g.setColour(look.pad.withAlpha(1.0f));
+            g.fillEllipse(p.x - 2.1f * scale, p.y - 2.1f * scale, 4.2f * scale, 4.2f * scale);
+            g.setColour(juce::Colour(0xe6141210));
+            g.fillEllipse(p.x - 0.8f * scale, p.y - 0.8f * scale, 1.6f * scale, 1.6f * scale);
         }
 
         // The voltage tints and the current: from the recordings where a wire stands for a node of its drum (D280),
@@ -2873,7 +3028,8 @@ namespace cs808
             if (a < 0.012)
                 continue;
             const float width = static_cast<float>(1.2 + 3.6 * std::sqrt(a));
-            g.setColour(th.flow.withAlpha(static_cast<float>(std::min(1.0, 0.4 + a * 2.0))));
+            const float alpha = static_cast<float>(std::min(1.0, 0.4 + a * 2.0));
+            const auto halo = look.flowDot.withAlpha(0.16f * alpha), core = look.flowDot.withAlpha(alpha);
             const float spacing = 6.5f;
             float s = std::fmod(-f.offset, spacing);
             if (s < 0.0f)
@@ -2882,6 +3038,9 @@ namespace cs808
             {
                 const auto p = pointAlong(f.points, s).transformedBy(t);
                 const float r = width * 0.5f * scale;
+                g.setColour(halo);
+                g.fillEllipse(p.x - r * 2.6f, p.y - r * 2.6f, r * 5.2f, r * 5.2f);
+                g.setColour(core);
                 g.fillEllipse(p.x - r, p.y - r, 2 * r, 2 * r);
             }
         }
@@ -2904,7 +3063,7 @@ namespace cs808
         {
             const auto& part = b.parts[static_cast<std::size_t>(impl->selected)];
             juce::String drum = part.lane >= 0 ? juce::String(instruments[static_cast<std::size_t>(part.lane)].name) + ": " : juce::String();
-            g.setColour(th.ink);
+            g.setColour(boardLook().ink);
             g.setFont(uiFont(12.0f, true));
             g.drawText(drum + part.name.upToFirstOccurrenceOf(" ~ ", false, false), caption.removeFromLeft(caption.getWidth() * 0.35f), juce::Justification::centredLeft);
             g.setColour(th.dim);
