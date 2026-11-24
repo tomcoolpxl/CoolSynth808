@@ -13,6 +13,7 @@
 #include "midi/ControllerSetup.h"
 #include "Project.h"
 #include "synth/StepSequencer.h"
+#include "synth/v3/CircuitWatch.h"
 #include "synth/v3/EngineV3.h"
 
 /*
@@ -120,6 +121,11 @@ namespace cs808
         [[nodiscard]] double tempoNow() const noexcept { return bpmNow.load(std::memory_order_acquire); }
         /** The lanes struck since the last call, a bit each (bit 11 the accent). */
         [[nodiscard]] std::uint32_t takeStruckLanes() noexcept { return struck.exchange(0, std::memory_order_acq_rel); }
+        /** Each drum's level as its circuit plays it, the highest since the last take, by the panel's lane (1 the bass
+            drum to 11 the closed hat; 0 unused): the engine's watch on the 808's circuits (D313). Message thread. */
+        void takeLights(std::array<float, 12>& byLane) noexcept;
+        /** How many blocks the 808's generators have reported: still the same, and the engine is not playing. */
+        [[nodiscard]] unsigned int lightReports() const noexcept { return watch.reportCount(); }
         /** Writes the hits recorded while playing into the project; returns whether any came. */
         bool applyRecordedHits();
 
@@ -208,6 +214,7 @@ namespace cs808
 
         // audio thread
         // One layer, no effects, one sound (CoolSynth's D270): about 35 MB instead of 610, the same samples.
+        coolsynth::synth::v3::CircuitWatch watch; // the circuits' levels for the panel (D313); outlives the engine's use
         coolsynth::synth::v3::EngineV3 engine { coolsynth::synth::v3::EngineShape::singleLayer() };
         coolsynth::synth::StepSequencer sequencer;
         coolsynth::synth::v3::EngineSettings engineSettings {};

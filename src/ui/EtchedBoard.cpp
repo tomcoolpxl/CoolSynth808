@@ -305,15 +305,47 @@ namespace cs808
         }
         cpuLit = cpuNow;
         bool lit = glowing || nowMs - stepAt < 400.0;
+        for (std::size_t c = 1; c < live.size() && ! lit; ++c)
+            lit = live[c] > 0.0f;
         for (int c = 1; c < 12 && ! lit; ++c)
             lit = nowMs - hitAt[static_cast<std::size_t>(c)] < 1000.0;
         if (lit)
             repaint(0, 0, width, juce::roundToInt(glassTop) + 40); // the circuit's strip, not the glass below
     }
 
+    void EtchedBoard::liveLevels(const std::array<float, 12>& byLane, unsigned int reports, double nowMs)
+    {
+        live = byLane;
+        if (reports != liveReports)
+        {
+            liveReports = reports;
+            liveAt = nowMs;
+        }
+    }
+
     float EtchedBoard::energyOf(int owner) const noexcept
     {
         const auto since = [this](double t) { return now - t; };
+        // Live (D313): each drum's level as its circuit plays it, on the recordings' scale: 36 dB from full to dark,
+        // full at the drum's peak with the kit's defaults and no accent (ProcessorTests logs them). An accent or a
+        // louder setting lights it full; a quieter one dims it, as it sounds. The recordings only while no engine runs.
+        static constexpr std::array<float, 12> defaultPeak { 1.0f, 0.3707f, 0.3554f, 0.4395f, 0.4241f, 0.4677f, 0.5060f,
+                                                             0.6667f, 0.3881f, 0.4375f, 0.4993f, 0.3604f };
+        const bool engineRuns = now - liveAt < 250.0;
+        const auto liveBrightness = [&](int lane)
+        {
+            const float level = live[static_cast<std::size_t>(lane)] / defaultPeak[static_cast<std::size_t>(lane)];
+            return level <= 0.0f ? 0.0f : juce::jlimit(0.0f, 1.0f, 1.0f + 20.0f * std::log10(level) / 36.0f);
+        };
+        if (engineRuns && owner >= 1 && owner <= 11)
+            return liveBrightness(owner);
+        if (engineRuns && owner == EtchedCircuit::mixBus)
+        {
+            float m = 0.0f;
+            for (int c = 1; c < 12; ++c)
+                m = std::max(m, liveBrightness(c));
+            return m * 0.75f;
+        }
         if (owner == EtchedCircuit::triggerBus)
             return static_cast<float>(std::exp(-since(stepAt) / 70.0));
         if (owner == 0) // the master column: the trigger and the accent

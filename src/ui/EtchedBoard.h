@@ -55,6 +55,9 @@ namespace cs808
         /** The sequencer as the CPU section under the glass shows it (D312): the sixteenth playing (-1 stopped) and a
             count of the edits, each a write to the pattern memory. */
         void sequencerState(std::int64_t sixteenth, std::uint64_t edits, double nowMs);
+        /** Each drum's level as its circuit plays it, by the panel's lane (D313: Processor::takeLights), and the
+            engine's report count: while it moves, the columns light from these, not from the recordings. */
+        void liveLevels(const std::array<float, 12>& byLane, unsigned int reports, double nowMs);
 
         /** A trace through its points, its corners cut at 45 degrees as an etched board's are. */
         static juce::Path tracePath(const std::vector<juce::Point<float>>& points);
@@ -93,6 +96,9 @@ namespace cs808
         std::array<double, 12> hitAt {}; // per column: when its drum was last struck (ms)
         double stepAt = -1.0e9, now = 0.0;
         bool glowing = false;
+        std::array<float, 12> live {};
+        unsigned int liveReports = 0;
+        double liveAt = -1.0e9; // when the engine last reported: its levels are used while it plays
         std::int64_t sixteenthNow = -1;
         std::uint64_t editsSeen = 0;
         double clockAt = -1.0e9, memoryAt = -1.0e9;

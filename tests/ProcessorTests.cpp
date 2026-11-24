@@ -90,6 +90,58 @@ public:
             expect(p->isPlaying());
         }
 
+        beginTest("the_lights_follow_each_drum_as_its_circuit_plays");
+        {
+            // D313: the panel's lights come from the engine's circuits as they play. Each drum struck alone lights its
+            // own lane and no other; a longer Decay keeps the bass drum's light up longer. The peaks at the kit's
+            // defaults are logged: the panel scales each lane's brightness by them.
+            const auto lightsOf = [this](int drum, float bdDecay, std::vector<float>& lane, int& otherLit)
+            {
+                auto p = prepared();
+                p->editBank([drum](SequencerBank& b) { b.pattern[0].lanes[static_cast<std::size_t>(drum)].a[0].on = true; }, false);
+                if (bdDecay >= 0.0f)
+                    p->editKit([bdDecay](KitValues& kit) { kit.knob[3] = bdDecay; }); // the bass drum's Decay
+                p->setPlaying(true);
+                juce::AudioBuffer<float> buffer(2, kBlock);
+                std::array<float, 12> lights {};
+                otherLit = 0;
+                for (int b = 0; b < 48000 / kBlock; ++b) // a second: the first bar's half, the hit at its start
+                {
+                    juce::MidiBuffer midi;
+                    p->processBlock(buffer, midi);
+                    p->takeLights(lights);
+                    lane.push_back(lights[static_cast<std::size_t>(drum + 1)]);
+                    for (int l = 1; l < 12; ++l)
+                        if (l != drum + 1 && lights[static_cast<std::size_t>(l)] > 0.0f)
+                            ++otherLit;
+                }
+                expectGreaterThan(static_cast<int>(p->lightReports()), 0);
+            };
+            juce::String peaks;
+            for (int drum = 0; drum < laneCount; ++drum)
+            {
+                std::vector<float> lane;
+                int otherLit = 0;
+                lightsOf(drum, -1.0f, lane, otherLit);
+                const float top = *std::max_element(lane.begin(), lane.end());
+                peaks << instruments[static_cast<std::size_t>(drum)].code << " " << juce::String(top, 4) << "  ";
+                expectGreaterThan(top, 0.005f, juce::String(instruments[static_cast<std::size_t>(drum)].code) + " lights");
+                expectEquals(otherLit, 0, juce::String(instruments[static_cast<std::size_t>(drum)].code) + " lights no other lane");
+            }
+            logMessage("each drum's light at the kit's defaults: " + peaks);
+            const auto heldFor = [&](float decay)
+            {
+                std::vector<float> lane;
+                int otherLit = 0;
+                lightsOf(0, decay, lane, otherLit);
+                const float top = *std::max_element(lane.begin(), lane.end());
+                return static_cast<int>(std::count_if(lane.begin(), lane.end(), [top](float v) { return v > 0.1f * top; }));
+            };
+            const int shortly = heldFor(0.1f), long_ = heldFor(0.9f);
+            logMessage("blocks the bass drum's light holds above a tenth: Decay 0.1 " + juce::String(shortly) + ", 0.9 " + juce::String(long_));
+            expectGreaterThan(long_, shortly + 5, "a longer Decay keeps the light longer");
+        }
+
         beginTest("a_switch_strikes_the_other_instrument");
         {
             auto p = prepared();

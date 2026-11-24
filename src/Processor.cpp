@@ -63,9 +63,21 @@ namespace cs808
                && layouts.getMainInputChannelSet().isDisabled();
     }
 
+    void Processor::takeLights(std::array<float, 12>& byLane) noexcept
+    {
+        // The watch's instruments to the panel's lanes: BD SD LT MT HT RS CP CB CY OH CH (a tom's light is its
+        // conga's too, the rim shot's the claves').
+        using W = coolsynth::synth::v3::CircuitWatch;
+        static constexpr std::array<int, 12> lightOfLane { -1, W::bassDrum, W::snare, W::lowTom, W::midTom, W::highTom, W::rimShot,
+                                                           W::clap, W::cowbell, W::cymbal, W::openHat, W::closedHat };
+        for (std::size_t lane = 0; lane < byLane.size(); ++lane)
+            byLane[lane] = lightOfLane[lane] < 0 ? 0.0f : watch.take(lightOfLane[lane]);
+    }
+
     void Processor::prepareToPlay(double sampleRate, int samplesPerBlock)
     {
         rate = sampleRate > 0.0 ? sampleRate : 48000.0;
+        engine.setCircuitWatch(&watch); // the panel's lights follow the circuits as they play (D313)
         engine.prepare(rate, std::max(1, samplesPerBlock), std::max(1, getTotalNumOutputChannels()));
         clock.prepare(rate);
         keptBlock.ensureSize(8192);

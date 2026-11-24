@@ -1011,6 +1011,9 @@ namespace cs808
         }
         lid->tick(now);
         board->sequencerState(processor.isPlaying() ? processor.playingSixteenth() : -1, processor.editCount(), now);
+        std::array<float, 12> lights {};
+        processor.takeLights(lights);
+        board->liveLevels(lights, processor.lightReports(), now);
         board->tick(now);
         followTransport();
         // The panel is drawn again only when something it shows changed (the review of D267: it was drawn whole 30

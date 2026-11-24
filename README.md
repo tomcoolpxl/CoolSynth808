@@ -11,7 +11,9 @@ on the published service notes of the machine and checked against recordings of 
 The top of the panel is the machine's circuit board, etched into the metal, with each drum's knobs mounted on its own
 column of copper: the bass drum's Level, Tone and Decay, the snare's Snappy, the toms' Tuning and so on, and the
 Accent and Volume under Master. Slide switches choose the second instrument of a circuit: conga for tom, claves for
-rim shot, maracas for clap. As the beat plays, each drum's column lights the way its recorded circuit rings.
+rim shot, maracas for clap. As the beat plays, each drum's column lights as its circuit rings,
+following the knobs and the accent; under the glass the sequencer's CPU and memory light with the clock and your
+edits.
 
 The sequencer sits on smoked glass below it, held over the board by four pins.
 
