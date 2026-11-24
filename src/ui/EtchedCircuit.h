@@ -24,10 +24,29 @@ namespace cs808
     public:
         /** Owners of the copper: 0 the master column (the trigger and accent), 1 to 11 the drums, and the buses. */
         static constexpr int triggerBus = 100, mixBus = 101;
+        /** The CPU board's owners (D315): its clocks, the CPU itself, the pattern memory and its bus, the four scan
+            lines and the four lamp lines, and the supply, which never lights. Its instrument lines are the drums'. */
+        static constexpr int cpuClock = 102, cpuCore = 103, cpuMemory = 104, cpuScan = 105, cpuLamp = 109, cpuPower = 113;
 
         /** The columns: their left edges and widths, the trigger side (y, the foot) and the mix side (y, the head). */
         struct Column { float x = 0.0f, w = 0.0f; };
         void build(const std::vector<Column>& columns, float top, float bottom);
+
+        // A board placed by hand (D315: the CPU board), in the same copper, pads, parts, names and light.
+        /** A trace through its points, its corners cut at 45 degrees; a bus line is thinner. */
+        void addTrace(std::vector<juce::Point<float>> points, int owner, bool busLine = false);
+        /** A part: the types the columns use (R, C, Q, A, P, G, N, S) and, for a board placed by hand, D a dual
+            in-line chip of `pins` pins, `k` its body's height (21 for 0.3 in, 42 for 0.6 in), its maker's marking
+            printed on it; J a connector of `pins` pads in a row; X the clock's coil can; B the backup battery; T a
+            trimmer; K the DIN socket. */
+        void addPart(char type, juce::Point<float> at, float k, int owner, const juce::String& name, int pins = 0,
+                     const juce::String& marking = {}, bool vertical = false);
+        /** After the parts and traces: their copper made, once. */
+        void finish();
+        void clear() { wires.clear(); paths.clear(); parts.clear(); }
+        /** A board placed by hand keeps its names off its copper too (the columns' boards, as they always were, only off
+            the parts). */
+        void setNamesOffCopper(bool on) { namesOffCopper = on; }
 
         /** Where controls are mounted (boxes in panel units): no part's name is printed there. The copper itself is cut
             away by the caller's clip. */
@@ -44,14 +63,16 @@ namespace cs808
         bool paintLit(juce::Graphics& g, double nowMs, const Energy& energy, float fade = 1.0f);
 
     private:
-        struct Wire { std::vector<juce::Point<float>> pts; int owner = 0; bool inCell = true; float length = 0.0f; };
-        struct Part { char type = 'R'; juce::Point<float> at; bool vertical = false; float k = 8.0f; int owner = 0; juce::String name; };
+        struct Wire { std::vector<juce::Point<float>> pts; int owner = 0; bool inCell = true; float length = 0.0f; bool bus = false; };
+        struct Part { char type = 'R'; juce::Point<float> at; bool vertical = false; float k = 8.0f; int owner = 0; juce::String name;
+                      int pins = 0; juce::String marking; };
         std::vector<Wire> wires;
         std::vector<juce::Path> paths; // each wire's copper, made once
         std::vector<Part> parts;
         std::vector<juce::Rectangle<float>> taken;
         std::array<float, 128> heat {};
         double lastNow = 0.0;
+        bool namesOffCopper = false;
         mutable float litFade = 1.0f; // paintLit's fade, for its parts
         [[nodiscard]] juce::Colour faded(juce::Colour c) const { return c.withMultipliedAlpha(litFade); }
 

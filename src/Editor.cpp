@@ -115,7 +115,7 @@ namespace cs808
         {
             setOpaque(true);
             addAndMakeVisible(lid);
-            back.text = "Back to the panel";
+            back.text = "Back to the board"; // the sheets open from the lifted lid (D315)
             back.onClick = [close = std::move(close)](const juce::MouseEvent&) { close(); };
             addAndMakeVisible(back);
         }
@@ -132,7 +132,7 @@ namespace cs808
         void resized() override
         {
             lid.setBounds(getLocalBounds().withTrimmedTop(44).reduced(16, 0).withTrimmedBottom(12));
-            const int w = juce::roundToInt(shapedWidth(labelFont(11.0f), "BACK TO THE PANEL") + 28.0f);
+            const int w = juce::roundToInt(shapedWidth(labelFont(11.0f), "BACK TO THE BOARD") + 28.0f);
             back.setBounds(getWidth() - 16 - w, 8, w, 28);
         }
 
@@ -173,6 +173,7 @@ namespace cs808
         board->addAndMakeVisible(*sequencer);
         sequencer->setBounds(SequencerGlass::boardArea());
         updateKeepOuts();
+        board->onPartClicked = [this](int column) { if (lidLifted) openSheet(column); };
         circuitAnimated = settings->getBoolValue("circuitAnimated", true);
         circuitShow = juce::jlimit(0, 2, settings->getIntValue("circuitShow", 1)); // faint unless chosen otherwise (the user)
         board->setCircuitLook(circuitAnimated, static_cast<EtchedBoard::CircuitShow>(circuitShow));
@@ -285,6 +286,32 @@ namespace cs808
     {
         lidView = show;
         layOut();
+    }
+
+    void Editor::liftLid(bool on)
+    {
+        // Lift the Lid (D315): the panel's top stays, its knobs and switches gone (their footprints left), the glass
+        // gone (its pins' holes left) and the CPU board under it whole and lit; one view. A click on a column opens
+        // that drum's schematic over it.
+        lidLifted = on;
+        board->setLifted(on);
+        sequencer->setVisible(! on);
+        for (auto* child : board->getChildren())
+            if (dynamic_cast<Knob*>(child) != nullptr || dynamic_cast<SlideSwitch*>(child) != nullptr)
+                child->setVisible(! on);
+        if (! on && lidView)
+            showLid(false);
+        transport->repaint();
+    }
+
+    void Editor::openSheet(int column)
+    {
+        // A column's drum, or the whole board for the master and the CPU (its own sheet comes with the redesign): the
+        // sheets are 0 the whole board, 1 bass drum, 2 snare, 3 low tom (the toms share it), 4 rim shot, 5 hand
+        // clap, 6 cowbell, 7 the metal oscillators, 8 cymbal, 9 hi-hats.
+        static constexpr std::array<int, 12> sheetOf { 0, 1, 2, 3, 3, 3, 4, 5, 6, 8, 9, 9 };
+        lid->showSheet(column >= 0 && column < 12 ? sheetOf[static_cast<std::size_t>(column)] : 0);
+        showLid(true);
     }
 
     // ---- The options (D311) -----------------------------------------------------------------------------------
@@ -413,7 +440,7 @@ namespace cs808
             knob.diameter = static_cast<float>(knobSize);
             knob.silver = true; // mounted on the board (D303), coloured as the theme has it (D307)
             knob.setBounds(juce::roundToInt(cx - 30.0f), top - 8, 60, 8 + knobSize + 5 + 12);
-            columnKeepOuts.push_back({ juce::Rectangle<float>(2.0f * (knobSize / 2 + 9), 2.0f * (knobSize / 2 + 9)).withCentre({ cx, top + knobSize * 0.5f }), true });
+            columnKeepOuts.push_back({ juce::Rectangle<float>(2.0f * (knobSize / 2 + 9), 2.0f * (knobSize / 2 + 9)).withCentre({ cx, top + knobSize * 0.5f }), true, false, 1 });
             columnKeepOuts.push_back(wordKeepOut(knob.label.toUpperCase(), labelFont(10.0f), cx, static_cast<float>(top + knobSize + 4), 14.0f));
         };
         for (int k = 0; k < knobCount; ++k)
@@ -466,7 +493,7 @@ namespace cs808
                 const int top = knobTop + rows[static_cast<std::size_t>(c)] * knobPitch;
                 slide.setBounds(juce::roundToInt(cx - 40.0f), top, 80, SlideSwitch::height);
                 columnKeepOuts.push_back(wordKeepOut(slide.first.toUpperCase(), labelFont(10.0f), cx, top - 1.0f, 14.0f));
-                columnKeepOuts.push_back({ { cx - 16.0f, top + 13.0f, 32.0f, 50.0f } });
+                columnKeepOuts.push_back({ { cx - 16.0f, top + 13.0f, 32.0f, 50.0f }, false, false, 2 });
                 columnKeepOuts.push_back(wordKeepOut(slide.second.toUpperCase(), labelFont(10.0f), cx, top + 62.0f, 14.0f));
             }
             auto& label = add<ColumnLabel>(*board);
@@ -974,7 +1001,12 @@ namespace cs808
         const auto mods = key.getModifiers();
         if (lidView && key == juce::KeyPress::escapeKey)
         {
-            showLid(false);
+            showLid(false); // back to the board
+            return true;
+        }
+        if (lidLifted && key == juce::KeyPress::escapeKey)
+        {
+            liftLid(false); // the lid down again
             return true;
         }
         if (key == juce::KeyPress::spaceKey)

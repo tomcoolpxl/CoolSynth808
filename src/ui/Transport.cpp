@@ -123,7 +123,10 @@ namespace cs808
         widths.push_back(8 + 18 + 10 + swingWordWidth + 6);
 
         separatorAfter = items.size() - 1;
-        key("Lid", [this] { editor.showLid(true); }); // Under the Lid (D308)
+        // Lift the Lid (D315): its lens lit while the lid is up.
+        auto* lidKey = key("Lid", [this] { editor.liftLid(! editor.isLidLifted()); }, juce::roundToInt(wordWidth("Lid") + 32.0f));
+        lidKey->filledWhenOn = false;
+        lidKey->isOn = [this] { return editor.isLidLifted(); };
         key("Library", [this] { editor.openLibrary(); });
         key("File", [this] { editor.showFileMenu(); });
         // The options window (D311): its lens lit while it is open.

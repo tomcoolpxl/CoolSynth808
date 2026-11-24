@@ -139,12 +139,26 @@ namespace cs808
             const float x0 = columns.front().x, x1 = columns.back().x + columns.back().w;
             addWire({ { x0, bottom }, { x1, bottom } }, triggerBus, false);
             addWire({ { x0 + 20.0f, top }, { x1, top } }, mixBus, false);
-            for (int i = 0; i < 6; ++i) // short stubs off the trigger bus, seen through the glass
-            {
-                const float sx = 120.0f + static_cast<float>(i) * 190.0f;
-                addWire({ { sx, bottom }, { sx, bottom + 12.0f }, { sx + 10.0f, bottom + 22.0f }, { sx + 80.0f, bottom + 22.0f } }, triggerBus, false);
-            }
+            // (the CPU board's instrument lines come up to the trigger bus from under the glass: D315)
         }
+        finish();
+    }
+
+    void EtchedCircuit::addTrace(std::vector<juce::Point<float>> points, int owner, bool busLine)
+    {
+        addWire(std::move(points), owner, true);
+        wires.back().bus = busLine;
+    }
+
+    void EtchedCircuit::addPart(char type, juce::Point<float> at, float k, int owner, const juce::String& name, int pins,
+                                const juce::String& marking, bool vertical)
+    {
+        parts.push_back({ type, at, vertical, k, owner, name, pins, marking });
+    }
+
+    void EtchedCircuit::finish()
+    {
+        paths.clear();
         // Copper turns at 45 degrees: each corner cut back up to 7 units. Made once, drawn every frame.
         for (const auto& w : wires)
         {
@@ -185,7 +199,7 @@ namespace cs808
 
     namespace
     {
-        float widthOf(bool inCell) { return inCell ? 2.0f : 1.6f; }
+        template <typename W> float widthOf(const W& w) { return w.bus ? 1.3f : w.inCell ? 2.0f : 1.6f; }
         juce::PathStrokeType stroke(float width) { return juce::PathStrokeType(width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded); }
     }
 
@@ -193,7 +207,7 @@ namespace cs808
     {
         g.setColour(boardLook().copper);
         for (std::size_t i = 0; i < wires.size(); ++i)
-            g.strokePath(paths[i], stroke(widthOf(wires[i].inCell)));
+            g.strokePath(paths[i], stroke(widthOf(wires[i])));
         for (const auto& p : parts)
             paintPart(g, p, 0.0f);
         // a pad at every end of copper
@@ -228,7 +242,7 @@ namespace cs808
             if (const float h = heat[static_cast<std::size_t>(wires[i].owner)]; h > 0.02f)
             {
                 g.setColour(faded(look.heat.withAlpha(0.14f * h)));
-                g.strokePath(paths[i], stroke(widthOf(wires[i].inCell) + 4.0f));
+                g.strokePath(paths[i], stroke(widthOf(wires[i]) + 4.0f));
             }
         // lit copper, and current: dots running along it, faster for more
         for (std::size_t i = 0; i < wires.size(); ++i)
@@ -238,15 +252,15 @@ namespace cs808
             if (e < 0.03f)
                 continue;
             g.setColour(faded(look.flowWire.withAlpha(0.06f * e)));
-            g.strokePath(paths[i], stroke(widthOf(w.inCell) + 4.0f));
+            g.strokePath(paths[i], stroke(widthOf(w) + 4.0f));
             g.setColour(faded(look.flowWire.withAlpha(0.42f * e)));
-            g.strokePath(paths[i], stroke(widthOf(w.inCell) + 0.5f));
+            g.strokePath(paths[i], stroke(widthOf(w) + 0.5f));
             if (e < 0.05f)
                 continue;
             // Each dot a little bigger, with a soft halo of its own light, so it shows on light metal and dark
             // alike (D308, the user): two wide faint discs under the core, solid fills, as gradients cost more.
             const float spacing = 11.0f, offset = static_cast<float>(std::fmod(nowMs * (0.02 + 0.07 * e), spacing));
-            const float r = w.inCell ? 1.8f : 1.5f, a = std::min(1.0f, e * 1.3f);
+            const float r = w.bus ? 1.1f : w.inCell ? 1.8f : 1.5f, a = std::min(1.0f, e * 1.3f);
             const auto halo = look.flowDot.withAlpha(0.16f * a), inner = look.flowDot.withAlpha(0.3f * a), core = look.flowDot.withAlpha(a);
             for (float d = offset; d < w.length; d += spacing)
             {
@@ -327,6 +341,95 @@ namespace cs808
                 g.setColour(faded(ink));
                 g.drawEllipse(juce::Rectangle<float>(8.0f, 8.0f).withCentre({}), 1.0f);
                 break;
+            case 'D':
+            {
+                // A dual in-line chip (D315): its pads 0.1 in apart in two rows, its outline with the notch at pin
+                // 1's end, the maker's marking printed on it.
+                const int n = std::max(1, p.pins / 2);
+                const float pitch = 7.0f, w = static_cast<float>(n) * pitch, h = k;
+                for (int i = 0; i < n; ++i)
+                {
+                    const float x = -w * 0.5f + pitch * (static_cast<float>(i) + 0.5f);
+                    pad(x, -h * 0.5f - 3.5f);
+                    pad(x, h * 0.5f + 3.5f);
+                }
+                if (e > 0.1f)
+                {
+                    g.setColour(faded(boardLook().flowDot.withAlpha(0.2f * e)));
+                    g.fillRect(juce::Rectangle<float>(w, h).withCentre({}));
+                }
+                g.setColour(faded(ink));
+                juce::Path outline;
+                outline.addRectangle(juce::Rectangle<float>(w, h).withCentre({}));
+                g.strokePath(outline, juce::PathStrokeType(1.0f));
+                juce::Path notch;
+                notch.addCentredArc(-w * 0.5f, 0.0f, h * 0.16f, h * 0.16f, 0.0f, 0.0f, juce::MathConstants<float>::pi, true);
+                g.strokePath(notch, juce::PathStrokeType(1.0f));
+                if (p.marking.isNotEmpty())
+                {
+                    g.setFont(monoFont(h > 30.0f ? 7.0f : 5.5f));
+                    shapedText(g, p.marking, juce::Rectangle<float>(w - 10.0f, h).withCentre({}), juce::Justification::centred, false);
+                }
+                break;
+            }
+            case 'J':
+            {
+                // a connector: its pads in a row, the first square, a frame round them
+                const int n = std::max(1, p.pins);
+                const float pitch = 7.0f, w = static_cast<float>(n) * pitch;
+                g.setColour(faded(ink));
+                g.drawRect(juce::Rectangle<float>(w + 4.0f, 11.0f).withCentre({}), 1.0f);
+                for (int i = 0; i < n; ++i)
+                {
+                    const float x = -w * 0.5f + pitch * (static_cast<float>(i) + 0.5f);
+                    if (i == 0)
+                    {
+                        g.setColour(faded(boardLook().pad.withMultipliedAlpha(0.75f / 0.7f)));
+                        g.fillRect(juce::Rectangle<float>(4.6f, 4.6f).withCentre({ x, 0.0f }));
+                    }
+                    else
+                        pad(x, 0.0f);
+                }
+                break;
+            }
+            case 'X':
+                // the clock's coil, a square can with its slug
+                box(k, k);
+                g.setColour(faded(ink));
+                g.drawEllipse(juce::Rectangle<float>(k * 0.6f, k * 0.6f).withCentre({}), 1.0f);
+                pad(-k * 0.3f, k * 0.5f + 3.5f); pad(k * 0.3f, k * 0.5f + 3.5f);
+                break;
+            case 'B':
+                // the backup battery: a coin cell, + on its face
+                g.setColour(faded(ink));
+                g.drawEllipse(juce::Rectangle<float>(k * 2.0f, k * 2.0f).withCentre({}), 1.0f);
+                g.drawEllipse(juce::Rectangle<float>(k * 1.7f, k * 1.7f).withCentre({}), 0.7f);
+                g.drawLine(-k * 0.25f, 0.0f, k * 0.25f, 0.0f, 1.0f);
+                g.drawLine(0.0f, -k * 0.25f, 0.0f, k * 0.25f, 1.0f);
+                pad(-k - 4.0f, 0.0f); pad(k + 4.0f, 0.0f);
+                break;
+            case 'T':
+            {
+                // a trimmer: its round body, the slot's arrow, three pads
+                g.setColour(faded(ink));
+                g.drawEllipse(juce::Rectangle<float>(k * 1.4f, k * 1.4f).withCentre({}), 1.0f);
+                g.drawLine(-k * 0.45f, k * 0.45f, k * 0.45f, -k * 0.45f, 1.0f);
+                pad(-k * 0.6f, k * 1.05f); pad(k * 0.6f, k * 1.05f); pad(0.0f, -k * 1.05f);
+                break;
+            }
+            case 'K':
+            {
+                // the DIN socket: its round shell and five pins on an arc
+                g.setColour(faded(ink));
+                g.drawEllipse(juce::Rectangle<float>(k * 2.0f, k * 2.0f).withCentre({}), 1.0f);
+                g.drawRect(juce::Rectangle<float>(k * 0.5f, k * 0.3f).withCentre({ 0.0f, k * 0.95f }), 1.0f);
+                for (int i = 0; i < 5; ++i)
+                {
+                    const float a = juce::degreesToRadians(-180.0f + 45.0f * static_cast<float>(i));
+                    pad(k * 0.6f * std::cos(a), k * 0.6f * std::sin(a));
+                }
+                break;
+            }
             default: // N, S: a small module
                 box(k * 1.8f, k * 1.8f); pad(-k * 0.6f, -k * 0.6f); pad(k * 0.6f, k * 0.6f);
                 break;
@@ -342,14 +445,26 @@ namespace cs808
         g.setColour(boardLook().silkText);
         const auto boxOf = [](const Part& p)
         {
-            const float w = (p.type == 'A' ? 1.2f : (p.type == 'R' || p.type == 'P') ? 1.35f : 1.0f) * p.k;
-            const float h = (p.type == 'A' ? 1.5f : (p.type == 'R' || p.type == 'P') ? 0.55f : 1.0f) * p.k;
+            float w = (p.type == 'A' ? 1.2f : (p.type == 'R' || p.type == 'P') ? 1.35f : 1.0f) * p.k;
+            float h = (p.type == 'A' ? 1.5f : (p.type == 'R' || p.type == 'P') ? 0.55f : 1.0f) * p.k;
+            // the hand-placed parts (D315): half their extent with their pads
+            if (p.type == 'D') { w = static_cast<float>(std::max(1, p.pins / 2)) * 3.5f + 2.0f; h = p.k * 0.5f + 6.0f; }
+            else if (p.type == 'J') { w = static_cast<float>(std::max(1, p.pins)) * 3.5f + 3.0f; h = 6.5f; }
+            else if (p.type == 'X') { w = p.k * 0.55f; h = p.k * 0.5f + 6.0f; }
+            else if (p.type == 'B') { w = p.k + 6.0f; h = p.k + 1.0f; }
+            else if (p.type == 'T') { w = p.k * 0.8f; h = p.k * 1.25f; }
+            else if (p.type == 'K') { w = p.k + 1.0f; h = p.k + 1.0f; }
             return p.vertical ? juce::Rectangle<float>(p.at.x - h, p.at.y - w, h * 2.0f, w * 2.0f)
                               : juce::Rectangle<float>(p.at.x - w, p.at.y - h, w * 2.0f, h * 2.0f);
         };
         auto used = taken;
         for (const auto& p : parts)
             used.push_back(boxOf(p));
+        // and off the copper, so no name sits on a trace (D315)
+        if (namesOffCopper)
+            for (const auto& w : wires)
+                for (std::size_t i = 1; i < w.pts.size(); ++i)
+                    used.push_back(juce::Rectangle<float>(w.pts[i - 1], w.pts[i]).expanded(1.5f));
         const auto hits = [&](juce::Rectangle<float> r) { return std::any_of(used.begin(), used.end(), [&](const auto& t) { return t.intersects(r); }); };
         for (const auto& p : parts)
         {

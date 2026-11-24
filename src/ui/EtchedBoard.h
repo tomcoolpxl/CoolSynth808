@@ -25,6 +25,7 @@ namespace cs808
         juce::Rectangle<float> area;
         bool round = false;
         bool outlined = false;
+        int footprint = 0; // with the lid lifted (D315): 1 a knob's pot, 2 a slide switch, left where it was mounted
     };
 
     class EtchedBoard final : public juce::Component
@@ -56,10 +57,10 @@ namespace cs808
             cache = {};
             repaint();
         }
-        [[nodiscard]] bool circuitAnimated() const noexcept { return animate && circuitShow != CircuitShow::hidden; }
-        [[nodiscard]] float circuitFade() const noexcept { return circuitShow == CircuitShow::faint ? 0.4f : circuitShow == CircuitShow::hidden ? 0.0f : 1.0f; }
+        [[nodiscard]] bool circuitAnimated() const noexcept { return lifted || (animate && circuitShow != CircuitShow::hidden); }
+        [[nodiscard]] float circuitFade() const noexcept { return lifted ? 1.0f : circuitShow == CircuitShow::faint ? 0.4f : circuitShow == CircuitShow::hidden ? 0.0f : 1.0f; }
         /** The theme changed (D307): the board is drawn again in its colours. */
-        void themeChanged() { cache = {}; repaint(); }
+        void themeChanged() { cache = {}; cpuImage = {}; repaint(); }
 
         /** Drums struck (bit l: the drum lane l, 0 the bass drum to 10 the closed hat, as the processor reports them):
             their columns light as their recordings' outputs do (D298). */
@@ -81,6 +82,9 @@ namespace cs808
         void paintCopper(juce::Graphics& g) const;
         /** The name plate's faded outline, printed on the metal: it stays when the circuit is hidden. */
         void paintOutline(juce::Graphics& g) const;
+        /** With the lid lifted (D315): the pots' and switches' footprints where they were mounted, and the holes the
+            glass's four pins leave. */
+        void paintFootprints(juce::Graphics& g) const;
         void paintGround(juce::Graphics& g) const;
         /** The glass's shadow on the metal, and the transport strip's (D303). */
         void paintShadows(juce::Graphics& g) const;
@@ -88,14 +92,21 @@ namespace cs808
         void paintCircuit(juce::Graphics& g) const;
         /** The 808's CPU section under the glass (D312, docs/design/COOLSYNTH_808_CPU.md in CoolSynth's repository):
             the uPD650C, its four uPD444C RAMs, the clock's Schmitt trigger and coil, the lamp lines and the trigger
-            lines up to the trigger bus. Still into the cache; its light is drawn on the glass (paintCpuGlow). */
+            lines up to the trigger bus (D315). Still into the cache; with the lid closed its hint is drawn on the glass. */
         void paintCpu(juce::Graphics& g) const;
 
     public:
         /** The CPU section's light as it shows on the smoked glass over it (D312): the glass passes little, but light
             under it spreads in it as a soft glow. Drawn by the glass after its smoke; `origin` is the glass's place on
             the board. */
-        void paintCpuGlow(juce::Graphics& g, juce::Point<float> origin) const;
+        void paintCpuGlow(juce::Graphics& g, juce::Point<float> origin);
+        /** Lift the Lid (D315): the board alone, the knobs and the glass gone, the CPU board whole and lit; the
+            panel's circuit options do not apply. */
+        void setLifted(bool on) { if (on != lifted) { lifted = on; cache = {}; repaint(); } }
+        /** With the lid lifted, a click on a column (0 the master, 1 to 11 the drums) or on the CPU board (-1). */
+        std::function<void(int)> onPartClicked;
+        void mouseUp(const juce::MouseEvent& e) override;
+        [[nodiscard]] bool isLifted() const noexcept { return lifted; }
 
     private:
 
@@ -120,7 +131,12 @@ namespace cs808
         std::int64_t sixteenthNow = -1;
         std::uint64_t editsSeen = 0;
         double clockAt = -1.0e9, memoryAt = -1.0e9;
-        bool cpuLit = false;
+        EtchedCircuit cpu;       // the CPU board under the glass (D315)
+        juce::Image cpuImage;    // its still self, for the glass's faint hint
+        float cpuImageScale = 0.0f;
+        bool lifted = false;
+        void buildCpu(const std::vector<float>& columnCentres);
+        std::vector<juce::Range<float>> columnSpans; // each column's x, for a click with the lid lifted
         [[nodiscard]] float energyOf(int owner) const noexcept;
     };
 }

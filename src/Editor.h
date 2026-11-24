@@ -82,8 +82,13 @@ namespace cs808
         void closeOverlaysLater();
         /** The library's shelf over the panel (the Library key), and while it is open, the shelf. */
         void openLibrary();
-        /** Opens or closes Under the Lid, the circuit with its measured currents, over the whole window (D308). */
+        /** Opens or closes a schematic sheet of Under the Lid over the whole window (D308). */
         void showLid(bool show);
+        /** Lifts the lid or lowers it (D315): the board alone, its CPU board whole; the Lid key's work. */
+        void liftLid(bool on);
+        [[nodiscard]] bool isLidLifted() const noexcept { return lidLifted; }
+        /** With the lid lifted: a column's schematic (0 the master, 1 to 11 the drums, -1 the CPU) over the board. */
+        void openSheet(int column);
         /** Opens or closes the options window (D311), the Options key's work. */
         void toggleOptions();
         [[nodiscard]] bool optionsOpen() const noexcept;
@@ -164,6 +169,7 @@ namespace cs808
         std::unique_ptr<juce::PropertiesFile> settings;
         int themeIndex = 0;
         int zoomPercent = 100;
+        bool lidLifted = false;
         bool circuitAnimated = true;
         int circuitShow = 1; // full, faint (the default, the user), hidden (D314)
         void applyCircuitLook();

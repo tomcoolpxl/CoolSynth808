@@ -247,6 +247,17 @@ public:
             // The circuit faint, as the options can set it for whom it distracts (D314).
             editor->boardForTesting().setCircuitLook(true, EtchedBoard::CircuitShow::faint);
             shoot("panel-faint");
+            // Lift the Lid (D315): the knobs and the glass gone, the CPU board whole and lit, a step playing.
+            editor->liftLid(true);
+            editor->boardForTesting().struck((1u << 0) | (1u << 1) | (1u << 10), 52000.0);
+            editor->boardForTesting().sequencerState(-1, 3, 52000.0);
+            editor->boardForTesting().sequencerState(6, 4, 52005.0);
+            editor->boardForTesting().tick(52030.0);
+            shoot("lid-lifted");
+            editor->boardForTesting().sequencerState(-1, 4, 70000.0);
+            editor->boardForTesting().tick(70000.0);
+            shoot("lid-lifted-rest");
+            editor->liftLid(false);
             editor->boardForTesting().setCircuitLook(true, EtchedBoard::CircuitShow::full);
             setTheme(1); // the same in the Silver theme (D307)
             editor->boardForTesting().themeChanged();

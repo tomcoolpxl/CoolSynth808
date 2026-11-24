@@ -21,8 +21,15 @@ namespace cs808
         const float unit = (right - left) / (0.85f + 11.0f);
         std::vector<EtchedCircuit::Column> columns;
         for (int c = 0; c < 12; ++c)
+        {
             columns.push_back({ c == 0 ? left : left + unit * (0.85f + static_cast<float>(c - 1)), unit * (c == 0 ? 0.85f : 1.0f) });
+            columnSpans.push_back({ columns.back().x, columns.back().x + columns.back().w });
+        }
         circuit.build(columns, 46.0f, glassTop + 12.0f);
+        std::vector<float> centres;
+        for (int c = 1; c < 12; ++c)
+            centres.push_back(columns[static_cast<std::size_t>(c)].x + columns[static_cast<std::size_t>(c)].w * 0.5f);
+        buildCpu(centres);
     }
 
     void EtchedBoard::setKeepOuts(std::vector<KeepOut> list)
@@ -55,18 +62,21 @@ namespace cs808
             juce::Graphics c(cache);
             c.addTransform(juce::AffineTransform::scale(scale));
             paintMetal(c);
-            if (circuitShow != CircuitShow::hidden)
+            if (lifted || circuitShow != CircuitShow::hidden)
             {
                 // faint: the whole circuit under half, its names and still copper too (D314)
-                if (circuitShow == CircuitShow::faint)
+                if (! lifted && circuitShow == CircuitShow::faint)
                     c.beginTransparencyLayer(circuitFade());
                 paintCopper(c);
                 paintCpu(c);
-                if (circuitShow == CircuitShow::faint)
+                if (! lifted && circuitShow == CircuitShow::faint)
                     c.endTransparencyLayer();
             }
             paintOutline(c);
-            paintShadows(c);
+            if (lifted)
+                paintFootprints(c);
+            else
+                paintShadows(c);
         }
         g.drawImageTransformed(cache, juce::AffineTransform::scale(1.0f / cacheScale));
         // The circuit lit over its still self, cut round the controls as the copper is (D298).
@@ -78,6 +88,12 @@ namespace cs808
         juce::Graphics::ScopedSaveState state(g);
         g.reduceClipRegion(copperClip);
         glowing = circuit.paintLit(g, now, [this](int owner) { return energyOf(owner); }, circuitFade());
+        if (lifted)
+        {
+            juce::Graphics::ScopedSaveState cpuState(g);
+            g.reduceClipRegion(juce::Rectangle<int>(14, juce::roundToInt(glassTop), 1252, 442));
+            cpu.paintLit(g, now, [this](int owner) { return energyOf(owner); });
+        }
     }
 
     void EtchedBoard::struck(std::uint32_t lanes, double nowMs)
@@ -91,44 +107,6 @@ namespace cs808
             }
         if (lanes != 0)
             stepAt = nowMs;
-    }
-
-    namespace
-    {
-        // Where the CPU section lies under the glass (D312): its chips under the empty foot of the tools at the right,
-        // the trigger lines up the gap between the steps' lengths and the tools, the lamp lines along the glass's foot.
-        const juce::Rectangle<float> cpuChip { 1034.0f, 700.0f, 150.0f, 30.0f };
-        const juce::Rectangle<float> coil { 1008.0f, 708.0f, 14.0f, 14.0f };
-        const juce::Rectangle<float> schmitt { 1196.0f, 708.0f, 40.0f, 14.0f };
-        constexpr float ramY = 752.0f, ramW = 44.0f, ramH = 15.0f;
-        constexpr std::array<float, 4> ramX { 1016.0f, 1074.0f, 1132.0f, 1190.0f };
-        constexpr std::array<float, 3> trunkX { 1241.0f, 1244.0f, 1247.0f };
-        constexpr std::array<float, 4> lampY { 775.0f, 778.0f, 781.0f, 784.0f };
-        const juce::Rectangle<int> cpuArea { 980, 690, 290, 100 };
-        const juce::Rectangle<int> trunkArea { 1030, 350, 228, 352 };
-        const juce::Rectangle<int> lampArea { 230, 772, 810, 16 };
-
-        void chip(juce::Graphics& g, juce::Rectangle<float> body, int pinsPerSide, const juce::String& name, const BoardLook& look)
-        {
-            // pads along both long sides, the black body over them, a notch at its left end, its name printed on it
-            g.setColour(look.pad);
-            const float pitch = body.getWidth() / static_cast<float>(pinsPerSide);
-            for (int i = 0; i < pinsPerSide; ++i)
-            {
-                const float x = body.getX() + pitch * (static_cast<float>(i) + 0.5f);
-                g.fillEllipse(juce::Rectangle<float>(3.2f, 3.2f).withCentre({ x, body.getY() - 2.5f }));
-                g.fillEllipse(juce::Rectangle<float>(3.2f, 3.2f).withCentre({ x, body.getBottom() + 2.5f }));
-            }
-            g.setColour(juce::Colour(0xff141516).withAlpha(0.9f));
-            g.fillRoundedRectangle(body, 1.5f);
-            g.setColour(look.silk);
-            g.drawRoundedRectangle(body.expanded(1.5f), 2.0f, 0.8f);
-            g.setColour(juce::Colour(0xff2a2b2d));
-            g.fillEllipse(juce::Rectangle<float>(5.0f, 5.0f).withCentre({ body.getX() + 2.0f, body.getCentreY() }));
-            g.setColour(juce::Colours::white.withAlpha(0.55f));
-            g.setFont(monoFont(body.getHeight() > 20.0f ? 7.0f : 5.5f));
-            shapedText(g, name, body.reduced(4.0f, 0.0f), juce::Justification::centred, false);
-        }
     }
 
     void EtchedBoard::sequencerState(std::int64_t sixteenth, std::uint64_t edits, double nowMs)
@@ -147,192 +125,215 @@ namespace cs808
         }
     }
 
-    void EtchedBoard::paintCpu(juce::Graphics& g) const
+    void EtchedBoard::buildCpu(const std::vector<float>& columnCentres)
     {
-        const auto& look = boardLook();
-        const auto stroke = juce::PathStrokeType(1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
-        // Brighter than the copper above the glass, which shows it faintly: the glass passes about a seventh.
-        g.setColour(look.copper.withAlpha(1.0f).brighter(0.35f));
-        // the trigger lines: the common trigger, the accent and the instrument data, up to the trigger bus
-        for (std::size_t i = 0; i < trunkX.size(); ++i)
-        {
-            const float x = trunkX[i], y0 = cpuChip.getY() - 2.5f, turn = 692.0f - static_cast<float>(i) * 3.0f;
-            g.strokePath(tracePath({ { cpuChip.getX() + 4.0f + static_cast<float>(i) * 7.5f, y0 }, { cpuChip.getX() + 4.0f + static_cast<float>(i) * 7.5f, turn },
-                                     { x, turn }, { x, glassTop + 12.0f } }), stroke);
-        }
-        // the lamp lines (PG0 to PG3) along the glass's foot, under the step keys
-        for (std::size_t i = 0; i < lampY.size(); ++i)
-        {
-            const float px = cpuChip.getX() + 4.0f + static_cast<float>(i) * 7.5f;
-            g.strokePath(tracePath({ { px, cpuChip.getBottom() + 2.5f }, { px, lampY[i] - 4.0f }, { px - 4.0f, lampY[i] }, { 240.0f, lampY[i] } }), stroke);
-        }
-        // the data bus (PC0 to PC3) and the addresses, from the CPU's foot to the four memories
-        for (int b = 0; b < 4; ++b)
-        {
-            const float y = 741.0f + static_cast<float>(b) * 2.0f, px = cpuChip.getX() + 60.0f + static_cast<float>(b) * 7.5f;
-            g.strokePath(tracePath({ { px, cpuChip.getBottom() + 2.5f }, { px, y } }), stroke);
-            g.drawLine(ramX.front() + 6.0f, y, ramX.back() + ramW - 6.0f, y, 1.0f);
-        }
-        for (const float x : ramX)
-            for (int b = 0; b < 4; ++b)
-                g.drawLine(x + 6.0f + static_cast<float>(b) * 4.6f, 741.0f + static_cast<float>(b) * 2.0f, x + 6.0f + static_cast<float>(b) * 4.6f, ramY - 2.5f, 1.0f);
-        // the clock: the coil beside the CPU, the Schmitt trigger's interrupt into it
-        g.strokePath(tracePath({ { coil.getRight(), coil.getCentreY() }, { cpuChip.getX(), coil.getCentreY() } }), stroke);
-        g.strokePath(tracePath({ { schmitt.getX(), schmitt.getCentreY() }, { cpuChip.getRight(), schmitt.getCentreY() } }), stroke);
-        g.setColour(look.silk);
-        g.drawRect(coil, 0.8f);
-        g.drawEllipse(coil.reduced(3.0f), 0.8f);
-        chip(g, cpuChip, 20, "uPD650C-085", look);
-        chip(g, schmitt, 7, "IC1", look);
-        for (std::size_t i = 0; i < ramX.size(); ++i)
-            chip(g, { ramX[i], ramY, ramW, ramH }, 9, "IC" + juce::String(7 + static_cast<int>(i)), look);
-        g.setColour(look.silkText);
-        g.setFont(monoFont(6.0f));
-        shapedText(g, "IFT-1", coil.translated(0.0f, 15.0f).withSizeKeepingCentre(30.0f, 8.0f), juce::Justification::centred, false);
-    }
+        // The 808's CPU board under the glass (D315; docs/design/COOLSYNTH_808_CPU.md in CoolSynth's repository): the
+        // main board's real parts by their names, laid out by hand so no two traces cross, drawn as the columns above
+        // are. Our sequencer drives its light, not Roland's program: the clock, the step, the memory as it is read and
+        // written, the keys' scan, the lamps, and each drum's instrument line up to the trigger bus.
+        using P = juce::Point<float>;
+        using C = EtchedCircuit;
+        cpu.clear();
+        cpu.setNamesOffCopper(true);
+        const float busY = glassTop + 12.0f; // the trigger bus the columns' circuits hang from
 
-    void EtchedBoard::paintCpuGlow(juce::Graphics& g, juce::Point<float> origin) const
-    {
-        // On the glass: the copper beneath shows faintly through the smoke, always; what works lights as thin bright
-        // traces with a small halo (D312). Solid strokes only, no gradients (D306).
-        const auto& look = boardLook();
-        const float tick = static_cast<float>(std::exp(-(now - clockAt) / 120.0));
-        const float trig = static_cast<float>(std::exp(-(now - clockAt) / 70.0));
-        const float mem = static_cast<float>(std::exp(-(now - memoryAt) / 400.0));
-        if (circuitShow == CircuitShow::hidden)
-            return; // the circuit hidden on the panel (D314)
-        juce::Graphics::ScopedSaveState state(g);
-        g.addTransform(juce::AffineTransform::translation(-origin.x, -origin.y));
-        const bool faintNow = circuitShow == CircuitShow::faint;
-        if (faintNow)
-            g.beginTransparencyLayer(circuitFade());
+        // The CPU, a uPD650C-085 in 40 pins (0.6 in), at the left; its pins 0.1 in apart, numbered from the left.
+        const P cpuAt { 130.0f, 488.0f };
+        constexpr float cpuH = 42.0f, pitch = 7.0f;
+        const auto cpuTop = [&](int i) { return P(cpuAt.x - 70.0f + pitch * (static_cast<float>(i) + 0.5f), cpuAt.y - cpuH * 0.5f - 3.5f); };
+        const auto cpuBottom = [&](int i) { return P(cpuAt.x - 70.0f + pitch * (static_cast<float>(i) + 0.5f), cpuAt.y + cpuH * 0.5f + 3.5f); };
+        cpu.addPart('D', cpuAt, cpuH, C::cpuCore, "IC4", 40, "uPD650C-085");
 
-        const auto trunk = [](int i)
+        // The instrument lines (PD, PE, PF): one per drum, from the CPU's top pins up to the trigger bus at its column,
+        // the leftmost drum's line the highest so none crosses another.
+        for (int c = 1; c <= 11 && c <= static_cast<int>(columnCentres.size()); ++c)
         {
-            const float x = trunkX[static_cast<std::size_t>(i)], px = cpuChip.getX() + 4.0f + static_cast<float>(i) * 7.5f;
-            const float turn = 692.0f - static_cast<float>(i) * 3.0f;
-            return tracePath({ { px, cpuChip.getY() - 2.5f }, { px, turn }, { x, turn }, { x, glassTop + 12.0f } });
-        };
-        const auto lamp = [](int i)
-        {
-            const float px = cpuChip.getX() + 4.0f + static_cast<float>(i) * 7.5f, y = lampY[static_cast<std::size_t>(i)];
-            return tracePath({ { px, cpuChip.getBottom() + 2.5f }, { px, y - 4.0f }, { px - 4.0f, y }, { 240.0f, y } });
-        };
-        const auto bus = [](int b)
-        {
-            juce::Path path;
-            const float y = 741.0f + static_cast<float>(b) * 2.0f, px = cpuChip.getX() + 60.0f + static_cast<float>(b) * 7.5f;
-            path.startNewSubPath(px, cpuChip.getBottom() + 2.5f);
-            path.lineTo(px, y);
-            path.startNewSubPath(ramX.front() + 6.0f, y);
-            path.lineTo(ramX.back() + ramW - 6.0f, y);
-            for (const float x : ramX)
-            {
-                path.startNewSubPath(x + 6.0f + static_cast<float>(b) * 4.6f, y);
-                path.lineTo(x + 6.0f + static_cast<float>(b) * 4.6f, ramY - 2.5f);
-            }
-            return path;
-        };
-        const auto pins = [&g](juce::Rectangle<float> body, int perSide, float size)
-        {
-            const float pitch = body.getWidth() / static_cast<float>(perSide);
-            for (int i = 0; i < perSide; ++i)
-            {
-                const float x = body.getX() + pitch * (static_cast<float>(i) + 0.5f);
-                g.fillEllipse(juce::Rectangle<float>(size, size).withCentre({ x, body.getY() - 2.5f }));
-                g.fillEllipse(juce::Rectangle<float>(size, size).withCentre({ x, body.getBottom() + 2.5f }));
-            }
-        };
-        // A faint hint of activity, a soft glow as the top panel's electricity has (the user): wide and faint, a thin
-        // core only a little brighter.
-        const auto glowLine = [&g](const juce::Path& path, juce::Colour c, float amount)
-        {
-            g.setColour(c.withAlpha(0.05f * amount));
-            g.strokePath(path, juce::PathStrokeType(9.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            g.setColour(c.withAlpha(0.09f * amount));
-            g.strokePath(path, juce::PathStrokeType(4.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            g.setColour(c.withAlpha(0.22f * amount));
-            g.strokePath(path, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        };
+            const auto pin = cpuTop(c - 1);
+            const float y = 380.0f + 4.0f * static_cast<float>(c - 1), x = columnCentres[static_cast<std::size_t>(c - 1)];
+            cpu.addTrace({ pin, { pin.x, y }, { x, y }, { x, busY } }, c);
+        }
 
-        // the board beneath, faint through the smoke
-        const auto faint = look.copper.withAlpha(1.0f).brighter(0.5f).withAlpha(0.06f); // much fainter (the user)
-        g.setColour(faint);
-        const auto thin = juce::PathStrokeType(1.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
-        for (int i = 0; i < 3; ++i)
-            g.strokePath(trunk(i), thin);
+        // The step's pulse (PI-2) and the accent (PF-3) to the trigger shaper at the centre; write and enable (PI-0,
+        // PI-1) to the memories' decoder.
+        const P shaper { 760.0f, 480.0f };
+        cpu.addTrace({ cpuTop(11), { cpuTop(11).x, 432.0f }, { 690.0f, 432.0f }, { 690.0f, 466.0f } }, C::triggerBus);
+        cpu.addTrace({ cpuTop(12), { cpuTop(12).x, 438.0f }, { 650.0f, 438.0f }, { 650.0f, 560.0f }, { 700.0f, 560.0f } }, C::triggerBus);
+        const P decoder { 470.0f, 520.0f };
+        cpu.addTrace({ cpuTop(13), { cpuTop(13).x, 444.0f }, { decoder.x - 10.5f, 444.0f }, { decoder.x - 10.5f, decoder.y - 14.0f } }, C::cpuMemory);
+        cpu.addTrace({ cpuTop(14), { cpuTop(14).x, 450.0f }, { decoder.x - 3.5f, 450.0f }, { decoder.x - 3.5f, decoder.y - 14.0f } }, C::cpuMemory);
+        for (int i = 15; i < 20; ++i) // the supply and the reset at the CPU's far end
+            cpu.addTrace({ cpuTop(i), { cpuTop(i).x, cpuTop(i).y - 8.0f - 2.0f * static_cast<float>(i - 15) } }, C::cpuPower);
+
+        // The trigger shaper: Q27 turns the pulse over, IC6 (a TC4011) widens it to about 1 ms (R100 C23, R102 C27);
+        // the accent's Q31 to Q34 and VR3 set its height; the common trigger runs right and up to the trigger bus.
+        cpu.addPart('Q', { 700.0f, 470.0f }, 8.0f, C::triggerBus, "Q27");
+        cpu.addPart('D', shaper, 21.0f, C::triggerBus, "IC6", 14, "TC4011BP");
+        cpu.addPart('R', { 830.0f, 452.0f }, 7.0f, C::triggerBus, "R100");
+        cpu.addPart('C', { 870.0f, 452.0f }, 7.0f, C::triggerBus, "C23");
+        cpu.addPart('R', { 830.0f, 508.0f }, 7.0f, C::triggerBus, "R102");
+        cpu.addPart('C', { 870.0f, 508.0f }, 7.0f, C::triggerBus, "C27");
+        cpu.addTrace({ { 708.0f, 470.0f }, { 735.0f, 470.0f } }, C::triggerBus);
+        cpu.addTrace({ { 784.0f, 466.0f }, { 784.0f, 452.0f }, { 821.0f, 452.0f } }, C::triggerBus);
+        cpu.addTrace({ { 839.0f, 452.0f }, { 865.0f, 452.0f } }, C::triggerBus);
+        cpu.addTrace({ { 784.0f, 494.0f }, { 784.0f, 508.0f }, { 821.0f, 508.0f } }, C::triggerBus);
+        cpu.addTrace({ { 839.0f, 508.0f }, { 865.0f, 508.0f } }, C::triggerBus);
+        cpu.addTrace({ { 875.0f, 452.0f }, { 900.0f, 452.0f }, { 900.0f, 470.0f }, { 1232.0f, 470.0f }, { 1232.0f, busY } }, C::triggerBus);
         for (int i = 0; i < 4; ++i)
         {
-            g.strokePath(lamp(i), thin);
-            g.strokePath(bus(i), thin);
+            const float x = 730.0f + 52.0f * static_cast<float>(i);
+            cpu.addPart('Q', { x, 575.0f }, 8.0f, C::triggerBus, "Q" + juce::String(31 + i));
+            cpu.addPart('R', { x, 612.0f }, 6.0f, C::triggerBus, "R" + juce::String(104 + i), 0, {}, true);
+            cpu.addTrace({ { x - 3.6f, 575.0f }, { x - 26.0f, 575.0f } }, C::triggerBus);
+            cpu.addTrace({ { x, 582.0f }, { x, 604.0f } }, C::triggerBus);
+            cpu.addTrace({ { x, 620.0f }, { x, 640.0f }, { 890.0f, 640.0f } }, C::cpuPower);
         }
-        pins(cpuChip, 20, 2.6f);
-        pins(schmitt, 7, 2.6f);
-        for (const float x : ramX)
-            pins({ x, ramY, ramW, ramH }, 9, 2.6f);
-        g.setColour(look.silkText.withAlpha(1.0f).brighter(0.6f).withAlpha(0.09f));
-        for (const auto& body : { cpuChip, schmitt })
-            g.drawRoundedRectangle(body.expanded(1.5f), 2.0f, 0.8f);
-        for (const float x : ramX)
-            g.drawRoundedRectangle(juce::Rectangle<float>(x, ramY, ramW, ramH).expanded(1.5f), 2.0f, 0.8f);
-        g.drawRect(coil, 0.8f);
-        g.setFont(monoFont(7.0f));
-        shapedText(g, "uPD650C-085", cpuChip, juce::Justification::centred, false);
-        g.setFont(monoFont(5.5f));
-        for (std::size_t i = 0; i < ramX.size(); ++i)
-            shapedText(g, "IC" + juce::String(7 + static_cast<int>(i)), juce::Rectangle<float>(ramX[i], ramY, ramW, ramH), juce::Justification::centred, false);
+        cpu.addPart('T', { 912.0f, 600.0f }, 8.0f, C::triggerBus, "VR3");
+        cpu.addTrace({ { 912.0f, 591.6f }, { 912.0f, 575.0f }, { 891.0f, 575.0f } }, C::triggerBus);
 
-        // what works, lit, while the electricity is animated (D314)
-        if (! circuitAnimated())
+        // The memories: IC5 decodes PE2 and PE3 to pick one of four uPD444C (1K x 4 each, 18 pins), its four selects
+        // reaching each memory's pin 1 without a crossing.
+        cpu.addPart('D', decoder, 21.0f, C::cpuMemory, "IC5", 14, "MC14001");
+        constexpr std::array<float, 4> ramX { 330.0f, 420.0f, 510.0f, 600.0f };
+        constexpr float ramY = 600.0f;
+        for (std::size_t r = 0; r < ramX.size(); ++r)
+            cpu.addPart('D', { ramX[r], ramY }, 21.0f, C::cpuMemory, "IC" + juce::String(7 + static_cast<int>(r)), 18, "uPD444C");
+        const auto ramTopPin0 = [&](std::size_t r) { return P(ramX[r] - 31.5f + 3.5f, ramY - 10.5f - 3.5f); };
+        const auto decoderBottom = [&](int i) { return P(decoder.x - 24.5f + 3.5f + 7.0f * static_cast<float>(i), decoder.y + 14.0f); };
+        cpu.addTrace({ decoderBottom(0), { decoderBottom(0).x, 560.0f }, { ramTopPin0(0).x, 560.0f }, ramTopPin0(0) }, C::cpuMemory);
+        cpu.addTrace({ decoderBottom(1), { decoderBottom(1).x, 564.0f }, { ramTopPin0(1).x, 564.0f }, ramTopPin0(1) }, C::cpuMemory);
+        cpu.addTrace({ decoderBottom(3), { decoderBottom(3).x, 560.0f }, { ramTopPin0(3).x, 560.0f }, ramTopPin0(3) }, C::cpuMemory);
+        cpu.addTrace({ decoderBottom(2), { decoderBottom(2).x, 564.0f }, { ramTopPin0(2).x, 564.0f }, ramTopPin0(2) }, C::cpuMemory);
+
+        // The data and address bus (PC and PD to PF): six lines from the CPU's last pins, down and along under the
+        // memories, each memory reaching down to them as a comb; R85 to R88 in the data lines against write clashes.
+        for (int j = 0; j < 6; ++j)
         {
-            if (faintNow)
-                g.endTransparencyLayer();
-            return;
-        }
-        if (trig > 0.03f)
-            for (int i = 0; i < 3; ++i)
-                glowLine(trunk(i), look.flowDot, trig);
-        if (sixteenthNow >= 0)
-            glowLine(lamp(static_cast<int>((sixteenthNow % 16) / 4)), look.flowWire, 0.7f);
-        if (tick > 0.03f)
-        {
-            g.setColour(look.flowDot.withAlpha(0.3f * tick));
-            pins(cpuChip, 20, 2.8f);
-            g.drawRoundedRectangle(cpuChip.expanded(1.5f), 2.0f, 1.0f);
-            juce::Path clock;
-            clock.startNewSubPath(coil.getRight(), coil.getCentreY());
-            clock.lineTo(cpuChip.getX(), coil.getCentreY());
-            clock.startNewSubPath(schmitt.getX(), schmitt.getCentreY());
-            clock.lineTo(cpuChip.getRight(), schmitt.getCentreY());
-            glowLine(clock, look.flowDot, tick);
-        }
-        if (mem > 0.03f)
-        {
-            for (int b = 0; b < 4; ++b)
-                glowLine(bus(b), look.flowDot, mem);
-            g.setColour(look.flowDot.withAlpha(0.3f * mem));
+            const auto pin = cpuBottom(14 + j);
+            const float y = 650.0f + 4.0f * static_cast<float>(j);
+            cpu.addTrace({ pin, { pin.x, y }, { 644.0f, y } }, C::cpuMemory, true);
             for (const float x : ramX)
             {
-                pins({ x, ramY, ramW, ramH }, 9, 2.8f);
-                g.drawRoundedRectangle(juce::Rectangle<float>(x, ramY, ramW, ramH).expanded(1.5f), 2.0f, 1.0f);
+                const float px = x - 31.5f + 3.5f + 7.0f * static_cast<float>(j + 1);
+                cpu.addTrace({ { px, ramY + 10.5f + 3.5f }, { px, y } }, C::cpuMemory, true);
             }
+            if (j < 4)
+                cpu.addPart('R', { pin.x, 540.0f }, 5.0f, C::cpuMemory, "R" + juce::String(85 + j), 0, {}, true);
         }
-        if (faintNow)
-            g.endTransparencyLayer();
+
+        // The keys and lamps (PH scan, PG lamps, PB and PA keys): twelve lines from the CPU's foot to the switch
+        // board's connector, the further right a pin, the higher its line, so none crosses another.
+        const P keysAt { 560.0f, 766.0f };
+        constexpr int keyLines = 12;
+        cpu.addPart('J', keysAt, 7.0f, C::cpuPower, "CN2", keyLines + 2);
+        for (int k = 0; k < keyLines; ++k)
+        {
+            const auto pin = cpuBottom(2 + k);
+            const float y = 744.0f - 3.0f * static_cast<float>(k);
+            const float cx = keysAt.x - static_cast<float>(keyLines + 2) * 3.5f + 3.5f + 7.0f * static_cast<float>(k + 1);
+            const int owner = k < 4 ? C::cpuScan + k : k < 8 ? C::cpuLamp + (k - 4) : C::cpuScan + (k - 8);
+            cpu.addTrace({ pin, { pin.x, y }, { cx, y }, { cx, keysAt.y } }, owner, true);
+        }
+
+        // The clocks: IFT-1's coil and the CPU's own 500 kHz, IC1 (an HD14584) the 1.9 ms interrupt, TM-1 its trim.
+        cpu.addPart('X', { 44.0f, 548.0f }, 16.0f, C::cpuClock, "IFT-1");
+        cpu.addTrace({ { 44.0f + 4.8f, 548.0f + 11.5f }, { 52.0f, 572.0f }, { cpuBottom(0).x, 572.0f }, cpuBottom(0) }, C::cpuClock);
+        cpu.addPart('D', { 48.0f, 640.0f }, 21.0f, C::cpuClock, "IC1", 14, "HD14584", true);
+        cpu.addTrace({ { 48.0f + 14.0f, 640.0f - 21.0f }, { cpuBottom(1).x, 619.0f }, cpuBottom(1) }, C::cpuClock);
+        cpu.addPart('T', { 48.0f, 700.0f }, 8.0f, C::cpuClock, "TM-1");
+        cpu.addTrace({ { 48.0f, 691.6f }, { 48.0f, 676.0f } }, C::cpuClock);
+        cpu.addPart('C', { 80.0f, 700.0f }, 7.0f, C::cpuClock, "C11");
+
+        // The tempo clock: IC12 (a TC4013 as a toggle) halves the tempo oscillator, TM-2 trims its range, CN3 takes the
+        // Tempo knob; IC11 (an MC14001) gates the keys' scan.
+        cpu.addPart('D', { 790.0f, 700.0f }, 21.0f, C::cpuClock, "IC12", 14, "TC4013BP");
+        cpu.addPart('T', { 868.0f, 700.0f }, 8.0f, C::cpuClock, "TM-2");
+        cpu.addPart('J', { 940.0f, 700.0f }, 7.0f, C::cpuClock, "CN3", 3);
+        cpu.addTrace({ { 814.5f - 3.5f, 686.0f }, { 811.0f, 676.0f }, { 868.0f, 676.0f }, { 868.0f, 691.6f } }, C::cpuClock);
+        cpu.addTrace({ { 872.8f, 708.4f }, { 872.8f, 724.0f }, { 933.0f, 724.0f }, { 933.0f, 700.0f } }, C::cpuClock);
+        cpu.addTrace({ { 863.2f, 708.4f }, { 863.2f, 730.0f }, { 947.0f, 730.0f }, { 947.0f, 700.0f } }, C::cpuPower);
+        cpu.addPart('D', { 700.0f, 700.0f }, 21.0f, C::cpuScan, "IC11", 14, "MC14001");
+        for (int i = 0; i < 3; ++i)
+        {
+            // nested, the outermost the deepest, so none crosses another
+            const float from = 707.0f + 7.0f * static_cast<float>(i), to = 783.0f - 7.0f * static_cast<float>(i), y = 752.0f - 4.0f * static_cast<float>(i);
+            cpu.addTrace({ { from, 714.0f }, { from, y }, { to, y }, { to, 714.0f } }, C::cpuScan + i, true);
+        }
+        // the chips' decoupling capacitors, each beside its chip's supply pin
+        const std::array<std::pair<P, const char*>, 6> decoupling { { { { 222.0f, 470.0f }, "C1" }, { { 375.0f, 640.0f }, "C2" },
+                                                                    { { 525.0f, 520.0f }, "C3" }, { { 815.0f, 480.0f }, "C4" },
+                                                                    { { 1070.0f, 590.0f }, "C5" }, { { 985.0f, 700.0f }, "C6" } } };
+        for (const auto& [at, name] : decoupling)
+            cpu.addPart('C', at, 6.0f, C::cpuPower, name);
+
+        // The status gate (IC3) and start/stop (IC2, a TC4013), the scan's inverters (Q18, Q23, Q24), the DIN socket
+        // for sync, the backup battery and its switches (Q64, Q75) that keep the memories alive.
+        const P gate { 1010.0f, 540.0f }, startStop { 1130.0f, 540.0f };
+        cpu.addPart('D', gate, 21.0f, C::cpuCore, "IC3", 16, "MC14051");
+        cpu.addPart('D', startStop, 21.0f, C::cpuCore, "IC2", 14, "TC4013BP");
+        for (int i = 0; i < 3; ++i)
+        {
+            const float x = 980.0f + 60.0f * static_cast<float>(i);
+            cpu.addPart('Q', { x, 610.0f }, 8.0f, C::cpuScan + i, juce::String(i == 0 ? "Q18" : i == 1 ? "Q23" : "Q24"));
+            cpu.addPart('R', { x + 22.0f, 640.0f }, 6.0f, C::cpuScan + i, "R" + juce::String(60 + i), 0, {}, true);
+            cpu.addTrace({ { x, 603.0f }, { x, 558.0f } }, C::cpuScan + i);
+            cpu.addTrace({ { x + 3.6f, 610.0f }, { x + 22.0f, 610.0f }, { x + 22.0f, 632.0f } }, C::cpuScan + i);
+        }
+        for (int i = 0; i < 4; ++i)
+            cpu.addTrace({ { gate.x + 31.5f, 528.0f - 3.0f * static_cast<float>(i) - 4.0f }, { startStop.x - 24.5f, 528.0f - 3.0f * static_cast<float>(i) - 4.0f } }, C::cpuCore, true);
+        cpu.addPart('K', { 1110.0f, 722.0f }, 17.0f, C::cpuClock, "DIN SYNC");
+        cpu.addTrace({ { 1110.0f - 10.2f, 722.0f }, { 1070.0f, 722.0f }, { 1070.0f, 680.0f }, { startStop.x - 10.5f, 680.0f }, { startStop.x - 10.5f, startStop.y + 14.0f } }, C::cpuClock);
+        cpu.addPart('B', { 1200.0f, 722.0f }, 15.0f, C::cpuPower, "BT1");
+        cpu.addPart('Q', { 1200.0f, 660.0f }, 8.0f, C::cpuPower, "Q64");
+        cpu.addPart('Q', { 1200.0f, 610.0f }, 8.0f, C::cpuPower, "Q75");
+        cpu.addTrace({ { 1200.0f + 19.0f, 722.0f }, { 1236.0f, 722.0f }, { 1236.0f, 660.0f }, { 1203.6f, 660.0f } }, C::cpuPower);
+        cpu.addTrace({ { 1200.0f, 653.0f }, { 1200.0f, 617.0f } }, C::cpuPower);
+        // the battery's line to the memories, along the board's foot and up past their right end
+        cpu.addTrace({ { 1200.0f - 19.0f, 722.0f }, { 1150.0f, 722.0f }, { 1150.0f, 778.0f }, { 652.0f, 778.0f }, { 652.0f, ramY + 14.0f }, { ramX.back() + 31.5f - 3.5f, ramY + 14.0f } }, C::cpuPower);
+        cpu.finish();
+    }
+
+    void EtchedBoard::paintCpu(juce::Graphics& g) const
+    {
+        // The CPU board unlit, under the glass (D315): seen whole with the lid lifted.
+        juce::Graphics::ScopedSaveState state(g);
+        g.reduceClipRegion(juce::Rectangle<int>(14, juce::roundToInt(glassTop), 1252, 442));
+        cpu.paintStill(g);
+    }
+
+    void EtchedBoard::paintCpuGlow(juce::Graphics& g, juce::Point<float> origin)
+    {
+        // With the lid closed, the CPU board shows through the smoked glass as a faint hint: its copper and names barely
+        // there, and the drums' instrument lines glowing softly as they are struck (the user, D314). Drawn by the glass.
+        if (circuitShow == CircuitShow::hidden || lifted)
+            return;
+        const float scale = std::max(1.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+        if (! cpuImage.isValid() || std::abs(cpuImageScale - scale) > 0.01f)
+        {
+            cpuImageScale = scale;
+            cpuImage = juce::Image(juce::Image::ARGB, juce::roundToInt(1252 * scale), juce::roundToInt(442 * scale), true);
+            juce::Graphics c(cpuImage);
+            c.addTransform(juce::AffineTransform::translation(-14.0f, -glassTop).scaled(scale));
+            cpu.paintStill(c);
+        }
+        juce::Graphics::ScopedSaveState state(g);
+        g.addTransform(juce::AffineTransform::translation(-origin.x, -origin.y));
+        const float fade = circuitShow == CircuitShow::faint ? 0.5f : 1.0f;
+        g.setOpacity(0.07f * fade);
+        g.drawImageTransformed(cpuImage, juce::AffineTransform::scale(1.0f / cpuImageScale).translated(14.0f, glassTop));
+        g.setOpacity(1.0f);
+        if (circuitAnimated())
+            cpu.paintLit(g, now, [this](int owner) { return owner >= 1 && owner <= 11 ? energyOf(owner) : 0.0f; }, 0.3f * fade);
     }
 
     void EtchedBoard::tick(double nowMs)
     {
         now = nowMs;
-        // The CPU section under the glass: only its own small areas drawn again, as the glass over them draws too.
-        const bool cpuNow = circuitAnimated() && (nowMs - clockAt < 500.0 || nowMs - memoryAt < 1500.0);
-        if (cpuNow || cpuLit)
+        if (lifted)
         {
-            repaint(cpuArea);
-            repaint(trunkArea);
-            repaint(lampArea);
+            // the lid lifted (D315): the whole board is the view, always lit and animated
+            repaint();
+            return;
         }
-        cpuLit = cpuNow;
         if (! circuitAnimated())
             return; // still: nothing to draw again
         bool lit = glowing || nowMs - stepAt < 400.0;
@@ -341,7 +342,10 @@ namespace cs808
         for (int c = 1; c < 12 && ! lit; ++c)
             lit = nowMs - hitAt[static_cast<std::size_t>(c)] < 1000.0;
         if (lit)
-            repaint(0, 0, width, juce::roundToInt(glassTop) + 40); // the circuit's strip, not the glass below
+        {
+            repaint(0, 0, width, juce::roundToInt(glassTop) + 40); // the circuit's strip
+            repaint(14, juce::roundToInt(glassTop), 1252, 126);     // and the instrument lines' under the glass's top
+        }
     }
 
     void EtchedBoard::liveLevels(const std::array<float, 12>& byLane, unsigned int reports, double nowMs)
@@ -377,6 +381,22 @@ namespace cs808
                 m = std::max(m, liveBrightness(c));
             return m * 0.75f;
         }
+        // The CPU board's (D315): its clocks always ticking a little, more on each step; the CPU and its memory on each
+        // step's read and on each edit's write; the keys' scan turning round; the playing step's group of lamps.
+        const double sinceStep = since(clockAt);
+        const bool running = sixteenthNow >= 0;
+        if (owner == EtchedCircuit::cpuClock)
+            return static_cast<float>((running ? 0.08 : 0.0) + 0.45 * std::exp(-sinceStep / 80.0));
+        if (owner == EtchedCircuit::cpuCore)
+            return static_cast<float>(0.7 * std::exp(-sinceStep / 110.0));
+        if (owner == EtchedCircuit::cpuMemory)
+            return static_cast<float>(std::max(0.9 * std::exp(-since(memoryAt) / 400.0), 0.35 * std::exp(-sinceStep / 60.0)));
+        if (owner >= EtchedCircuit::cpuScan && owner < EtchedCircuit::cpuScan + 4)
+            return running && (static_cast<int>(now / 140.0) & 3) == owner - EtchedCircuit::cpuScan ? 0.3f : 0.0f;
+        if (owner >= EtchedCircuit::cpuLamp && owner < EtchedCircuit::cpuLamp + 4)
+            return running && (sixteenthNow % 16) / 4 == owner - EtchedCircuit::cpuLamp ? 0.45f : 0.0f;
+        if (owner == EtchedCircuit::cpuPower)
+            return 0.0f;
         if (owner == EtchedCircuit::triggerBus)
             return static_cast<float>(std::exp(-since(stepAt) / 70.0));
         if (owner == 0) // the master column: the trigger and the accent
@@ -462,6 +482,72 @@ namespace cs808
             g.reduceClipRegion(clip);
             paintGround(g);
             paintCircuit(g);
+        }
+    }
+
+    void EtchedBoard::mouseUp(const juce::MouseEvent& e)
+    {
+        if (! lifted || ! onPartClicked || ! e.mouseWasClicked())
+            return;
+        if (e.position.y >= glassTop)
+        {
+            onPartClicked(-1); // the CPU board
+            return;
+        }
+        for (std::size_t c = 0; c < columnSpans.size(); ++c)
+            if (columnSpans[c].contains(e.position.x))
+            {
+                onPartClicked(static_cast<int>(c));
+                return;
+            }
+    }
+
+    void EtchedBoard::paintFootprints(juce::Graphics& g) const
+    {
+        const auto& look = boardLook();
+        const auto pad = [&](juce::Point<float> at, float d)
+        {
+            g.setColour(look.pad);
+            g.fillEllipse(juce::Rectangle<float>(d, d).withCentre(at));
+            g.setColour(rgb(0x141210, 0.9f));
+            g.fillEllipse(juce::Rectangle<float>(d * 0.4f, d * 0.4f).withCentre(at));
+        };
+        for (const auto& k : keeps)
+        {
+            if (k.footprint == 1)
+            {
+                // a pot's footprint: its round outline, the shaft's hole, three legs below
+                const auto r = k.area.reduced(8.0f);
+                g.setColour(look.silk);
+                g.drawEllipse(r, 1.0f);
+                g.setColour(look.metalBottom.darker(0.6f));
+                g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre(r.getCentre()));
+                for (int i = -1; i <= 1; ++i)
+                    pad({ r.getCentreX() + static_cast<float>(i) * 8.0f, r.getBottom() + 5.0f }, 5.2f);
+            }
+            else if (k.footprint == 2)
+            {
+                // a slide switch's: its outline and two rows of three pins
+                const auto r = k.area.reduced(4.0f, 6.0f);
+                g.setColour(look.silk);
+                g.drawRoundedRectangle(r, 2.0f, 1.0f);
+                for (int i = 0; i < 3; ++i)
+                {
+                    const float y = r.getY() + r.getHeight() * (0.25f + 0.25f * static_cast<float>(i));
+                    pad({ r.getX() + r.getWidth() * 0.3f, y }, 5.0f);
+                    pad({ r.getX() + r.getWidth() * 0.7f, y }, 5.0f);
+                }
+            }
+        }
+        // the holes the glass's four pins held it by, a lighter rim round each
+        const juce::Rectangle<float> glass { 14.0f, glassTop, 1252.0f, 442.0f };
+        for (const auto c : { glass.getTopLeft() + juce::Point<float>(9.0f, 9.0f), glass.getTopRight() + juce::Point<float>(-9.0f, 9.0f),
+                              glass.getBottomLeft() + juce::Point<float>(9.0f, -9.0f), glass.getBottomRight() + juce::Point<float>(-9.0f, -9.0f) })
+        {
+            g.setColour(look.metalTop.brighter(0.25f));
+            g.fillEllipse(juce::Rectangle<float>(9.0f, 9.0f).withCentre(c));
+            g.setColour(rgb(0x0b0b0c));
+            g.fillEllipse(juce::Rectangle<float>(6.5f, 6.5f).withCentre(c));
         }
     }
 
