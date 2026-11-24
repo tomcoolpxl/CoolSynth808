@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>808 Options Pages</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@500;600&display=block" rel="stylesheet">
+<style>
+  /* The 808's Options window in the Roland theme, as OptionsWindow.cpp draws it: the panel a shade darker,
+     heads in Archivo SemiCondensed Bold, labels in Archivo Condensed SemiBold tracked 0.09, keys as keycaps
+     with a lens, the chosen one lit orange. Three ways to page it; every page drawn at its real size (1 px a point). */
+  :root { --page: #0f0f10; --text: #d8d6cf; --muted: #8d8c88; --win: #1c1c1c; --bar: #2a2a2b; --ink: #f1ebde;
+          --dim: #8f8a80; --line: #3a3836; --orange: #f28a2c; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--page); color: var(--text); font-family: Archivo, sans-serif; padding: 28px; width: 2100px; }
+  h1 { font-weight: 800; font-size: 20px; letter-spacing: 0.04em; text-transform: uppercase; }
+  h1 b { color: var(--orange); }
+  .lede { color: var(--muted); font-size: 12.5px; margin: 6px 0 22px; line-height: 1.5; max-width: 1200px; }
+  .options { display: flex; gap: 40px; align-items: flex-start; }
+  .tag { font-size: 13px; margin-bottom: 8px; }
+  .tag .id { font-weight: 800; color: var(--orange); letter-spacing: 0.06em; text-transform: uppercase; margin-right: 8px; }
+  .tag .from { color: var(--muted); font-size: 12px; display: block; margin-top: 3px; }
+  .pages { display: flex; flex-direction: column; gap: 18px; }
+
+  .window { background: var(--win); border: 1px solid #000; border-radius: 6px; overflow: hidden; box-shadow: 0 10px 30px #0008; }
+  .titlebar { height: 30px; background: var(--bar); display: flex; align-items: center; padding: 0 12px; justify-content: space-between;
+              font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink); text-transform: uppercase; font-stretch: 87%; }
+  .titlebar .x { font-size: 16px; color: var(--ink); opacity: 0.8; }
+  .body { display: flex; }
+  .content { padding: 18px 22px 20px; flex: 1; }
+
+  .head { font-weight: 700; font-stretch: 87%; font-size: 13px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.04em;
+          border-bottom: 1px solid var(--line); padding-bottom: 5px; margin: 0 0 10px; }
+  .head.next { margin-top: 16px; }
+  .row { display: flex; align-items: center; min-height: 28px; margin-bottom: 6px; }
+  .label { width: 104px; flex: none; font-size: 10.5px; font-weight: 600; font-stretch: 75%; letter-spacing: 0.09em; text-transform: uppercase; color: var(--dim); }
+  .ctl { flex: 1; display: flex; gap: 4px; flex-wrap: wrap; }
+  .key { height: 26px; padding: 0 10px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+         background: linear-gradient(#3b3b3c, #2b2b2c); border: 1px solid #0c0c0c; box-shadow: inset 0 1px 0 #ffffff14;
+         font-size: 10.5px; font-weight: 600; font-stretch: 75%; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink); white-space: nowrap; flex: 1; }
+  .key.fit { flex: none; }
+  .key .lens { width: 7px; height: 7px; border-radius: 50%; background: #3a2a1e; border: 1px solid #120c08; flex: none; }
+  .key.on .lens { background: radial-gradient(#ffd9a8, var(--orange)); box-shadow: 0 0 5px var(--orange); }
+  .pick { flex: 1; height: 26px; border-radius: 4px; background: linear-gradient(#353536, #29292a); border: 1px solid #0c0c0c;
+          display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-size: 12px; color: var(--ink); }
+  .pick::after { content: "\25BE"; font-size: 11px; }
+  .note { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--orange); }
+  .hint { font-size: 11.5px; color: var(--dim); line-height: 1.4; }
+  .list { flex: 1; border: 1px solid #0c0c0c; border-radius: 4px; background: #161616; }
+  .list .item { height: 24px; display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 12px; color: var(--ink); border-bottom: 1px solid #222; }
+  .list .item:last-child { border-bottom: none; }
+  .tick { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #555; }
+  .tick.on { background: var(--orange); border-color: var(--orange); }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; flex: 1; }
+  .grid4 .key { padding: 0 6px; }
+  .grid4 .key b { color: var(--orange); font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 10.5px; letter-spacing: 0; }
+
+  /* A: a sidebar of pages */
+  .side { width: 148px; flex: none; background: #161616; border-right: 1px solid #0c0c0c; padding: 12px 8px; display: flex; flex-direction: column; gap: 3px; }
+  .side .p { height: 30px; border-radius: 4px; display: flex; align-items: center; gap: 9px; padding: 0 10px; font-size: 11px; font-weight: 600;
+             font-stretch: 75%; letter-spacing: 0.09em; text-transform: uppercase; color: var(--dim); }
+  .side .p .lens { width: 7px; height: 7px; border-radius: 50%; background: #3a2a1e; }
+  .side .p.on { background: linear-gradient(#3b3b3c, #2b2b2c); color: var(--ink); box-shadow: inset 0 1px 0 #ffffff14; border: 1px solid #0c0c0c; }
+  .side .p.on .lens { background: radial-gradient(#ffd9a8, var(--orange)); box-shadow: 0 0 5px var(--orange); }
+
+  /* B and C: tabs along the top */
+  .tabs { display: flex; gap: 4px; padding: 12px 22px 0; border-bottom: 1px solid var(--line); background: #191919; }
+  .tabs .t { height: 30px; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-radius: 5px 5px 0 0; font-size: 11px; font-weight: 600;
+             font-stretch: 75%; letter-spacing: 0.09em; text-transform: uppercase; color: var(--dim); border: 1px solid transparent; border-bottom: none; }
+  .tabs .t .lens { width: 7px; height: 7px; border-radius: 50%; background: #3a2a1e; }
+  .tabs .t.on { background: var(--win); color: var(--ink); border-color: var(--line); margin-bottom: -1px; }
+  .tabs .t.on .lens { background: radial-gradient(#ffd9a8, var(--orange)); box-shadow: 0 0 5px var(--orange); }
+  .cols { display: flex; gap: 26px; }
+  .cols > div { flex: 1; }
+  .caption { font-size: 11px; color: var(--muted); margin-top: 5px; }
+</style>
+</head>
+<body>
+  <h1>CoolSynth <b>808</b>: Options in pages</h1>
+  <p class="lede">The Options window today is 600 by 1120 points, five sections in one column. Each layout below splits it into pages and
+    tightens each page: the MIDI inputs a tick list instead of a key each, the window size a list to pick from, the drum notes a compact
+    grid. Each window is drawn at its real size. Ableton (Settings, a tab per page down the left) and Bitwig (Dashboard, Settings pages)
+    split theirs the same way.</p>
+
+  <div class="options">
+    <!-- A -->
+    <div>
+      <div class="tag"><span class="id">A</span>A list of pages down the left, five pages
+        <span class="from">As Ableton's Settings. 600 by 400; every page fits without scrolling.</span></div>
+      <div class="pages">
+        <div class="window" style="width:600px">
+          <div class="titlebar"><span>Options</span><span class="x">&#x2715;</span></div>
+          <div class="body" style="height:370px">
+            <div class="side">
+              <div class="p"><span class="lens"></span>Audio</div>
+              <div class="p on"><span class="lens"></span>MIDI</div>
+              <div class="p"><span class="lens"></span>Drum notes</div>
+              <div class="p"><span class="lens"></span>Panel</div>
+              <div class="p"><span class="lens"></span>Controller</div>
+            </div>
+            <div class="content">
+              <div class="head">MIDI</div>
+              <div class="row" style="align-items:flex-start"><div class="label" style="padding-top:6px">Inputs</div>
+                <div class="list">
+                  <div class="item"><span class="tick on"></span>UMC204HD 192k MIDI In</div>
+                  <div class="item"><span class="tick on"></span>Minilab3 MIDI</div>
+                  <div class="item"><span class="tick"></span>Minilab3 DIN Thru</div>
+                  <div class="item"><span class="tick"></span>Minilab3 MCU/HUI</div>
+                  <div class="item"><span class="tick"></span>Minilab3 ALV</div>
+                </div></div>
+              <div class="row"><div class="label">Output</div><div class="pick">None</div></div>
+              <div class="row"><div class="label">Clock</div><div class="ctl">
+                <span class="key on"><span class="lens"></span>Follow incoming</span><span class="key"><span class="lens"></span>Send</span></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="window" style="width:600px">
+          <div class="titlebar"><span>Options</span><span class="x">&#x2715;</span></div>
+          <div class="body" style="height:370px">
+            <div class="side">
+              <div class="p"><span class="lens"></span>Audio</div>
+              <div class="p"><span class="lens"></span>MIDI</div>
+              <div class="p on"><span class="lens"></span>Drum notes</div>
+              <div class="p"><span class="lens"></span>Panel</div>
+              <div class="p"><span class="lens"></span>Controller</div>
+            </div>
+            <div class="content">
+              <div class="head">Drum notes</div>
+              <div class="row"><div class="label">Set</div><div class="ctl">
+                <span class="key on"><span class="lens"></span>General MIDI</span><span class="key"><span class="lens"></span>From 36</span><span class="key"><span class="lens"></span>From 60</span></div></div>
+              <div class="row" style="align-items:flex-start"><div class="label" style="padding-top:6px">Learn</div>
+                <div class="grid4">
+                  <span class="key">BD <b>36</b></span><span class="key on"><span class="lens"></span>SD <b>play</b></span><span class="key">LT <b>43</b></span><span class="key">MT <b>47</b></span>
+                  <span class="key">HT <b>50</b></span><span class="key">RS <b>37</b></span><span class="key">CP <b>39</b></span><span class="key">CB <b>56</b></span>
+                  <span class="key">CY <b>49</b></span><span class="key">OH <b>46</b></span><span class="key">CH <b>42</b></span><span class="key">LC <b>64</b></span>
+                  <span class="key">MC <b>63</b></span><span class="key">HC <b>62</b></span><span class="key">CL <b>75</b></span><span class="key">MA <b>70</b></span>
+                </div></div>
+              <div class="row"><div class="label"></div><div class="hint">Click a drum, then play the note it should answer to.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div>
+      <div class="tag"><span class="id">B</span>Tabs along the top, five pages
+        <span class="from">600 by 380; the pages use the window's whole width, the page list costs no column.</span></div>
+      <div class="pages">
+        <div class="window" style="width:600px">
+          <div class="titlebar"><span>Options</span><span class="x">&#x2715;</span></div>
+          <div class="tabs">
+            <div class="t"><span class="lens"></span>Audio</div><div class="t on"><span class="lens"></span>MIDI</div><div class="t"><span class="lens"></span>Drum notes</div>
+            <div class="t"><span class="lens"></span>Panel</div><div class="t"><span class="lens"></span>Controller</div>
+          </div>
+          <div class="content" style="height:308px">
+            <div class="row" style="align-items:flex-start"><div class="label" style="padding-top:6px">Inputs</div>
+              <div class="list">
+                <div class="item"><span class="tick on"></span>UMC204HD 192k MIDI In</div>
+                <div class="item"><span class="tick on"></span>Minilab3 MIDI</div>
+                <div class="item"><span class="tick"></span>Minilab3 DIN Thru</div>
+                <div class="item"><span class="tick"></span>Minilab3 MCU/HUI</div>
+                <div class="item"><span class="tick"></span>Minilab3 ALV</div>
+              </div></div>
+            <div class="row"><div class="label">Output</div><div class="pick">None</div></div>
+            <div class="row"><div class="label">Clock</div><div class="ctl">
+              <span class="key on"><span class="lens"></span>Follow an incoming clock</span><span class="key"><span class="lens"></span>Send clock</span></div></div>
+          </div>
+        </div>
+        <div class="window" style="width:600px">
+          <div class="titlebar"><span>Options</span><span class="x">&#x2715;</span></div>
+          <div class="tabs">
+            <div class="t"><span class="lens"></span>Audio</div><div class="t"><span class="lens"></span>MIDI</div><div class="t"><span class="lens"></span>Drum notes</div>
+            <div class="t on"><span class="lens"></span>Panel</div><div class="t"><span class="lens"></span>Controller</div>
+          </div>
+          <div class="content" style="height:308px">
+            <div class="row"><div class="label">Theme</div><div class="ctl">
+              <span class="key on"><span class="lens"></span>Roland</span><span class="key"><span class="lens"></span>Silver</span><span class="key"><span class="lens"></span>Steel</span><span class="key"><span class="lens"></span>Olive</span></div></div>
+            <div class="row"><div class="label">Window size</div><div class="pick">100 %</div></div>
+            <div class="row"><div class="label">Circuit</div><div class="ctl">
+              <span class="key"><span class="lens"></span>Full</span><span class="key on"><span class="lens"></span>Faint</span><span class="key"><span class="lens"></span>Hidden</span></div></div>
+            <div class="row"><div class="label">Electricity</div><div class="ctl">
+              <span class="key on"><span class="lens"></span>Animated</span><span class="key"><span class="lens"></span>Still</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div>
+      <div class="tag"><span class="id">C</span>Tabs along the top, three pages
+        <span class="from">Audio and MIDI side by side on one page (as Ableton's Audio and Link, Tempo &amp; MIDI together). 760 by 360.</span></div>
+      <div class="pages">
+        <div class="window" style="width:760px">
+          <div class="titlebar"><span>Options</span><span class="x">&#x2715;</span></div>
+          <div class="tabs">
+            <div class="t on"><span class="lens"></span>Audio and MIDI</div><div class="t"><span class="lens"></span>Drum notes and controller</div><div class="t"><span class="lens"></span>Panel</div>
+          </div>
+          <div class="content" style="height:288px">
+            <div class="cols">
+              <div>
+                <div class="head">Audio</div>
+                <div class="row"><div class="label" style="width:84px">Driver</div><div class="pick">ASIO</div></div>
+                <div class="row"><div class="label" style="width:84px">Output</div><div class="pick">UMC ASIO Driver</div></div>
+                <div class="row"><div class="label" style="width:84px">Sample rate</div><div class="pick">48000 Hz</div></div>
+                <div class="row"><div class="label" style="width:84px">Buffer</div><div class="pick">256 samples (5.3 ms)</div></div>
+                <div class="row"><div class="label" style="width:84px"></div><span class="note" style="flex:1">10.7 ms out, 12 % busy</span><span class="key fit"><span class="lens"></span>Test tone</span></div>
+              </div>
+              <div>
+                <div class="head">MIDI</div>
+                <div class="row" style="align-items:flex-start"><div class="label" style="width:70px;padding-top:6px">Inputs</div>
+                  <div class="list">
+                    <div class="item"><span class="tick on"></span>UMC204HD 192k MIDI In</div>
+                    <div class="item"><span class="tick on"></span>Minilab3 MIDI</div>
+                    <div class="item"><span class="tick"></span>Minilab3 DIN Thru</div>
+                    <div class="item"><span class="tick"></span>Minilab3 MCU/HUI</div>
+                  </div></div>
+                <div class="row"><div class="label" style="width:70px">Output</div><div class="pick">None</div></div>
+                <div class="row"><div class="label" style="width:70px">Clock</div><div class="ctl">
+                  <span class="key on"><span class="lens"></span>Follow</span><span class="key"><span class="lens"></span>Send</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="caption">The other two pages: Drum notes with the controller's setup key under them, and Panel (theme, window size,
+          circuit, electricity) as in B.</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

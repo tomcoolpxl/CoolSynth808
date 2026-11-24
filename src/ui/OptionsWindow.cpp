@@ -17,7 +17,9 @@ namespace cs808
 {
     namespace
     {
-        constexpr int panelWidth = 600, pad = 22, labelWidth = 130, rowHeight = 30, rowGap = 8, sectionGap = 22, headHeight = 22;
+        // In pages (D335): the pages' list down the left, a page beside it; every page fits the one size.
+        constexpr int panelWidth = 600, panelHeight = 372, sideWidth = 148, pad = 22, labelWidth = 104, rowHeight = 28, rowGap = 8,
+                      headHeight = 22;
 
         /** A value to pick from a list: a key with the value written on it in plain case and a small arrow; a click
             opens the list. */
@@ -73,12 +75,88 @@ namespace cs808
 
     // =============================================================================================================
 
+    /** The MIDI inputs as one list (D335): a tick and a name a row; a click switches that input on or off. */
+    class InputList final : public juce::Component
+    {
+    public:
+        struct Input
+        {
+            juce::String name, id;
+        };
+        std::vector<Input> rows;
+        std::function<bool(const juce::String&)> isOn;
+        std::function<void(const juce::String&)> toggle;
+        static constexpr int rowPitch = 24;
+
+        InputList() { setRepaintsOnMouseActivity(true); }
+
+        void paint(juce::Graphics& g) override
+        {
+            const auto& th = theme();
+            const int hover = isMouseOver() ? getMouseXYRelative().y / rowPitch : -1;
+            for (int i = 0; i < static_cast<int>(rows.size()); ++i)
+            {
+                const auto r = juce::Rectangle<int>(0, i * rowPitch, getWidth(), rowPitch);
+                if (i == hover)
+                {
+                    g.setColour(th.ink.withAlpha(0.06f));
+                    g.fillRect(r);
+                }
+                if (i > 0)
+                {
+                    g.setColour(juce::Colour(0xff222222));
+                    g.fillRect(r.getX(), r.getY(), r.getWidth(), 1);
+                }
+                const bool on = isOn && isOn(rows[static_cast<std::size_t>(i)].id);
+                const auto tick = juce::Rectangle<float>(10.0f, r.getCentreY() - 6.0f, 12.0f, 12.0f);
+                if (on)
+                {
+                    g.setColour(th.lit);
+                    g.fillRoundedRectangle(tick, 3.0f);
+                    juce::Path mark;
+                    mark.startNewSubPath(tick.getX() + 2.8f, tick.getCentreY());
+                    mark.lineTo(tick.getX() + 5.2f, tick.getBottom() - 3.0f);
+                    mark.lineTo(tick.getRight() - 2.6f, tick.getY() + 3.0f);
+                    g.setColour(juce::Colour(0xff161616));
+                    g.strokePath(mark, juce::PathStrokeType(1.6f));
+                }
+                else
+                {
+                    g.setColour(juce::Colour(0xff5a5a5a));
+                    g.drawRoundedRectangle(tick.reduced(0.5f), 3.0f, 1.0f);
+                }
+                g.setColour(juce::Colour(0xfff1ebde));
+                g.setFont(uiFont(12.5f));
+                shapedText(g, rows[static_cast<std::size_t>(i)].name, r.withTrimmedLeft(30).withTrimmedRight(8), juce::Justification::centredLeft, true);
+            }
+        }
+
+        void mouseUp(const juce::MouseEvent& e) override
+        {
+            const int i = e.y / rowPitch;
+            if (e.mouseWasClicked() && i >= 0 && i < static_cast<int>(rows.size()) && toggle)
+                toggle(rows[static_cast<std::size_t>(i)].id);
+            repaint();
+        }
+        void mouseMove(const juce::MouseEvent&) override { repaint(); }
+    };
+
+    /** The options in pages (D335, layout A): their list down the left, one page at a time beside it. The standalone
+        app's pages are Audio, MIDI, Drum notes, Panel and Controller; a plugin's Host takes Audio's and MIDI's place. */
     class OptionsPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
     {
     public:
+        enum Page { audioPage, midiPage, hostPage, drumsPage, lookPage, controllerPage };
+
         OptionsPanel(OptionsHooks h, juce::AudioDeviceManager* dm) : hooks(std::move(h)), devices(dm)
         {
             setWantsKeyboardFocus(false);
+            if (devices != nullptr)
+                pages = { audioPage, midiPage, drumsPage, lookPage, controllerPage };
+            else
+                pages = { hostPage, drumsPage, lookPage, controllerPage };
+            page = pages.front();
+
             if (devices != nullptr)
             {
                 driver.value = [this] { return devices->getCurrentAudioDeviceType(); };
@@ -150,7 +228,7 @@ namespace cs808
                         applySetup([b = device->getAvailableBufferSizes()[i]](auto& s) { s.bufferSize = b; });
                 };
                 for (auto* p : { &driver, &output, &rate, &buffer })
-                    addAndMakeVisible(*p);
+                    addChildComponent(*p);
 
                 controlPanel.text = "Driver's control panel";
                 controlPanel.onClick = [this](const juce::MouseEvent&)
@@ -166,7 +244,18 @@ namespace cs808
                 addChildComponent(controlPanel);
                 testTone.text = "Test tone";
                 testTone.onClick = [this](const juce::MouseEvent&) { devices->playTestSound(); };
-                addAndMakeVisible(testTone);
+                addChildComponent(testTone);
+
+                inputList.isOn = [this](const juce::String& id) { return devices->isMidiInputDeviceEnabled(id); };
+                inputList.toggle = [this](const juce::String& id)
+                {
+                    devices->setMidiInputDeviceEnabled(id, ! devices->isMidiInputDeviceEnabled(id));
+                    changed();
+                };
+                inputView.setViewedComponent(&inputList, false);
+                inputView.setScrollBarsShown(true, false);
+                inputView.setScrollBarThickness(8);
+                addChildComponent(inputView);
 
                 midiOut.value = [this]
                 {
@@ -189,15 +278,15 @@ namespace cs808
                     devices->setDefaultMidiOutputDevice(i == 0 || i > list.size() ? juce::String() : list[i - 1].identifier);
                     changed();
                 };
-                addAndMakeVisible(midiOut);
+                addChildComponent(midiOut);
                 devices->addChangeListener(this);
             }
 
-            follow.text = "Follow an incoming clock";
+            follow.text = "Follow incoming";
             follow.isOn = [this] { return hooks.followClock(); };
             follow.filledWhenOn = false;
             follow.onClick = [this](const juce::MouseEvent&) { hooks.chooseFollowClock(! hooks.followClock()); repaint(); };
-            send.text = "Send clock";
+            send.text = "Send";
             send.isOn = [this] { return hooks.sendClock(); };
             send.filledWhenOn = false;
             send.onClick = [this](const juce::MouseEvent&) { hooks.chooseSendClock(! hooks.sendClock()); repaint(); };
@@ -212,40 +301,36 @@ namespace cs808
                     repaint();
                 };
             }
-            addAndMakeVisible(follow);
+            addChildComponent(follow);
             addChildComponent(send);
-            send.setVisible(! inPlugin());
 
             for (const auto& t : themes())
                 themeChoice.options.push_back(t.name);
             themeChoice.get = [this] { return hooks.theme(); };
             themeChoice.set = [this](int i) { hooks.chooseTheme(i); };
-            addAndMakeVisible(themeChoice);
-            for (const auto z : zooms)
-                zoomChoice.options.push_back(juce::String(z) + " %");
-            zoomChoice.get = [this]
+            addChildComponent(themeChoice);
+            zoomPicker.value = [this] { return juce::String(hooks.zoom()) + " %"; };
+            zoomPicker.items = []
             {
-                const int now = hooks.zoom();
-                for (std::size_t i = 0; i < zooms.size(); ++i)
-                    if (zooms[i] == now)
-                        return static_cast<int>(i);
-                return 1;
+                juce::StringArray names;
+                for (const auto z : zooms)
+                    names.add(juce::String(z) + " %");
+                return names;
             };
-            zoomChoice.set = [this](int i) { hooks.chooseZoom(zooms[static_cast<std::size_t>(i)]); };
-            addAndMakeVisible(zoomChoice);
+            zoomPicker.choose = [this](int i) { hooks.chooseZoom(zooms[static_cast<std::size_t>(i)]); repaint(); };
+            addChildComponent(zoomPicker);
 
-            animateChip.text = "Animate the electricity";
-            animateChip.filledWhenOn = false;
-            animateChip.isOn = [this] { return hooks.circuitAnimated(); };
-            animateChip.onClick = [this](const juce::MouseEvent&) { hooks.chooseCircuitAnimated(! hooks.circuitAnimated()); repaint(); };
-            addAndMakeVisible(animateChip);
             showChoice.options = { "Full", "Faint", "Hidden" };
             showChoice.get = [this] { return hooks.circuitShow(); };
             showChoice.set = [this](int i) { hooks.chooseCircuitShow(i); };
-            addAndMakeVisible(showChoice);
+            addChildComponent(showChoice);
+            animateChoice.options = { "Animated", "Still" };
+            animateChoice.get = [this] { return hooks.circuitAnimated() ? 0 : 1; };
+            animateChoice.set = [this](int i) { hooks.chooseCircuitAnimated(i == 0); repaint(); };
+            addChildComponent(animateChoice);
 
             // The drums' notes from outside (D329): a ready set, or each drum learned from the note played next.
-            drumSet.options = { "General MIDI", "In a row from 36", "In a row from 60" };
+            drumSet.options = { "General MIDI", "From 36", "From 60" };
             drumSet.get = [this]
             {
                 if (! hooks.drumNotes)
@@ -267,7 +352,7 @@ namespace cs808
                     hooks.chooseDrumSet(i);
                 repaint();
             };
-            addAndMakeVisible(drumSet);
+            addChildComponent(drumSet);
             static constexpr std::array<const char*, 16> codes { "BD", "SD", "LT", "MT", "HT", "RS", "CP", "CB", "CY", "OH", "CH", "LC", "MC", "HC", "CL", "MA" };
             for (int s = 0; s < 16; ++s)
             {
@@ -279,7 +364,7 @@ namespace cs808
                 {
                     const juce::String code(codes[static_cast<std::size_t>(s)]);
                     if (hooks.learningDrumNote && hooks.learningDrumNote() == s)
-                        return code + "  play a note";
+                        return code + "  play";
                     const int n = hooks.drumNotes ? hooks.drumNotes()[static_cast<std::size_t>(s)] : -1;
                     return code + "  " + (n >= 0 ? juce::String(n) : juce::String("none"));
                 };
@@ -289,12 +374,12 @@ namespace cs808
                         hooks.learnDrumNote(hooks.learningDrumNote && hooks.learningDrumNote() == s ? -1 : s);
                     repaint();
                 };
-                addAndMakeVisible(chip);
+                addChildComponent(chip);
             }
 
             controller.text = "Controller setup...";
             controller.onClick = [this](const juce::MouseEvent&) { hooks.controllerSetup(); };
-            addAndMakeVisible(controller);
+            addChildComponent(controller);
 
             rebuildInputs();
             startTimer(500);
@@ -307,125 +392,225 @@ namespace cs808
                 devices->removeChangeListener(this);
         }
 
+        /** The page shown, by its place in the list; the list says its pages' names. */
+        void showPage(int index)
+        {
+            page = pages[static_cast<std::size_t>(juce::jlimit(0, static_cast<int>(pages.size()) - 1, index))];
+            if (onPageChanged)
+                onPageChanged(index);
+            layOut();
+            repaint();
+        }
+        [[nodiscard]] int pageIndex() const
+        {
+            for (std::size_t i = 0; i < pages.size(); ++i)
+                if (pages[i] == page)
+                    return static_cast<int>(i);
+            return 0;
+        }
+        [[nodiscard]] int pageCount() const { return static_cast<int>(pages.size()); }
+        [[nodiscard]] juce::String pageName(int index) const { return nameOf(pages[static_cast<std::size_t>(index)]); }
+        std::function<void(int)> onPageChanged;
+
         void paint(juce::Graphics& g) override
         {
             const auto& th = theme();
             g.fillAll(th.panel.darker(0.25f));
-            const auto head = [&](const juce::String& text, int y)
+
+            // The pages' list: a lens and a name each, the page shown on a key of its own.
+            g.setColour(th.panel.darker(0.45f));
+            g.fillRect(0, 0, sideWidth, getHeight());
+            g.setColour(juce::Colours::black.withAlpha(0.6f));
+            g.fillRect(sideWidth - 1, 0, 1, getHeight());
+            for (int i = 0; i < pageCount(); ++i)
             {
-                g.setColour(th.ink);
-                g.setFont(headFont(13.0f));
-                shapedText(g, text, juce::Rectangle<int>(pad, y, panelWidth - 2 * pad, headHeight), juce::Justification::centredLeft, false);
-                g.setColour(th.line);
-                g.fillRect(pad, y + headHeight, panelWidth - 2 * pad, 1);
-            };
-            const auto label = [&](const juce::String& text, int y)
+                const auto r = pageArea(i).toFloat();
+                const bool shown = i == pageIndex();
+                if (shown)
+                    drawKeyCap(g, r, Cap::plain, false, false);
+                else if (i == hoverPage)
+                {
+                    g.setColour(th.ink.withAlpha(0.06f));
+                    g.fillRoundedRectangle(r, 4.0f);
+                }
+                drawLens(g, { r.getX() + 13.0f, r.getCentreY() }, 6.0f, shown ? Lens::orange : Lens::off);
+                g.setColour(shown || i == hoverPage ? juce::Colour(0xfff1ebde) : th.dim);
+                g.setFont(labelFont(11.0f));
+                shapedText(g, pageName(i).toUpperCase(), r.withTrimmedLeft(26.0f), juce::Justification::centredLeft, false);
+            }
+
+            // The page: its name, and each row's label.
+            const int x = sideWidth + pad, w = getWidth() - x - pad;
+            g.setColour(th.ink);
+            g.setFont(headFont(13.0f));
+            shapedText(g, nameOf(page).toUpperCase(), juce::Rectangle<int>(x, topPad, w, headHeight), juce::Justification::centredLeft, false);
+            g.setColour(th.line);
+            g.fillRect(x, topPad + headHeight, w, 1);
+            for (const auto& [text, y] : labels)
             {
                 g.setColour(th.dim);
                 g.setFont(labelFont(11.0f));
-                shapedText(g, text.toUpperCase(), juce::Rectangle<int>(pad, y, labelWidth, rowHeight), juce::Justification::centredLeft, false);
-            };
-            for (const auto& [text, y] : heads)
-                head(text, y);
-            for (const auto& [text, y] : labels)
-                label(text, y);
-            if (devices != nullptr)
+                shapedText(g, text.toUpperCase(), juce::Rectangle<int>(x, y, labelWidth, rowHeight), juce::Justification::centredLeft, false);
+            }
+            g.setFont(uiFont(12.0f));
+            g.setColour(th.dim);
+            if (page == audioPage)
             {
                 // the latency the app adds and how busy the audio is, under the buffer
                 g.setColour(th.lit);
                 g.setFont(monoFont(12.0f));
-                shapedText(g, readout(), juce::Rectangle<int>(pad + labelWidth, readoutY, panelWidth - 2 * pad - labelWidth, rowHeight - 8), juce::Justification::centredLeft, false);
+                shapedText(g, readout(), juce::Rectangle<int>(x + labelWidth, readoutY, w - labelWidth - 120, rowHeight), juce::Justification::centredLeft, false);
                 g.setColour(th.dim);
                 g.setFont(uiFont(12.0f));
-                shapedText(g, status, juce::Rectangle<int>(pad + labelWidth, readoutY + rowHeight - 8, panelWidth - 2 * pad - labelWidth, 18), juce::Justification::centredLeft, true);
+                shapedText(g, status, juce::Rectangle<int>(x + labelWidth, readoutY + rowHeight + 4, w - labelWidth, 36), juce::Justification::topLeft, true);
             }
-            if (devices != nullptr && inputs.isEmpty())
+            if (page == midiPage && inputList.rows.empty())
+                shapedText(g, "No MIDI input is connected.", juce::Rectangle<int>(x + labelWidth, inputsY, w - labelWidth, rowHeight), juce::Justification::centredLeft, false);
+            if (page == midiPage && ! inputList.rows.empty())
             {
-                g.setColour(th.dim);
-                g.setFont(uiFont(12.0f));
-                shapedText(g, "No MIDI input is connected.", juce::Rectangle<int>(pad + labelWidth, inputsY, panelWidth - 2 * pad - labelWidth, rowHeight), juce::Justification::centredLeft, false);
+                g.setColour(juce::Colour(0xff161616));
+                g.fillRoundedRectangle(inputView.getBounds().toFloat().expanded(1.0f), 4.0f);
+                g.setColour(juce::Colour(0xff0c0c0c));
+                g.drawRoundedRectangle(inputView.getBounds().toFloat().expanded(1.0f), 4.0f, 1.0f);
             }
+            if (! hint.isEmpty())
+                shapedText(g, hint, juce::Rectangle<int>(x + labelWidth, hintY, w - labelWidth, 36), juce::Justification::topLeft, true);
         }
 
         void resized() override { layOut(); }
 
-        [[nodiscard]] int preferredHeight() const { return contentHeight; }
+        void mouseMove(const juce::MouseEvent& e) override
+        {
+            const int over = pageAt(e.getPosition());
+            if (over != hoverPage)
+            {
+                hoverPage = over;
+                repaint(0, 0, sideWidth, getHeight());
+            }
+        }
+        void mouseExit(const juce::MouseEvent&) override
+        {
+            hoverPage = -1;
+            repaint(0, 0, sideWidth, getHeight());
+        }
+        void mouseDown(const juce::MouseEvent& e) override
+        {
+            if (const int i = pageAt(e.getPosition()); i >= 0)
+                showPage(i);
+        }
 
     private:
         static constexpr std::array<int, 6> zooms { 75, 100, 125, 150, 175, 200 };
+        static constexpr int topPad = 18, sidePad = 8, pagePitch = 33, pageHeight = 30;
+
+        [[nodiscard]] static juce::String nameOf(Page p)
+        {
+            switch (p)
+            {
+                case audioPage: return "Audio";
+                case midiPage: return "MIDI";
+                case hostPage: return "Host";
+                case drumsPage: return "Drum notes";
+                case lookPage: return "Panel";
+                case controllerPage: return "Controller";
+            }
+            return {};
+        }
+        [[nodiscard]] juce::Rectangle<int> pageArea(int i) const { return { sidePad, 12 + i * pagePitch, sideWidth - 2 * sidePad, pageHeight }; }
+        [[nodiscard]] int pageAt(juce::Point<int> p) const
+        {
+            for (int i = 0; i < pageCount(); ++i)
+                if (pageArea(i).contains(p))
+                    return i;
+            return -1;
+        }
 
         void layOut()
         {
-            heads.clear();
             labels.clear();
-            int y = pad;
-            const auto row = [&](juce::Component& c, const juce::String& label, int width = panelWidth - 2 * pad - labelWidth)
+            hint.clear();
+            for (auto* c : getChildren())
+                c->setVisible(false);
+            const int x = sideWidth + pad, w = getWidth() - x - pad, cw = w - labelWidth;
+            int y = topPad + headHeight + 12;
+            const auto row = [&](juce::Component& c, const juce::String& label, int width = -1)
             {
                 labels.push_back({ label, y });
-                c.setBounds(pad + labelWidth, y, width, rowHeight);
+                c.setBounds(x + labelWidth, y, width < 0 ? cw : width, rowHeight);
+                c.setVisible(true);
                 y += rowHeight + rowGap;
             };
-            if (devices != nullptr)
+            switch (page)
             {
-                heads.push_back({ "AUDIO", y });
-                y += headHeight + 12;
-                row(driver, "Driver");
-                row(output, "Output");
-                row(rate, "Sample rate");
-                const bool asio = devices->getCurrentAudioDevice() != nullptr && devices->getCurrentAudioDevice()->hasControlPanel();
-                buffer.setVisible(! asio);
-                controlPanel.setVisible(asio);
-                row(asio ? static_cast<juce::Component&>(controlPanel) : buffer, "Buffer");
-                readoutY = y;
-                testTone.setBounds(panelWidth - pad - 110, y, 110, rowHeight);
-                y += rowHeight + 14 + sectionGap;
-            }
-            heads.push_back({ "MIDI", y });
-            y += headHeight + 12;
-            if (devices != nullptr)
-            {
-                inputsY = y;
-                if (inputs.isEmpty())
+                case audioPage:
                 {
+                    row(driver, "Driver");
+                    row(output, "Output");
+                    row(rate, "Sample rate");
+                    const bool asio = devices->getCurrentAudioDevice() != nullptr && devices->getCurrentAudioDevice()->hasControlPanel();
+                    row(asio ? static_cast<juce::Component&>(controlPanel) : buffer, "Buffer");
+                    readoutY = y;
+                    testTone.setBounds(x + w - 110, y, 110, rowHeight);
+                    testTone.setVisible(true);
+                    break;
+                }
+                case midiPage:
+                {
+                    inputsY = y;
                     labels.push_back({ "Inputs", y });
-                    y += rowHeight + rowGap;
-                }
-                for (int i = 0; i < inputs.size(); ++i)
-                    row(*inputs[i], i == 0 ? "Inputs" : juce::String());
-                row(midiOut, "Output");
-            }
-            labels.push_back({ inPlugin() ? "Host" : "Clock", y });
-            follow.setBounds(pad + labelWidth, y, 220, rowHeight);
-            send.setBounds(pad + labelWidth + 230, y, 140, rowHeight);
-            y += rowHeight + rowGap + sectionGap;
-            heads.push_back({ "PANEL", y });
-            y += headHeight + 12;
-            row(themeChoice, "Theme");
-            row(zoomChoice, "Window size");
-            row(showChoice, "Circuit", 300);
-            row(animateChip, "Electricity", 240);
-            y += sectionGap - rowGap;
-            // The drums' notes (D329): a ready set, then the sixteen drums four to a row; a click learns its note.
-            heads.push_back({ "DRUM NOTES", y });
-            y += headHeight + 12;
-            row(drumSet, "Set");
-            {
-                const int cellWidth = (panelWidth - 2 * pad - labelWidth) / 4;
-                for (int s = 0; s < drumChips.size(); ++s)
-                {
-                    if (s % 4 == 0 && s > 0)
+                    const int shownRows = juce::jlimit(1, maxInputRows, static_cast<int>(inputList.rows.size()));
+                    inputList.setSize(cw - (static_cast<int>(inputList.rows.size()) > maxInputRows ? 10 : 0),
+                                      static_cast<int>(inputList.rows.size()) * InputList::rowPitch);
+                    if (! inputList.rows.empty())
+                    {
+                        inputView.setBounds(x + labelWidth, y, cw, shownRows * InputList::rowPitch);
+                        inputView.setVisible(true);
+                        y += shownRows * InputList::rowPitch + rowGap + 4;
+                    }
+                    else
                         y += rowHeight + rowGap;
-                    if (s == 0)
-                        labels.push_back({ "Learn", y });
-                    drumChips[s]->setBounds(pad + labelWidth + (s % 4) * cellWidth, y, cellWidth - 6, rowHeight);
+                    row(midiOut, "Output");
+                    labels.push_back({ "Clock", y });
+                    const int half = (cw - 4) / 2;
+                    follow.setBounds(x + labelWidth, y, half, rowHeight);
+                    send.setBounds(x + labelWidth + half + 4, y, cw - half - 4, rowHeight);
+                    follow.setVisible(true);
+                    send.setVisible(true);
+                    break;
                 }
-                y += rowHeight + rowGap;
+                case hostPage:
+                    row(follow, "Play");
+                    hint = "Off, the pattern waits for its own Play key, at the host's tempo.";
+                    hintY = y;
+                    break;
+                case drumsPage:
+                {
+                    // A ready set, then the sixteen drums four to a row; a click learns its note (D329).
+                    row(drumSet, "Set");
+                    labels.push_back({ "Learn", y });
+                    const int cell = (cw + 4) / 4;
+                    for (int s = 0; s < drumChips.size(); ++s)
+                    {
+                        drumChips[s]->setBounds(x + labelWidth + (s % 4) * cell, y + (s / 4) * (rowHeight + 6), cell - 4, rowHeight);
+                        drumChips[s]->setVisible(true);
+                    }
+                    y += 4 * (rowHeight + 6) + 4;
+                    hint = "Click a drum, then play the note it should answer to.";
+                    hintY = y;
+                    break;
+                }
+                case lookPage:
+                    row(themeChoice, "Theme");
+                    row(zoomPicker, "Window size");
+                    row(showChoice, "Circuit");
+                    row(animateChoice, "Electricity", (cw * 2) / 3);
+                    break;
+                case controllerPage:
+                    row(controller, "Setup", 190);
+                    hint = "Link a MIDI controller's knobs, keys and pads to the panel.";
+                    hintY = y;
+                    break;
             }
-            y += sectionGap - rowGap;
-            heads.push_back({ "CONTROLLER", y });
-            y += headHeight + 12;
-            row(controller, "Setup", 190);
-            contentHeight = y + pad - rowGap;
         }
 
         void rebuildInputs()
@@ -434,24 +619,11 @@ namespace cs808
                 return;
             const auto list = juce::MidiInput::getAvailableDevices();
             knownInputs = list.size();
-            inputs.clear();
+            inputList.rows.clear();
             for (const auto& d : list)
-            {
-                auto* chip = inputs.add(std::make_unique<Chip>());
-                chip->text = d.name;
-                chip->filledWhenOn = false;
-                chip->isOn = [this, id = d.identifier] { return devices->isMidiInputDeviceEnabled(id); };
-                chip->onClick = [this, id = d.identifier](const juce::MouseEvent&)
-                {
-                    devices->setMidiInputDeviceEnabled(id, ! devices->isMidiInputDeviceEnabled(id));
-                    changed();
-                };
-                addAndMakeVisible(*chip);
-            }
-            const int before = contentHeight;
+                inputList.rows.push_back({ d.name, d.identifier });
             layOut();
-            if (contentHeight != before && onHeightChanged)
-                onHeightChanged();
+            repaint();
         }
 
         template <typename Edit>
@@ -469,6 +641,7 @@ namespace cs808
             saveStandaloneDeviceState();
             layOut();
             repaint();
+            inputList.repaint();
         }
 
         juce::String readout() const
@@ -485,33 +658,38 @@ namespace cs808
         {
             layOut();
             repaint();
+            inputList.repaint();
         }
 
         void timerCallback() override
         {
-            for (auto* chip : drumChips)
-                chip->repaint(); // a note learned on the audio thread (D329)
-            drumSet.repaint();
+            if (page == drumsPage)
+            {
+                for (auto* chip : drumChips)
+                    chip->repaint(); // a note learned on the audio thread (D329)
+                drumSet.repaint();
+            }
             if (devices == nullptr)
                 return;
             if (juce::MidiInput::getAvailableDevices().size() != knownInputs)
                 rebuildInputs();
-            repaint(pad + labelWidth, readoutY, panelWidth, rowHeight);
+            if (page == audioPage)
+                repaint(sideWidth, readoutY, getWidth() - sideWidth, rowHeight);
         }
 
-    public:
-        std::function<void()> onHeightChanged;
-
-    private:
         OptionsHooks hooks;
         juce::AudioDeviceManager* devices;
-        Picker driver, output, rate, buffer, midiOut;
+        std::vector<Page> pages;
+        Page page = audioPage;
+        int hoverPage = -1;
+        Picker driver, output, rate, buffer, midiOut, zoomPicker;
         Chip controlPanel, testTone, follow, send, controller;
         [[nodiscard]] bool inPlugin() const { return hooks.plugin && hooks.plugin(); }
-        juce::OwnedArray<Chip> inputs;
+        static constexpr int maxInputRows = 8;
+        InputList inputList;
+        juce::Viewport inputView;
         int knownInputs = -1;
-        Choices themeChoice, zoomChoice, showChoice;
-        Chip animateChip;
+        Choices themeChoice, showChoice, animateChoice;
         Choices drumSet;
         juce::OwnedArray<Chip> drumChips;
         /** A ready set's note for a slot, as Kit.h's drumNoteSet. */
@@ -520,8 +698,9 @@ namespace cs808
             static constexpr std::array<int, 16> gm { 36, 38, 43, 47, 50, 37, 39, 56, 49, 46, 42, 64, 63, 62, 75, 70 };
             return set == 1 ? 36 + slot : set == 2 ? 60 + slot : gm[static_cast<std::size_t>(slot)];
         }
-        std::vector<std::pair<juce::String, int>> heads, labels;
-        int contentHeight = 400, readoutY = 0, inputsY = 0;
+        std::vector<std::pair<juce::String, int>> labels;
+        juce::String hint;
+        int readoutY = 0, inputsY = 0, hintY = 0;
         juce::String status;
     };
 
@@ -534,10 +713,17 @@ namespace cs808
         setLookAndFeel(&WindowLook::shared());
         setTitleBarHeight(28);
         panel = std::make_unique<OptionsPanel>(std::move(hooks), devices);
-        panel->setSize(panelWidth, 400);
-        panel->onHeightChanged = [this] { setContentComponentSize(panelWidth, panel->preferredHeight()); };
+        panel->setSize(panelWidth, panelHeight);
+        // It opens on the page last shown.
+        if (settings != nullptr)
+            panel->showPage(settings->getIntValue("optionsPage", 0));
+        panel->onPageChanged = [this](int index)
+        {
+            if (settings != nullptr)
+                settings->setValue("optionsPage", index);
+        };
         setContentNonOwned(panel.get(), true);
-        setContentComponentSize(panelWidth, panel->preferredHeight());
+        setContentComponentSize(panelWidth, panelHeight);
         setResizable(false, false);
         // Where it was last put; else beside the middle of the screen.
         const int x = settings != nullptr ? settings->getIntValue("optionsX", -100000) : -100000;
@@ -619,8 +805,17 @@ namespace cs808
     std::unique_ptr<juce::Component> makeOptionsPanelForTesting(OptionsHooks hooks, juce::AudioDeviceManager* devices)
     {
         auto p = std::make_unique<OptionsPanel>(std::move(hooks), devices);
-        p->setSize(panelWidth, 400);
-        p->setSize(panelWidth, p->preferredHeight());
+        p->setSize(panelWidth, panelHeight);
         return p;
+    }
+
+    int showOptionsPageForTesting(juce::Component& panel, int page)
+    {
+        auto* p = dynamic_cast<OptionsPanel*>(&panel);
+        if (p == nullptr)
+            return 0;
+        if (page >= 0 && page < p->pageCount())
+            p->showPage(page);
+        return p->pageCount();
     }
 }

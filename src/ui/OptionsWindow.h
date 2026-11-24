@@ -7,9 +7,10 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 /*
-    CoolSynth 808's own options (D311), in a window of their own in the theme, opened by the panel's Options key:
-    the audio device (standalone only: driver, output, sample rate, buffer, latency, a test tone), the MIDI inputs and
-    output (standalone only) and the clock, the theme and the window's size, and the controller setup. It stays above
+    CoolSynth 808's own options (D311), in a window of their own in the theme, opened by the panel's Options key, in
+    pages listed down its left (D335): Audio (standalone only: driver, output, sample rate, buffer, latency, a test
+    tone), MIDI (standalone only: the inputs, the output, the clock), or Host in a plugin; Drum notes; Panel (the theme,
+    the window's size, the circuit); the controller setup. It stays above
     the 808's window, remembers its place, and closes on its close key, Escape or the Options key.
 */
 namespace cs808
@@ -68,4 +69,6 @@ namespace cs808
 
     /** The options as the window shows them, alone, for the snapshot tests. */
     std::unique_ptr<juce::Component> makeOptionsPanelForTesting(OptionsHooks hooks, juce::AudioDeviceManager* devices);
+    /** Shows one of the panel's pages (D335), by its place in the list; returns how many pages it has. */
+    int showOptionsPageForTesting(juce::Component& panel, int page);
 }
