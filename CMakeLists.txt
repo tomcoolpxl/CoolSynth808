@@ -83,7 +83,9 @@ set(COOLSYNTH808_SOURCES
     src/ui/Sequencer.cpp
     src/ui/LidView.cpp
     src/ui/WindowLook.cpp
-    src/ui/OptionsWindow.cpp)
+    src/ui/OptionsWindow.cpp
+    src/mcp/McpServer.cpp
+    src/mcp/Tools808.cpp)
 
 target_sources(CoolSynth808 PRIVATE ${COOLSYNTH808_SOURCES} src/StandaloneApp.cpp)
 target_include_directories(CoolSynth808 PRIVATE src)
@@ -144,6 +146,7 @@ if(BUILD_TESTING)
             tests/EditorSnapshotTests.cpp
             tests/ControllerTests.cpp
             tests/HostingTests.cpp
+            tests/McpTests.cpp
             ${COOLSYNTH808_SOURCES})
     target_include_directories(CoolSynth808Tests PRIVATE src tests)
     target_compile_features(CoolSynth808Tests PUBLIC cxx_std_20)

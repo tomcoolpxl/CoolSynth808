@@ -1,4 +1,5 @@
 #include "Processor.h"
+#include "mcp/Tools808.h"
 
 #include "Editor.h"
 #include "StandaloneMidiIn.h"
@@ -51,6 +52,9 @@ namespace cs808
             }
             setDrumNotes(notes);
         }
+        // Claude's way in, in the standalone app only (a plugin in a DAW opens no port): D333, as the 303's.
+        if (wrapperType == wrapperType_Standalone)
+            startMcpServer();
         // The computer's controller setup (D211, D268): read once for the program. Tests (no wrapper) set their own.
         if (wrapperType == wrapperType_Standalone)
         {
@@ -67,6 +71,8 @@ namespace cs808
 
     Processor::~Processor()
     {
+        alive->store(false); // a tool's job still queued finds the processor gone and does nothing (D333)
+        mcp = nullptr;
         midiInRouter.reset(); // gives the inputs back to the standalone's player before anything here goes
         // The last one: the setup's timers go while JUCE still runs (the review of D211).
         if (startedSetup && liveProcessors.fetch_sub(1, std::memory_order_relaxed) == 1)
@@ -357,6 +363,47 @@ namespace cs808
         if (cueing)
             pendingChainFromBar = true; // stays so while the edits wait, whatever chain joins them
         markCue();
+    }
+
+    void Processor::startMcpServer()
+    {
+        if (mcp != nullptr)
+            return;
+        // A tool runs on the message thread, as the panel's own edits do, and the server waits for it (10 s at most).
+        coolsynth::mcp::Server::Runner runner = [alive = alive](std::function<void()> job)
+        {
+            if (juce::MessageManager::getInstance()->isThisTheMessageThread())
+            {
+                job();
+                return;
+            }
+            auto done = std::make_shared<juce::WaitableEvent>();
+            juce::MessageManager::callAsync([alive, done, job = std::move(job)]
+            {
+                if (alive->load())
+                    job();
+                done->signal();
+            });
+            done->wait(10000);
+        };
+        mcp = std::make_unique<coolsynth::mcp::Server>("CoolSynth 808", "0.1", tools808(*this, runner), runner);
+        if (mcp->start(mcpPort))
+            mcpStatusText = "On: Claude reaches this app at http://127.0.0.1:" + juce::String(mcpPort) + "/mcp.";
+        else
+        {
+            mcp = nullptr;
+            mcpStatusText = "Could not start: port " + juce::String(mcpPort) + " is taken (another CoolSynth 808?).";
+        }
+    }
+
+    void Processor::startCapture(double seconds)
+    {
+        captureArmed.store(false, std::memory_order_release);
+        // The audio thread may still be inside its last copy: wait out a block before the buffer is touched.
+        juce::Thread::sleep(static_cast<int>(1000.0 * 2048.0 / std::max(1.0, rate)) + 5);
+        captureBuffer.assign(static_cast<std::size_t>(juce::jlimit(0.1, 60.0, seconds) * rate), 0.0f);
+        captureCount.store(0, std::memory_order_release);
+        captureArmed.store(true, std::memory_order_release);
     }
 
     void Processor::setDrumNotes(const DrumNotes& notes) noexcept
@@ -895,6 +942,33 @@ namespace cs808
         bpmNow.store(bpm, std::memory_order_release);
         if (hitLanes != 0)
             struck.fetch_or(hitLanes, std::memory_order_acq_rel);
+
+        // For Claude's tools (D333): the loudest sample and the block's level; the left channel captured when asked.
+        if (buffer.getNumChannels() > 0)
+        {
+            const float* left = buffer.getReadPointer(0);
+            float peakNow = 0.0f;
+            for (int i = 0; i < n; ++i)
+                peakNow = std::max(peakNow, std::abs(left[i]));
+            lastLevel.store(peakNow, std::memory_order_relaxed);
+            float seen = loudest.load(std::memory_order_relaxed);
+            while (peakNow > seen && ! loudest.compare_exchange_weak(seen, peakNow, std::memory_order_relaxed))
+            {
+            }
+            if (captureArmed.load(std::memory_order_acquire))
+            {
+                const int at = captureCount.load(std::memory_order_relaxed);
+                const int room = static_cast<int>(captureBuffer.size()) - at;
+                const int take = std::min(room, n);
+                if (take > 0)
+                {
+                    std::copy(left, left + take, captureBuffer.begin() + at);
+                    captureCount.store(at + take, std::memory_order_release);
+                }
+                else
+                    captureArmed.store(false, std::memory_order_release);
+            }
+        }
     }
 
     juce::AudioProcessorEditor* Processor::createEditor() { return new Editor(*this); }

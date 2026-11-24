@@ -4,8 +4,8 @@ The shared project memory for every AI tool (`CLAUDE.md` points here).
 
 ## What it is
 
-- A standalone drum machine app for Windows (JUCE 9.0.5, C++20, CMake): a JUCE audio plugin built only as a
-  Standalone for now (D267), so VST3 and CLAP are one line in `CMakeLists.txt` later.
+- A drum machine for Windows (JUCE 9.0.5, C++20, CMake): a JUCE audio plugin built as a Standalone (D267) and a VST3
+  (D325), linked into `C:\Program Files\Common Files\VST3`.
 - The sound is CoolSynth's engine, the submodule `external/coolsynth-engine` (its own repository,
   `tomcoolpxl/coolsynth-engine`): the three 808 generators in one layer in the Kit mode, set as CoolSynth's stock
   808 Kit (`src/Kit.cpp`). The step sequencer is the engine's (`src/synth/StepSequencer`).
@@ -26,6 +26,10 @@ The shared project memory for every AI tool (`CLAUDE.md` points here).
   `src/StandaloneMidiIn` sorts the standalone's MIDI inputs: the controller's linked controls apart from the sound's
   notes (D271); `src/StandaloneMidiOut` keeps the clock's output thread running.
 - `tests/`: the app's tests (`CoolSynth808Tests`); the engine's run in the engine's repository.
+- `src/mcp`: the standalone app's MCP server (D333, CoolSynth's and the 303's), on `http://127.0.0.1:47608/mcp`,
+  registered with `claude mcp add --transport http coolsynth808 http://127.0.0.1:47608/mcp`. Its tools read and set
+  the kit, run the transport, strike drums, record the output to WAV, picture the window and open the lid, a sheet or
+  Options: check the running app through it, and ask the user only for ears and hands.
 - `tools/RenderLibrary`: `CoolSynth808Render <folder> [id ...]` writes the built-in beats as WAV files, for listening
   passes (D276); `listening/` holds them and is not committed.
 

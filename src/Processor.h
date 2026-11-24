@@ -8,6 +8,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 
+#include "mcp/McpServer.h"
 #include "ClockFollower.h"
 #include "Kit.h"
 #include "midi/ControllerSetup.h"
@@ -163,6 +164,17 @@ namespace cs808
             with the DAW's project. */
         void setFollowHostPlay(bool on) noexcept { followHostPlayOn.store(on, std::memory_order_relaxed); }
         [[nodiscard]] bool followsHostPlay() const noexcept { return followHostPlayOn.load(std::memory_order_relaxed); }
+        // ---- Claude's way in (D333): the standalone app's MCP server, its output captured and measured --------------
+        /** Starts capturing the output's left channel for so many seconds (message thread); captured() counts it. */
+        void startCapture(double seconds);
+        [[nodiscard]] int captured() const noexcept { return captureCount.load(std::memory_order_acquire); }
+        [[nodiscard]] double captureRate() const noexcept { return rate; }
+        [[nodiscard]] const std::vector<float>& capture() const noexcept { return captureBuffer; }
+        /** The loudest output sample since the last take, and a fresh start; the level of the last block. */
+        [[nodiscard]] float takeLoudest() noexcept { return loudest.exchange(0.0f, std::memory_order_acq_rel); }
+        [[nodiscard]] float outputLevel() const noexcept { return lastLevel.load(std::memory_order_relaxed); }
+        [[nodiscard]] juce::String mcpStatus() const { return mcpStatusText; }
+
         // ---- The drums' notes from outside (D329) ----------------------------------------------------------------
         /** The notes a DAW or a MIDI input plays the drums with (Kit.h's slots); any thread. */
         void setDrumNotes(const DrumNotes& notes) noexcept;
@@ -283,6 +295,15 @@ namespace cs808
         std::array<std::atomic<int>, drumSlots> drumNoteOf {};
         std::array<std::atomic<int>, 128> engineNoteFrom {};
         std::atomic<int> learningSlot { -1 };
+        // Claude's way in (D333)
+        std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>>(true);
+        std::unique_ptr<coolsynth::mcp::Server> mcp;
+        juce::String mcpStatusText = "Off";
+        std::vector<float> captureBuffer;
+        std::atomic<bool> captureArmed { false };
+        std::atomic<int> captureCount { 0 };
+        std::atomic<float> loudest { 0.0f }, lastLevel { 0.0f };
+        void startMcpServer();
         std::atomic<unsigned int> drumNotesChanged { 0 };
         void rebuildDrumNotes() noexcept;
         juce::SpinLock routedWriters; // one writer at a time: each input may have its own thread
