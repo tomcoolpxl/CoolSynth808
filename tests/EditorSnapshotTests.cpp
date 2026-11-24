@@ -230,6 +230,39 @@ public:
                 shoot("lid-bass-drum-live");
                 lid.showMomentForTesting(0.0);
             }
+            // Every other sheet live (D318): each drum struck on the bar's first step, each sheet shown in turn takes
+            // the engine's capture of its drum's next hit, shown a few milliseconds into it. The bank is put back after.
+            {
+                auto& lid = editor->lidForTesting();
+                auto& watch = p->circuitWatch();
+                SequencerBank saved;
+                p->editBank([&](SequencerBank& b)
+                {
+                    saved = b;
+                    for (auto& pattern : b.pattern)
+                        for (int lane = 0; lane <= 9; ++lane)
+                            pattern.lanes[static_cast<std::size_t>(lane)].a[0].on = true;
+                }, false);
+                struct Live { int sheet; float length; double moment; const char* name; };
+                const Live live[] { { 2, 300.0f, 3.0, "snare" }, { 3, 600.0f, 5.0, "low-tom" }, { 4, 150.0f, 1.0, "rim-shot" },
+                                    { 5, 300.0f, 12.0, "hand-clap" }, { 6, 250.0f, 5.0, "cowbell" }, { 7, 30.0f, 10.0, "metal-oscillators" },
+                                    { 8, 600.0f, 5.0, "cymbal" }, { 9, 400.0f, 5.0, "hi-hats" } };
+                double now = 110000.0;
+                for (const auto& l : live)
+                {
+                    lid.showSheet(l.sheet);
+                    editor->layOut();
+                    lid.tick(now);
+                    const auto before = watch.captureCount();
+                    runUntil([&] { return watch.captureCount() > before && watch.framesCaptured() > 8 && watch.capturedTime(watch.framesCaptured() - 1) >= l.length - 1.0f; });
+                    lid.tick(now + 40.0);
+                    expect(lid.showMomentForTesting(l.moment), juce::String(l.name) + ": the sheet took the engine's capture");
+                    shoot(juce::String("lid-") + l.name + "-live");
+                    lid.showMomentForTesting(0.0);
+                    now += 10000.0;
+                }
+                p->editBank([&](SequencerBank& b) { b = saved; }, false);
+            }
             editor->lidForTesting().showSheet(2);
             shoot("lid-snare");
             editor->lidForTesting().showSheet(3);

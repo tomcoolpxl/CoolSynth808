@@ -2550,7 +2550,18 @@ namespace cs808
                     auto& v = out.series[name];
                     v.resize(static_cast<std::size_t>(frames));
                     const auto it = index.find(name);
-                    const float rest = values.empty() ? 0.0f : values.front();
+                    // Set on the recording's standing value, where the engine draws a stage from an ideal source; but a
+                    // part the metal oscillators drive swings still at the recording's end, and its first frame is only
+                    // where the squares stood: it keeps the engine's own value (its mean matches the recording's).
+                    bool freeRunning = false;
+                    if (values.size() > 10)
+                    {
+                        const auto [lo, hi] = std::minmax_element(values.begin(), values.end());
+                        const auto tail = values.begin() + static_cast<std::ptrdiff_t>(values.size() * 4 / 5);
+                        const auto [tailLo, tailHi] = std::minmax_element(tail, values.end());
+                        freeRunning = *hi > *lo && *tailHi - *tailLo > 0.5f * (*hi - *lo);
+                    }
+                    const float rest = values.empty() || freeRunning ? 0.0f : values.front();
                     float engineRest = 0.0f;
                     bool haveRest = false;
                     std::size_t k = 0;
@@ -2563,7 +2574,7 @@ namespace cs808
                         {
                             if (! haveRest)
                             {
-                                engineRest = value;
+                                engineRest = freeRunning ? 0.0f : value;
                                 haveRest = true;
                             }
                             v[static_cast<std::size_t>(f)] = rest + (value - engineRest);
@@ -2795,17 +2806,23 @@ namespace cs808
     {
         const double dt = std::min(50.0, nowMs - impl->now) / 1000.0;
         impl->now = nowMs;
-        // The engine captures the shown drum's circuit at each of its hits (D317): only the bass drum's, so far.
+        // The engine captures the shown drum's circuit at each of its hits (D317): each sheet watches its drum (the
+        // toms' sheet the low tom, the hats' the open hat, whose capture holds the closed hat's choke), the metal
+        // oscillators' the bank; a capture runs as long as the sheet's recording.
+        using W = coolsynth::synth::v3::CircuitWatch;
+        static constexpr std::array<int, drumsDrawn> watchOf { W::bassDrum, W::snare, W::lowTom, W::rimShot, W::clap, W::cowbell,
+                                                               W::metalBankSheet, W::cymbal, W::openHat };
+        static constexpr std::array<float, drumsDrawn> lengthOf { 300.0f, 300.0f, 600.0f, 150.0f, 300.0f, 250.0f, 30.0f, 600.0f, 400.0f }; // each recording's length
         auto& watch = processor.circuitWatch();
-        const bool liveSheet = isVisible() && impl->showFull && impl->full && impl->full->which == bassDrum;
-        watch.watchCircuit(liveSheet ? coolsynth::synth::v3::CircuitWatch::bassDrum : -1);
+        const bool liveSheet = isVisible() && impl->showFull && impl->full != nullptr;
+        watch.watchCircuit(liveSheet ? watchOf[static_cast<std::size_t>(impl->full->which)] : -1);
         if (liveSheet)
         {
             auto& f = *impl->full;
             const unsigned int hits = watch.captureCount();
             const int frames = watch.framesCaptured();
-            // a hit's capture is taken once it is whole (300 ms of it) and a hit newer than the sheet's
-            if (hits != f.liveHits && frames > 8 && watch.capturedTime(frames - 1) >= 299.0f)
+            // a hit's capture is taken once it is whole and newer than the sheet's
+            if (hits != f.liveHits && frames > 8 && watch.capturedTime(frames - 1) >= lengthOf[static_cast<std::size_t>(f.which)] - 1.0f)
             {
                 watch.holdCapture(true);
                 auto captured = f.fromCapture(watch, watch.framesCaptured());
