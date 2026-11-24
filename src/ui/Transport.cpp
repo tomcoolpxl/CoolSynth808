@@ -23,7 +23,7 @@ namespace cs808
     public:
         explicit TempoReadout(Processor& p) : processor(p) {}
 
-        static int width() { return juce::roundToInt(shapedWidth(monoFont(13.0f), "120.0") + 5.0f + wordWidth("BPM") + 12.0f); }
+        static int width() { return juce::roundToInt(shapedWidth(monoFont(13.0f), "120.0") + 5.0f + std::max(wordWidth("BPM"), wordWidth("HOST")) + 12.0f); } // HOST in a DAW (D325)
 
         void paint(juce::Graphics& g) override
         {
