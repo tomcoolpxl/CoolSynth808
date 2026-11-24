@@ -103,15 +103,19 @@ namespace cs808
     };
 
     // =============================================================================================================
-    // Under the Lid over the whole window. No key on the panel opens it (D292); the snapshot tests do.
+    // Under the Lid over the whole window: the Lid key on the transport strip opens it, its own key or Escape closes
+    // it (D308, the user: the green and red currents back; D292 had left the key out).
 
     class Editor::LidOverlay final : public juce::Component
     {
     public:
-        explicit LidOverlay(LidView& lidView) : lid(lidView)
+        LidOverlay(LidView& lidView, std::function<void()> close) : lid(lidView)
         {
             setOpaque(true);
             addAndMakeVisible(lid);
+            back.text = "Back to the panel";
+            back.onClick = [close = std::move(close)](const juce::MouseEvent&) { close(); };
+            addAndMakeVisible(back);
         }
 
         void paint(juce::Graphics& g) override
@@ -126,10 +130,13 @@ namespace cs808
         void resized() override
         {
             lid.setBounds(getLocalBounds().withTrimmedTop(44).reduced(16, 0).withTrimmedBottom(12));
+            const int w = juce::roundToInt(shapedWidth(labelFont(11.0f), "BACK TO THE PANEL") + 28.0f);
+            back.setBounds(getWidth() - 16 - w, 8, w, 28);
         }
 
     private:
         LidView& lid;
+        Chip back;
     };
 
     // =============================================================================================================
@@ -163,7 +170,7 @@ namespace cs808
         updateKeepOuts();
 
         lid = std::make_unique<LidView>(p);
-        lidOverlay = std::make_unique<LidOverlay>(*lid);
+        lidOverlay = std::make_unique<LidOverlay>(*lid, [this] { showLid(false); });
         addChildComponent(*lidOverlay);
 
         setWantsKeyboardFocus(true);
@@ -260,6 +267,12 @@ namespace cs808
     }
 
     void Editor::paint(juce::Graphics& g) { g.fillAll(theme().desk); }
+
+    void Editor::showLid(bool show)
+    {
+        lidView = show;
+        layOut();
+    }
 
     void Editor::resized()
     {
@@ -876,6 +889,11 @@ namespace cs808
     bool Editor::keyPressed(const juce::KeyPress& key)
     {
         const auto mods = key.getModifiers();
+        if (lidView && key == juce::KeyPress::escapeKey)
+        {
+            showLid(false);
+            return true;
+        }
         if (key == juce::KeyPress::spaceKey)
         {
             processor.setPlaying(! processor.isPlaying());

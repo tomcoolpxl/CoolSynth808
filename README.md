@@ -26,7 +26,8 @@ The sequencer sits on smoked glass below it, held over the board by four pins.
   two or three hits and its accent. A row of lights above shows the step that plays.
 - On the right, the picked lane's length, Every 4, Every 2, Clear and a shift, and the pattern's tools.
 - The strip at the top right: Play, Rec (writes the drums you play onto the nearest step), the tempo (drag it), Tap,
-  Swing (delays every second sixteenth, as Roger Linn's drum machines do), Library and File. Space starts and stops.
+  Swing (delays every second sixteenth, as Roger Linn's drum machines do), Lid (Under the Lid: the circuits with
+  their measured currents, green above zero and red below), Library and File. Space starts and stops.
 - File also holds the banks, the themes (Roland, the 808's own charcoal and colours; Silver; Steel; Olive),
   Controller (a MIDI controller: the main knob chooses the drum, knobs follow it, pads play the drums or, after a press of the main knob, enter its steps), Undo and Redo.
 - Drag MIDI drags the pattern into your music software as a MIDI file.

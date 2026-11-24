@@ -6,7 +6,7 @@
 
 /*
     The transport and the files on one strip of smoked glass at the top right of the board (D292, the mockup's
-    .tstrip): Play, Rec, the tempo, Tap and the Swing knob; then Library and File.
+    .tstrip): Play, Rec, the tempo, Tap and the Swing knob; then Lid (Under the Lid, D308), Library and File.
 */
 namespace cs808
 {

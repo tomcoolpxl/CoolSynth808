@@ -123,6 +123,7 @@ namespace cs808
         widths.push_back(8 + 18 + 10 + swingWordWidth + 6);
 
         separatorAfter = items.size() - 1;
+        key("Lid", [this] { editor.showLid(true); }); // Under the Lid (D308)
         key("Library", [this] { editor.openLibrary(); });
         key("File", [this] { editor.showFileMenu(); });
     }

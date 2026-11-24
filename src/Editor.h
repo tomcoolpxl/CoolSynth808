@@ -80,6 +80,8 @@ namespace cs808
         void closeOverlaysLater();
         /** The library's shelf over the panel (the Library key), and while it is open, the shelf. */
         void openLibrary();
+        /** Opens or closes Under the Lid, the circuit with its measured currents, over the whole window (D308). */
+        void showLid(bool show);
         [[nodiscard]] LibraryShelf* libraryForTesting() noexcept { return library.get(); }
         /** A library beat played in place of the pattern being edited, nothing written to undo (D273); stopAudition
             gives the project back as it was. Playing starts if it was stopped, and stops again with the audition. While

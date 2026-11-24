@@ -242,11 +242,21 @@ namespace cs808
             g.strokePath(paths[i], stroke(widthOf(w.inCell) + 0.5f));
             if (e < 0.05f)
                 continue;
-            g.setColour(look.flowDot.withAlpha(std::min(1.0f, e * 1.3f)));
+            // Each dot a little bigger, with a soft halo of its own light, so it shows on light metal and dark
+            // alike (D308, the user): two wide faint discs under the core, solid fills, as gradients cost more.
             const float spacing = 11.0f, offset = static_cast<float>(std::fmod(nowMs * (0.02 + 0.07 * e), spacing));
-            const float r = w.inCell ? 1.4f : 1.15f;
+            const float r = w.inCell ? 1.8f : 1.5f, a = std::min(1.0f, e * 1.3f);
+            const auto halo = look.flowDot.withAlpha(0.16f * a), inner = look.flowDot.withAlpha(0.3f * a), core = look.flowDot.withAlpha(a);
             for (float d = offset; d < w.length; d += spacing)
-                g.fillEllipse(juce::Rectangle<float>(r * 2.0f, r * 2.0f).withCentre(pointAlong(w, d)));
+            {
+                const auto at = pointAlong(w, d);
+                g.setColour(halo);
+                g.fillEllipse(juce::Rectangle<float>(r * 6.0f, r * 6.0f).withCentre(at));
+                g.setColour(inner);
+                g.fillEllipse(juce::Rectangle<float>(r * 3.6f, r * 3.6f).withCentre(at));
+                g.setColour(core);
+                g.fillEllipse(juce::Rectangle<float>(r * 2.0f, r * 2.0f).withCentre(at));
+            }
         }
         // the parts lit, and the transistors' lights
         for (const auto& p : parts)
