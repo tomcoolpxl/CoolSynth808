@@ -208,8 +208,9 @@ namespace cs808
         paintNames(g);
     }
 
-    bool EtchedCircuit::paintLit(juce::Graphics& g, double nowMs, const Energy& energy)
+    bool EtchedCircuit::paintLit(juce::Graphics& g, double nowMs, const Energy& energy, float fade)
     {
+        litFade = fade;
         const float dt = static_cast<float>(juce::jlimit(0.0, 100.0, nowMs - lastNow));
         lastNow = nowMs;
         std::array<float, 128> lit {};
@@ -226,7 +227,7 @@ namespace cs808
         for (std::size_t i = 0; i < wires.size(); ++i)
             if (const float h = heat[static_cast<std::size_t>(wires[i].owner)]; h > 0.02f)
             {
-                g.setColour(look.heat.withAlpha(0.14f * h));
+                g.setColour(faded(look.heat.withAlpha(0.14f * h)));
                 g.strokePath(paths[i], stroke(widthOf(wires[i].inCell) + 4.0f));
             }
         // lit copper, and current: dots running along it, faster for more
@@ -236,9 +237,9 @@ namespace cs808
             const float e = lit[static_cast<std::size_t>(w.owner)];
             if (e < 0.03f)
                 continue;
-            g.setColour(look.flowWire.withAlpha(0.06f * e));
+            g.setColour(faded(look.flowWire.withAlpha(0.06f * e)));
             g.strokePath(paths[i], stroke(widthOf(w.inCell) + 4.0f));
-            g.setColour(look.flowWire.withAlpha(0.42f * e));
+            g.setColour(faded(look.flowWire.withAlpha(0.42f * e)));
             g.strokePath(paths[i], stroke(widthOf(w.inCell) + 0.5f));
             if (e < 0.05f)
                 continue;
@@ -250,11 +251,11 @@ namespace cs808
             for (float d = offset; d < w.length; d += spacing)
             {
                 const auto at = pointAlong(w, d);
-                g.setColour(halo);
+                g.setColour(faded(halo));
                 g.fillEllipse(juce::Rectangle<float>(r * 6.0f, r * 6.0f).withCentre(at));
-                g.setColour(inner);
+                g.setColour(faded(inner));
                 g.fillEllipse(juce::Rectangle<float>(r * 3.6f, r * 3.6f).withCentre(at));
-                g.setColour(core);
+                g.setColour(faded(core));
                 g.fillEllipse(juce::Rectangle<float>(r * 2.0f, r * 2.0f).withCentre(at));
             }
         }
@@ -262,6 +263,7 @@ namespace cs808
         for (const auto& p : parts)
             if (const float e = lit[static_cast<std::size_t>(p.owner)]; e > 0.05f)
                 paintPart(g, p, e);
+        litFade = 1.0f;
         return any;
     }
 
@@ -272,20 +274,20 @@ namespace cs808
         const float k = p.k;
         const auto pad = [&](float x, float y)
         {
-            g.setColour(boardLook().pad.withMultipliedAlpha(0.75f / 0.7f));
+            g.setColour(faded(boardLook().pad.withMultipliedAlpha(0.75f / 0.7f)));
             g.fillEllipse(juce::Rectangle<float>(4.8f, 4.8f).withCentre({ x, y }));
         };
         const auto ink = e > 0.05f ? boardLook().flowDot.withAlpha(0.45f + 0.55f * e) : boardLook().silk;
         const auto box = [&](float w, float h)
         {
-            g.setColour(ink);
+            g.setColour(faded(ink));
             g.drawRect(juce::Rectangle<float>(w, h).withCentre({}), 1.0f);
         };
         switch (p.type)
         {
             case 'R': case 'P':
                 box(k * 2.1f, k * 0.76f); pad(-k * 1.25f, 0.0f); pad(k * 1.25f, 0.0f);
-                if (p.type == 'P') { g.setColour(ink); g.drawEllipse(juce::Rectangle<float>(k * 0.6f, k * 0.6f).withCentre({}), 1.0f); }
+                if (p.type == 'P') { g.setColour(faded(ink)); g.drawEllipse(juce::Rectangle<float>(k * 0.6f, k * 0.6f).withCentre({}), 1.0f); }
                 break;
             case 'C': box(k * 0.64f, k * 1.2f); pad(-k * 0.4f, 0.0f); pad(k * 0.4f, 0.0f); break;
             case 'Q':
@@ -293,17 +295,17 @@ namespace cs808
                 juce::Path d;
                 d.addCentredArc(0.0f, 0.0f, k * 0.85f, k * 0.85f, 0.0f, juce::MathConstants<float>::pi * 0.65f, juce::MathConstants<float>::pi * 2.35f, true);
                 d.closeSubPath();
-                g.setColour(ink);
+                g.setColour(faded(ink));
                 g.strokePath(d, juce::PathStrokeType(1.0f));
                 pad(-k * 0.45f, 0.0f); pad(0.0f, 0.0f); pad(k * 0.45f, 0.0f);
                 // an LED by every transistor: the board's own lights
                 const auto led = juce::Point<float>(k * 1.4f, -k * 0.9f);
                 if (e > 0.1f)
                 {
-                    g.setColour(rgba(255, 150, 60, 0.25f * e));
+                    g.setColour(faded(rgba(255, 150, 60, 0.25f * e)));
                     g.fillEllipse(juce::Rectangle<float>(14.0f, 14.0f).withCentre(led));
                 }
-                g.setColour(rgba(255, static_cast<int>(120 + 80 * e), 60, 0.15f + 0.85f * e));
+                g.setColour(faded(rgba(255, static_cast<int>(120 + 80 * e), 60, 0.15f + 0.85f * e)));
                 g.fillEllipse(juce::Rectangle<float>(4.4f, 4.4f).withCentre(led));
                 break;
             }
@@ -316,13 +318,13 @@ namespace cs808
                 }
                 if (e > 0.1f)
                 {
-                    g.setColour(boardLook().flowDot.withAlpha(0.25f * e));
+                    g.setColour(faded(boardLook().flowDot.withAlpha(0.25f * e)));
                     g.fillRect(juce::Rectangle<float>(k * 2.2f, k * 2.8f).withCentre({}));
                 }
                 break;
             case 'G':
                 pad(0.0f, 0.0f);
-                g.setColour(ink);
+                g.setColour(faded(ink));
                 g.drawEllipse(juce::Rectangle<float>(8.0f, 8.0f).withCentre({}), 1.0f);
                 break;
             default: // N, S: a small module

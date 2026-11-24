@@ -173,6 +173,9 @@ namespace cs808
         board->addAndMakeVisible(*sequencer);
         sequencer->setBounds(SequencerGlass::boardArea());
         updateKeepOuts();
+        circuitAnimated = settings->getBoolValue("circuitAnimated", true);
+        circuitShow = juce::jlimit(0, 2, settings->getIntValue("circuitShow", 0));
+        board->setCircuitLook(circuitAnimated, static_cast<EtchedBoard::CircuitShow>(circuitShow));
 
         lid = std::make_unique<LidView>(p);
         lidOverlay = std::make_unique<LidOverlay>(*lid, [this] { showLid(false); });
@@ -307,6 +310,10 @@ namespace cs808
         hooks.chooseFollowClock = [this](bool on) { processor.setFollowClock(on); settings->setValue("followClock", on); };
         hooks.chooseSendClock = [this](bool on) { processor.setSendClock(on); settings->setValue("sendClock", on); };
         hooks.controllerSetup = [this] { openControllerSetup(); };
+        hooks.circuitAnimated = [this] { return circuitAnimated; };
+        hooks.chooseCircuitAnimated = [this](bool on) { circuitAnimated = on; settings->setValue("circuitAnimated", on); applyCircuitLook(); };
+        hooks.circuitShow = [this] { return circuitShow; };
+        hooks.chooseCircuitShow = [this](int i) { circuitShow = juce::jlimit(0, 2, i); settings->setValue("circuitShow", circuitShow); applyCircuitLook(); };
         optionsWindow = std::make_unique<OptionsWindow>(std::move(hooks), standaloneDeviceManager(), settings.get());
         optionsWindow->onClose = [this]
         {
@@ -349,6 +356,13 @@ namespace cs808
             optionsWindow->themeChanged();
         repaint();
         refresh();
+    }
+
+    void Editor::applyCircuitLook()
+    {
+        // The panel's circuit as the options set it (D314); the glass shows its part of it too.
+        board->setCircuitLook(circuitAnimated, static_cast<EtchedBoard::CircuitShow>(circuitShow));
+        sequencer->repaint();
     }
 
     void Editor::chooseZoom(int percent)

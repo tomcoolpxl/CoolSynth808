@@ -55,15 +55,29 @@ namespace cs808
             juce::Graphics c(cache);
             c.addTransform(juce::AffineTransform::scale(scale));
             paintMetal(c);
-            paintCopper(c);
-            paintCpu(c);
+            if (circuitShow != CircuitShow::hidden)
+            {
+                // faint: the whole circuit under half, its names and still copper too (D314)
+                if (circuitShow == CircuitShow::faint)
+                    c.beginTransparencyLayer(circuitFade());
+                paintCopper(c);
+                paintCpu(c);
+                if (circuitShow == CircuitShow::faint)
+                    c.endTransparencyLayer();
+            }
+            paintOutline(c);
             paintShadows(c);
         }
         g.drawImageTransformed(cache, juce::AffineTransform::scale(1.0f / cacheScale));
         // The circuit lit over its still self, cut round the controls as the copper is (D298).
+        if (! circuitAnimated())
+        {
+            glowing = false;
+            return;
+        }
         juce::Graphics::ScopedSaveState state(g);
         g.reduceClipRegion(copperClip);
-        glowing = circuit.paintLit(g, now, [this](int owner) { return energyOf(owner); });
+        glowing = circuit.paintLit(g, now, [this](int owner) { return energyOf(owner); }, circuitFade());
     }
 
     void EtchedBoard::struck(std::uint32_t lanes, double nowMs)
@@ -185,8 +199,13 @@ namespace cs808
         const float tick = static_cast<float>(std::exp(-(now - clockAt) / 120.0));
         const float trig = static_cast<float>(std::exp(-(now - clockAt) / 70.0));
         const float mem = static_cast<float>(std::exp(-(now - memoryAt) / 400.0));
+        if (circuitShow == CircuitShow::hidden)
+            return; // the circuit hidden on the panel (D314)
         juce::Graphics::ScopedSaveState state(g);
         g.addTransform(juce::AffineTransform::translation(-origin.x, -origin.y));
+        const bool faintNow = circuitShow == CircuitShow::faint;
+        if (faintNow)
+            g.beginTransparencyLayer(circuitFade());
 
         const auto trunk = [](int i)
         {
@@ -263,7 +282,13 @@ namespace cs808
         for (std::size_t i = 0; i < ramX.size(); ++i)
             shapedText(g, "IC" + juce::String(7 + static_cast<int>(i)), juce::Rectangle<float>(ramX[i], ramY, ramW, ramH), juce::Justification::centred, false);
 
-        // what works, lit
+        // what works, lit, while the electricity is animated (D314)
+        if (! circuitAnimated())
+        {
+            if (faintNow)
+                g.endTransparencyLayer();
+            return;
+        }
         if (trig > 0.03f)
             for (int i = 0; i < 3; ++i)
                 glowLine(trunk(i), look.flowDot, trig);
@@ -292,13 +317,15 @@ namespace cs808
                 g.drawRoundedRectangle(juce::Rectangle<float>(x, ramY, ramW, ramH).expanded(1.5f), 2.0f, 1.0f);
             }
         }
+        if (faintNow)
+            g.endTransparencyLayer();
     }
 
     void EtchedBoard::tick(double nowMs)
     {
         now = nowMs;
         // The CPU section under the glass: only its own small areas drawn again, as the glass over them draws too.
-        const bool cpuNow = nowMs - clockAt < 500.0 || nowMs - memoryAt < 1500.0;
+        const bool cpuNow = circuitAnimated() && (nowMs - clockAt < 500.0 || nowMs - memoryAt < 1500.0);
         if (cpuNow || cpuLit)
         {
             repaint(cpuArea);
@@ -306,6 +333,8 @@ namespace cs808
             repaint(lampArea);
         }
         cpuLit = cpuNow;
+        if (! circuitAnimated())
+            return; // still: nothing to draw again
         bool lit = glowing || nowMs - stepAt < 400.0;
         for (std::size_t c = 1; c < live.size() && ! lit; ++c)
             lit = live[c] > 0.0f;
@@ -434,6 +463,10 @@ namespace cs808
             paintGround(g);
             paintCircuit(g);
         }
+    }
+
+    void EtchedBoard::paintOutline(juce::Graphics& g) const
+    {
         // The name plate keeps its faded outline where the copper was cut away round it, in the board's ink.
         g.setColour(boardLook().ink.withAlpha(0.32f));
         for (const auto& k : keeps)

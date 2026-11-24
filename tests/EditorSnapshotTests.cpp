@@ -160,6 +160,10 @@ public:
                     hooks.sendClock = [] { return false; };
                     hooks.chooseFollowClock = hooks.chooseSendClock = [](bool) {};
                     hooks.controllerSetup = [] {};
+                    hooks.circuitAnimated = [] { return true; };
+                    hooks.chooseCircuitAnimated = [](bool) {};
+                    hooks.circuitShow = [] { return 1; };
+                    hooks.chooseCircuitShow = [](int) {};
                     auto options = makeOptionsPanelForTesting(std::move(hooks), &devices);
                     const auto image = options->createComponentSnapshot(options->getLocalBounds(), true, 2.0f);
                     juce::FileOutputStream out(folder.getChildFile(juce::String("options-") + themes()[static_cast<std::size_t>(t)].id + ".png"));
@@ -240,6 +244,10 @@ public:
             editor->boardForTesting().sequencerState(5, 2, 50010.0);
             editor->boardForTesting().tick(50030.0);
             shoot("panel-cpu");
+            // The circuit faint, as the options can set it for whom it distracts (D314).
+            editor->boardForTesting().setCircuitLook(true, EtchedBoard::CircuitShow::faint);
+            shoot("panel-faint");
+            editor->boardForTesting().setCircuitLook(true, EtchedBoard::CircuitShow::full);
             setTheme(1); // the same in the Silver theme (D307)
             editor->boardForTesting().themeChanged();
             editor->boardForTesting().struck((1u << 0) | (1u << 1) | (1u << 10), 51000.0);

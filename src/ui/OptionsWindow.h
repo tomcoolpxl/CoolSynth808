@@ -26,6 +26,11 @@ namespace cs808
         std::function<bool()> followClock, sendClock;
         std::function<void(bool)> chooseFollowClock, chooseSendClock;
         std::function<void()> controllerSetup;
+        // The panel's circuit (D314): its electricity animated or still, and full (0), faint (1) or hidden (2).
+        std::function<bool()> circuitAnimated;
+        std::function<void(bool)> chooseCircuitAnimated;
+        std::function<int()> circuitShow;
+        std::function<void(int)> chooseCircuitShow;
     };
 
     class OptionsWindow final : public juce::DocumentWindow

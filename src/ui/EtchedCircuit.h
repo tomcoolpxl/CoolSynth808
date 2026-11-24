@@ -41,7 +41,7 @@ namespace cs808
         /** Over the still board, each frame: the afterglow, the lit copper, the current running along it, the lit
             parts and the transistors' lights. Returns whether anything is lit or glowing, so the caller knows to keep
             drawing. */
-        bool paintLit(juce::Graphics& g, double nowMs, const Energy& energy);
+        bool paintLit(juce::Graphics& g, double nowMs, const Energy& energy, float fade = 1.0f);
 
     private:
         struct Wire { std::vector<juce::Point<float>> pts; int owner = 0; bool inCell = true; float length = 0.0f; };
@@ -52,6 +52,8 @@ namespace cs808
         std::vector<juce::Rectangle<float>> taken;
         std::array<float, 128> heat {};
         double lastNow = 0.0;
+        mutable float litFade = 1.0f; // paintLit's fade, for its parts
+        [[nodiscard]] juce::Colour faded(juce::Colour c) const { return c.withMultipliedAlpha(litFade); }
 
         void addWire(std::vector<juce::Point<float>> pts, int owner, bool inCell);
         juce::Point<float> pointAlong(const Wire& w, float d) const;

@@ -222,6 +222,16 @@ namespace cs808
             zoomChoice.set = [this](int i) { hooks.chooseZoom(zooms[static_cast<std::size_t>(i)]); };
             addAndMakeVisible(zoomChoice);
 
+            animateChip.text = "Animate the electricity";
+            animateChip.filledWhenOn = false;
+            animateChip.isOn = [this] { return hooks.circuitAnimated(); };
+            animateChip.onClick = [this](const juce::MouseEvent&) { hooks.chooseCircuitAnimated(! hooks.circuitAnimated()); repaint(); };
+            addAndMakeVisible(animateChip);
+            showChoice.options = { "Full", "Faint", "Hidden" };
+            showChoice.get = [this] { return hooks.circuitShow(); };
+            showChoice.set = [this](int i) { hooks.chooseCircuitShow(i); };
+            addAndMakeVisible(showChoice);
+
             controller.text = "Controller setup...";
             controller.onClick = [this](const juce::MouseEvent&) { hooks.controllerSetup(); };
             addAndMakeVisible(controller);
@@ -332,6 +342,8 @@ namespace cs808
             y += headHeight + 12;
             row(themeChoice, "Theme");
             row(zoomChoice, "Window size");
+            row(showChoice, "Circuit", 300);
+            row(animateChip, "Electricity", 240);
             y += sectionGap - rowGap;
             heads.push_back({ "CONTROLLER", y });
             y += headHeight + 12;
@@ -417,7 +429,8 @@ namespace cs808
         Chip controlPanel, testTone, follow, send, controller;
         juce::OwnedArray<Chip> inputs;
         int knownInputs = -1;
-        Choices themeChoice, zoomChoice;
+        Choices themeChoice, zoomChoice, showChoice;
+        Chip animateChip;
         std::vector<std::pair<juce::String, int>> heads, labels;
         int contentHeight = 400, readoutY = 0, inputsY = 0;
         juce::String status;

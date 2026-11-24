@@ -164,6 +164,9 @@ namespace cs808
         std::unique_ptr<juce::PropertiesFile> settings;
         int themeIndex = 0;
         int zoomPercent = 100;
+        bool circuitAnimated = true;
+        int circuitShow = 0; // full, faint, hidden (D314)
+        void applyCircuitLook();
         std::unique_ptr<OptionsWindow> optionsWindow;
         juce::Component* watchedWindow = nullptr; // the window the options stay above
         void componentBroughtToFront(juce::Component& c) override;

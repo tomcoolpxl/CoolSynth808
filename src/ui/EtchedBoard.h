@@ -44,6 +44,20 @@ namespace cs808
 
         void paint(juce::Graphics& g) override;
         void resized() override { cache = {}; }
+        /** How the circuit shows on the panel (D314, the user, for whom it distracts): its electricity animated or
+            still, and the circuit full, faint (all of it at under half, its names too) or hidden. */
+        enum class CircuitShow { full = 0, faint, hidden };
+        void setCircuitLook(bool animated, CircuitShow show)
+        {
+            if (animated == animate && show == circuitShow)
+                return;
+            animate = animated;
+            circuitShow = show;
+            cache = {};
+            repaint();
+        }
+        [[nodiscard]] bool circuitAnimated() const noexcept { return animate && circuitShow != CircuitShow::hidden; }
+        [[nodiscard]] float circuitFade() const noexcept { return circuitShow == CircuitShow::faint ? 0.4f : circuitShow == CircuitShow::hidden ? 0.0f : 1.0f; }
         /** The theme changed (D307): the board is drawn again in its colours. */
         void themeChanged() { cache = {}; repaint(); }
 
@@ -65,6 +79,8 @@ namespace cs808
     private:
         void paintMetal(juce::Graphics& g) const;
         void paintCopper(juce::Graphics& g) const;
+        /** The name plate's faded outline, printed on the metal: it stays when the circuit is hidden. */
+        void paintOutline(juce::Graphics& g) const;
         void paintGround(juce::Graphics& g) const;
         /** The glass's shadow on the metal, and the transport strip's (D303). */
         void paintShadows(juce::Graphics& g) const;
@@ -96,6 +112,8 @@ namespace cs808
         std::array<double, 12> hitAt {}; // per column: when its drum was last struck (ms)
         double stepAt = -1.0e9, now = 0.0;
         bool glowing = false;
+        bool animate = true;
+        CircuitShow circuitShow = CircuitShow::full;
         std::array<float, 12> live {};
         unsigned int liveReports = 0;
         double liveAt = -1.0e9; // when the engine last reported: its levels are used while it plays
