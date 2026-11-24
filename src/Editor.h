@@ -27,6 +27,7 @@ namespace cs808
     class LibraryShelf;
     class Controls;
     class ControllerPanel;
+    class ExportPanel;
     class EtchedBoard;
     class SequencerGlass;
     class TransportStrip;
@@ -80,6 +81,9 @@ namespace cs808
         [[nodiscard]] Controls& controlsForTesting() noexcept { return *controls; }
         /** The controller setup over the panel (the File menu's Controller setup). */
         void openControllerSetup();
+        /** The WAV export's dialog over the panel (D331, the File menu's Export audio). */
+        void openExport();
+        [[nodiscard]] ExportPanel* exportForTesting() noexcept { return exportPanel.get(); }
         /** The library or controller overlay closes after the callback that asked has returned. */
         void closeOverlaysLater();
         /** The library's shelf over the panel (the Library key), and while it is open, the shelf. */
@@ -166,6 +170,7 @@ namespace cs808
         juce::String auditionKey;
         std::unique_ptr<Controls> controls; // a MIDI controller's knobs, faders and pads (D268)
         std::unique_ptr<ControllerPanel> controllerPanel;
+        std::unique_ptr<ExportPanel> exportPanel; // the WAV export's dialog (D331)
 
         juce::OwnedArray<juce::Component> parts; // every widget, owned here
         std::vector<KeepOut> columnKeepOuts;     // the knobs' circles, the words and the switches

@@ -42,6 +42,10 @@ namespace cs808
     {
     public:
         Processor();
+        /** A processor that renders offline (the WAV export, D331): no MCP server, no controller setup, no MIDI
+            ports, no settings read, whatever wraps the app. */
+        struct Offline {};
+        explicit Processor(Offline);
         ~Processor() override;
 
         // ---- juce::AudioProcessor ----------------------------------------------------------------------------
@@ -194,6 +198,10 @@ namespace cs808
             controller; anything else is not taken. */
         void takeControllerMessage(const juce::MidiMessage& message) noexcept;
 
+        /** The transport to this beat position at the next block while it plays, as a DAW's loop jumps: what rings
+            rings on, every random number from its seed again. The WAV export's seamless loop (D331). Any thread. */
+        void jumpTo(double beatPosition) noexcept { jumpRequest.store(beatPosition, std::memory_order_release); }
+
         // ---- Rendering without a device (tests, the MIDI file) -----------------------------------------------
         [[nodiscard]] coolsynth::synth::v3::EngineV3& engineForTesting() noexcept { return engine; }
 
@@ -219,6 +227,9 @@ namespace cs808
         void sendClock(juce::MidiBuffer& out, double beat0, double beat1, int numSamples, bool started, bool stopped,
                        int offsetInBlock = 0);
 
+        explicit Processor(bool offlineRender);
+        const bool offline; // the WAV export's: none of the app's ports, setups or settings
+
         // message thread
         Project model;
         juce::File file;
@@ -240,6 +251,7 @@ namespace cs808
         std::atomic<bool> cueWaiting { false }, cueOpen { false };
         std::atomic<int> playRequest { -1 };
         std::atomic<bool> fillRequest { false };
+        std::atomic<double> jumpRequest { -1.0 };
         std::atomic<bool> recording { false };
         struct Strike
         {

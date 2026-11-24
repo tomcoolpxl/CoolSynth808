@@ -9,6 +9,7 @@
 #include "ui/Sequencer.h"
 #include "ui/Transport.h"
 #include "ui/Text.h"
+#include "ui/ExportPanel.h"
 #include "ui/OptionsWindow.h"
 #include "StandaloneDevices.h"
 
@@ -462,7 +463,8 @@ namespace cs808
         // The overlays cover the window, whatever its size; in a window narrower than the panel they are laid out at
         // the panel's width and drawn smaller with it, so their columns keep their room (D273).
         const float widthScale = getWidth() / static_cast<float>(baseWidth);
-        for (juce::Component* overlay : { static_cast<juce::Component*>(library.get()), static_cast<juce::Component*>(controllerPanel.get()) })
+        for (juce::Component* overlay : { static_cast<juce::Component*>(library.get()), static_cast<juce::Component*>(controllerPanel.get()),
+                                          static_cast<juce::Component*>(exportPanel.get()) })
         {
             if (overlay == nullptr)
                 continue;
@@ -732,6 +734,7 @@ namespace cs808
         m.addItem(4, "Save project as...");
         m.addSeparator();
         m.addItem(5, "Keep this pattern in the library...");
+        m.addItem(6, "Export audio...");
         m.addSeparator();
         juce::PopupMenu banks;
         const auto& p = processor.project();
@@ -754,6 +757,7 @@ namespace cs808
             else if (r == 3) e.saveProject(false);
             else if (r == 4) e.saveProject(true);
             else if (r == 5) e.savePatternToLibrary(e.editPattern);
+            else if (r == 6) e.openExport();
             else if (r == 7) { e.processor.undo(); e.refresh(); }
             else if (r == 8) { e.processor.redo(); e.refresh(); }
             else if (r == 99) { e.processor.addBank(); e.refresh(); }
@@ -873,6 +877,43 @@ namespace cs808
         addAndMakeVisible(*library);
         resized();
         library->grabKeyboardFocus();
+    }
+
+    void Editor::openExport()
+    {
+        // What plays: the pattern shown (the fill played as a pattern of its own), or the chain; at the tempo heard.
+        const auto two = [](int index) { return juce::String(index + 1).paddedLeft('0', 2); };
+        ExportPanel::Hooks hooks;
+        hooks.patternName = editPattern < 0 ? juce::String("Fill") : "Pattern " + two(editPattern);
+        const auto chain = processor.chain();
+        juce::StringArray chainText;
+        for (std::size_t i = 0; i < chain.size() && i < 6; ++i)
+            chainText.add(two(chain[i]));
+        hooks.chainName = "Chain " + chainText.joinIntoString(" ") + (chain.size() > 6 ? "..." : "");
+        hooks.settings = settings.get();
+        hooks.jobFor = [this](bool wholeChain)
+        {
+            ExportJob job;
+            job.project = processor.project();
+            job.sampleRate = processor.captureRate();
+            job.bpm = processor.isPlugin() && processor.tempoNow() > 0.0 ? processor.tempoNow() : processor.project().play.tempo;
+            if (wholeChain)
+                job.patterns = processor.chain();
+            else if (editPattern < 0)
+            {
+                auto& bank = job.project.currentBank();
+                bank.pattern[0] = bank.fill;
+                job.patterns = { 0 };
+            }
+            else
+                job.patterns = { editPattern };
+            return job;
+        };
+        exportPanel = std::make_unique<ExportPanel>(std::move(hooks));
+        exportPanel->onClose = [this] { closeOverlaysLater(); };
+        addAndMakeVisible(*exportPanel);
+        resized();
+        exportPanel->grabKeyboardFocus();
     }
 
     void Editor::openControllerSetup()
@@ -996,6 +1037,7 @@ namespace cs808
             safe->stopAudition();
             safe->library.reset();
             safe->controllerPanel.reset();
+            safe->exportPanel.reset();
             safe->grabKeyboardFocus();
         });
     }

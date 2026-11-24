@@ -65,6 +65,7 @@ set(COOLSYNTH808_SOURCES
     src/Project.cpp
     src/Library.cpp
     src/MidiExport.cpp
+    src/AudioExport.cpp
     src/Processor.cpp
     src/Editor.cpp
     src/Controls.cpp
@@ -84,6 +85,7 @@ set(COOLSYNTH808_SOURCES
     src/ui/LidView.cpp
     src/ui/WindowLook.cpp
     src/ui/OptionsWindow.cpp
+    src/ui/ExportPanel.cpp
     src/mcp/McpServer.cpp
     src/mcp/Tools808.cpp)
 
@@ -147,6 +149,7 @@ if(BUILD_TESTING)
             tests/ControllerTests.cpp
             tests/HostingTests.cpp
             tests/McpTests.cpp
+            tests/ExportTests.cpp
             ${COOLSYNTH808_SOURCES})
     target_include_directories(CoolSynth808Tests PRIVATE src tests)
     target_compile_features(CoolSynth808Tests PUBLIC cxx_std_20)

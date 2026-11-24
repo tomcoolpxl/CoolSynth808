@@ -16,8 +16,13 @@ namespace cs808
         std::atomic<int> liveProcessors { 0 }; // the controller setup runs while one plays (D268)
     }
 
-    Processor::Processor()
-        : juce::AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true))
+    Processor::Processor() : Processor(false) {}
+
+    Processor::Processor(Offline) : Processor(true) {}
+
+    Processor::Processor(bool offlineRender)
+        : juce::AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
+          offline(offlineRender)
     {
         events.reserve(maxEvents);
         sequencerEvents.resize(512);
@@ -39,7 +44,7 @@ namespace cs808
         // The drums' notes from outside (D329): the app's, from its settings; General MIDI in the tests.
         {
             DrumNotes notes = drumNoteSet(0);
-            if (wrapperType != wrapperType_Undefined)
+            if (wrapperType != wrapperType_Undefined && ! offline)
             {
                 juce::PropertiesFile::Options options;
                 options.applicationName = "CoolSynth808";
@@ -53,15 +58,15 @@ namespace cs808
             setDrumNotes(notes);
         }
         // Claude's way in, in the standalone app only (a plugin in a DAW opens no port): D333, as the 303's.
-        if (wrapperType == wrapperType_Standalone)
+        if (wrapperType == wrapperType_Standalone && ! offline)
             startMcpServer();
         // The computer's controller setup (D211, D268): read once for the program. Tests (no wrapper) set their own.
-        if (wrapperType == wrapperType_Standalone)
+        if (wrapperType == wrapperType_Standalone && ! offline)
         {
             midiOutKeeper = makeStandaloneMidiOutKeeper(); // MIDI clock out at its own samples (the review of D267)
             midiInRouter = makeStandaloneMidiInRouter(*this); // the controller's input apart from the sound's (D271)
         }
-        if (wrapperType != wrapperType_Undefined)
+        if (wrapperType != wrapperType_Undefined && ! offline)
         {
             startedSetup = true;
             if (liveProcessors.fetch_add(1, std::memory_order_relaxed) == 0)
@@ -726,7 +731,7 @@ namespace cs808
         // keeps the pattern to its own Play key; its tempo leads always. A clock leads only the standalone app.
         bool hostPlays = false;
         double hostBeat = 0.0, hostBpm = 0.0;
-        if (wrapperType != wrapperType_Standalone)
+        if (wrapperType != wrapperType_Standalone && ! offline)
             if (auto* head = getPlayHead())
                 if (const auto position = head->getPosition())
                 {
@@ -768,6 +773,13 @@ namespace cs808
             playing = false;
             stopped = true;
             playingByHost = false;
+        }
+
+        // A jump asked for (the WAV export's loop, D331): from there on, what rings ringing on.
+        if (const double to = jumpRequest.exchange(-1.0, std::memory_order_acq_rel); to >= 0.0 && playing && ! byClock && ! byHost)
+        {
+            beat = to;
+            engine.reseed();
         }
 
         double beat0 = beat, bpm = playOnAudio.tempo;
@@ -914,7 +926,7 @@ namespace cs808
         const double beatEnd = beatAt(n);
 
         midi.clear();
-        if (! byClock && ! byHost && ! isPlugin() && sendClockOn.load(std::memory_order_relaxed))
+        if (! byClock && ! byHost && ! isPlugin() && ! offline && sendClockOn.load(std::memory_order_relaxed))
         {
             sendClock(midi, beat0, beatAtSplit, split, started, stopped);
             if (split < n)

@@ -49,6 +49,8 @@ To come.
   window's size and a MIDI controller's setup.
 - It follows an incoming MIDI clock and sends its own when none comes in; both can be switched off.
 - Drag MIDI drags the pattern into your music software as a MIDI file.
+- File, Export audio writes the pattern shown or the chain as a 24-bit WAV, played a number of times: cut at the
+  end, ringing on, or as a seamless loop. A file per drum too if you like, each as long as the mix.
 - The library holds starter beats for 22 modern genres, classic 808 beats and your own patterns.
 - File saves projects (`.cs808`): the kit, every bank and the tempo. The app reopens where you left off; Ctrl+Z and
   Ctrl+Y undo and redo any edit.

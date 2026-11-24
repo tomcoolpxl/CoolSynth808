@@ -368,6 +368,9 @@ public:
                 shoot("library-narrow");
                 editor->setSize(1280, 800);
             }
+            // The WAV export's dialog (D331), over the rest.
+            editor->openExport();
+            shoot("export");
             expect(folder.getChildFile("lid.png").existsAsFile());
         }
     }

@@ -25,6 +25,8 @@ The shared project memory for every AI tool (`CLAUDE.md` points here).
   `src/Controls` says what each place does in the 808. Pads strike on the audio thread (`Processor::setPadNotes`).
   `src/StandaloneMidiIn` sorts the standalone's MIDI inputs: the controller's linked controls apart from the sound's
   notes (D271); `src/StandaloneMidiOut` keeps the clock's output thread running.
+- `src/AudioExport` and `ui/ExportPanel`: the WAV export (D331, D334), rendered by an offline `Processor`; a drum's
+  file is the same render with only that drum heard (`CircuitWatch::hearOnly`), so the files add up to the mix.
 - `tests/`: the app's tests (`CoolSynth808Tests`); the engine's run in the engine's repository.
 - `src/mcp`: the standalone app's MCP server (D333, CoolSynth's and the 303's), on `http://127.0.0.1:47608/mcp`,
   registered with `claude mcp add --transport http coolsynth808 http://127.0.0.1:47608/mcp`. Its tools read and set
