@@ -3087,7 +3087,8 @@ namespace cs808
         auto& i = *impl;
         auto bottom = getLocalBounds().removeFromBottom(24);
         i.sheet.chip.setBounds(bottom.removeFromRight(250).reduced(0, 1));
-        const bool full = i.showFull && i.full && i.full->rec.samples > 1;
+        // the CPU sheet has no Play or slider: it follows the sequencer's steps (the user, D323)
+        const bool full = i.showFull && i.full && i.full->rec.samples > 1 && i.full->which != cpuSection;
         i.play.setVisible(full);
         i.time.setVisible(full);
         if (full)
@@ -3467,13 +3468,14 @@ namespace cs808
             }
         }
 
-        // The time and what the circuit does then, and where the numbers come from.
+        // The time and what the circuit does then, and where the numbers come from (not on the CPU sheet: D323).
         const double ms = f.msAt(f.pos);
         const juce::String phase = f.phaseAt(ms);
         auto bar = getLocalBounds().withTrimmedBottom(26).removeFromBottom(26).toFloat();
         g.setColour(look.ink);
         g.setFont(uiFont(11.5f));
-        g.drawText(juce::String(ms, ms < 10.0 ? 2 : 0) + " ms, " + phase, bar.removeFromRight(320.0f), juce::Justification::centredLeft);
+        if (f.which != cpuSection)
+            g.drawText(juce::String(ms, ms < 10.0 ? 2 : 0) + " ms, " + phase, bar.removeFromRight(320.0f), juce::Justification::centredLeft);
         if (impl->selected < 0)
         {
             auto caption = getLocalBounds().removeFromBottom(24).toFloat().withTrimmedRight(260.0f + backHintWidth);

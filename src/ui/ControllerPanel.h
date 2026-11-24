@@ -19,6 +19,7 @@ namespace cs808
         ~ControllerPanel() override;
 
         std::function<void()> onClose;
+        std::unique_ptr<juce::Button> closeKey; // the cross at the top right
 
         void paint(juce::Graphics& g) override;
         void resized() override;

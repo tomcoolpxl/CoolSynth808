@@ -70,6 +70,11 @@ namespace cs808
         return new TitleKey(buttonType);
     }
 
+    std::unique_ptr<juce::Button> WindowLook::makeCloseKey()
+    {
+        return std::make_unique<TitleKey>(juce::DocumentWindow::closeButton);
+    }
+
     WindowLook& WindowLook::shared()
     {
         return SharedLook::getInstance()->look;

@@ -4,6 +4,7 @@
 
 #include "Kit.h"
 #include "ui/Theme.h"
+#include "ui/WindowLook.h"
 
 namespace cs808
 {
@@ -335,6 +336,14 @@ namespace cs808
 
     void LibraryShelf::resized()
     {
+        if (closeKey == nullptr)
+        {
+            closeKey = WindowLook::makeCloseKey();
+            closeKey->setTooltip("Close (Esc)");
+            closeKey->onClick = [this] { if (onClose) onClose(); };
+            addAndMakeVisible(*closeKey);
+        }
+        closeKey->setBounds(juce::Rectangle<float>(card().getRight() - 40.0f, card().getY() + 8.0f, 32.0f, 28.0f).toNearestInt());
         auto body = card().reduced(20.0f, 14.0f).withTrimmedTop(58.0f);
         auto sideBox = body.removeFromLeft(sideWidth);
         body.removeFromLeft(12.0f);

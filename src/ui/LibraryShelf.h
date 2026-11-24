@@ -27,6 +27,7 @@ namespace cs808
         std::function<void(const LibraryEntry&)> onLoad;     // into the pattern being edited
         std::function<void(const LibraryEntry*)> onAudition; // in place of that pattern; null: back to yours
         std::function<void()> onClose;
+        std::unique_ptr<juce::Button> closeKey; // the cross at the top right
         juce::String loadTarget = "pattern 1"; // what Load fills, as its button says it
 
         /** Reads the library again, keeping the chosen beat when it is still there. */

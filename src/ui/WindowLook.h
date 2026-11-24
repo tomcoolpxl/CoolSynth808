@@ -18,5 +18,7 @@ namespace cs808
 
         /** One look for every window, made on first use and kept until JUCE shuts down. */
         static WindowLook& shared();
+        /** The title bar's close cross, for a panel over the window (the library, the controller): red under the mouse. */
+        static std::unique_ptr<juce::Button> makeCloseKey();
     };
 }

@@ -2,6 +2,7 @@
 
 #include "Controls.h"
 #include "ui/Theme.h"
+#include "ui/WindowLook.h"
 
 namespace cs808
 {
@@ -27,19 +28,19 @@ namespace cs808
     juce::Rectangle<float> ControllerPanel::readyButton() const
     {
         const auto box = card().reduced(20.0f, 14.0f);
-        return { box.getRight() - 290.0f, box.getY(), 170.0f, 26.0f };
+        return { box.getRight() - 326.0f, box.getY(), 170.0f, 26.0f }; // left of the close cross
     }
 
     juce::Rectangle<float> ControllerPanel::forgetButton() const
     {
         const auto box = card().reduced(20.0f, 14.0f);
-        return { box.getRight() - 110.0f, box.getY(), 110.0f, 26.0f };
+        return { box.getRight() - 146.0f, box.getY(), 110.0f, 26.0f };
     }
 
     juce::Rectangle<float> ControllerPanel::inputButton() const
     {
         const auto box = card().reduced(20.0f, 14.0f);
-        return { box.getRight() - 290.0f, box.getY() + 32.0f, 290.0f, 24.0f };
+        return { box.getRight() - 326.0f, box.getY() + 32.0f, 290.0f, 24.0f };
     }
 
     void ControllerPanel::paint(juce::Graphics& g)
@@ -58,7 +59,7 @@ namespace cs808
         const auto& map = midi::ControllerSetup::instance().map();
         g.drawText(map.empty() ? juce::String("Controller") : "Controller: " + map.name, inner.removeFromTop(26.0f),
                    juce::Justification::centredLeft);
-        inner.removeFromRight(300.0f); // the input's button
+        inner.removeFromRight(336.0f); // the input's button and the close cross
         g.setColour(th.dim);
         g.setFont(uiFont(11.0f));
         g.drawText("Click a row, then move that control on your controller. Right-click a row to forget it. Esc closes.",
@@ -80,7 +81,18 @@ namespace cs808
         }
     }
 
-    void ControllerPanel::resized() { list.setBounds(card().reduced(20.0f).withTrimmedTop(70.0f).toNearestInt()); }
+    void ControllerPanel::resized()
+    {
+        list.setBounds(card().reduced(20.0f).withTrimmedTop(70.0f).toNearestInt());
+        if (closeKey == nullptr)
+        {
+            closeKey = WindowLook::makeCloseKey();
+            closeKey->setTooltip("Close (Esc)");
+            closeKey->onClick = [this] { if (onClose) onClose(); };
+            addAndMakeVisible(*closeKey);
+        }
+        closeKey->setBounds(juce::Rectangle<float>(card().getRight() - 40.0f, card().getY() + 8.0f, 32.0f, 28.0f).toNearestInt());
+    }
 
     int ControllerPanel::getNumRows() { return midi::placeCount; }
 
