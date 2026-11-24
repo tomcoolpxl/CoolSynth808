@@ -35,6 +35,22 @@ namespace cs808
         for (auto* table : { &padNotes, &padNotesShifted })
             for (auto& note : *table)
                 note.store(-1, std::memory_order_relaxed);
+        // The drums' notes from outside (D329): the app's, from its settings; General MIDI in the tests.
+        {
+            DrumNotes notes = drumNoteSet(0);
+            if (wrapperType != wrapperType_Undefined)
+            {
+                juce::PropertiesFile::Options options;
+                options.applicationName = "CoolSynth808";
+                options.filenameSuffix = ".settings";
+                options.folderName = "CoolSynth808";
+                options.osxLibrarySubFolder = "Application Support";
+                juce::PropertiesFile file(options);
+                if (file.containsKey("drumNotes"))
+                    notes = drumNotesFromString(file.getValue("drumNotes"));
+            }
+            setDrumNotes(notes);
+        }
         // The computer's controller setup (D211, D268): read once for the program. Tests (no wrapper) set their own.
         if (wrapperType == wrapperType_Standalone)
         {
@@ -343,6 +359,39 @@ namespace cs808
         markCue();
     }
 
+    void Processor::setDrumNotes(const DrumNotes& notes) noexcept
+    {
+        for (std::size_t s = 0; s < notes.size(); ++s)
+            drumNoteOf[s].store(notes[s], std::memory_order_relaxed);
+        rebuildDrumNotes();
+        drumNotesChanged.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    DrumNotes Processor::drumNotes() const noexcept
+    {
+        DrumNotes out {};
+        for (std::size_t s = 0; s < out.size(); ++s)
+            out[s] = drumNoteOf[s].load(std::memory_order_relaxed);
+        return out;
+    }
+
+    void Processor::rebuildDrumNotes() noexcept
+    {
+        // Each note from outside to the drum's own note; with General MIDI's set, its other keys for the same drums
+        // too (laneOfNote's: 35, 40, 41, 44, 45, 48, 51, 57), as before.
+        const auto notes = drumNotes();
+        std::array<int, 128> table {};
+        table.fill(-1);
+        if (drumNoteSetOf(notes) == 0)
+            for (const auto [from, to] : { std::pair { 35, 36 }, { 40, 38 }, { 41, 43 }, { 44, 42 }, { 45, 47 }, { 48, 50 }, { 51, 49 }, { 57, 49 } })
+                table[static_cast<std::size_t>(from)] = to;
+        for (int s = 0; s < drumSlots; ++s)
+            if (const int n = notes[static_cast<std::size_t>(s)]; n >= 0 && n < 128)
+                table[static_cast<std::size_t>(n)] = drumSlotEngineNote(s);
+        for (std::size_t i = 0; i < table.size(); ++i)
+            engineNoteFrom[i].store(table[i], std::memory_order_relaxed);
+    }
+
     void Processor::strike(int lane, bool accent)
     {
         const int note = laneNote(lane, model.kit);
@@ -536,9 +585,10 @@ namespace cs808
         keptBlock.clear();
         bool changed = false;
         const bool routedNow = inputsRouted.load(std::memory_order_relaxed);
+        bool translated = false;
         for (const auto metadata : midi)
         {
-            const auto& m = metadata.getMessage();
+            auto m = metadata.getMessage();
             if (! routedNow)
             {
                 if (coolsynth::midi::ControllerSetup::wanted(m))
@@ -548,6 +598,27 @@ namespace cs808
                     changed = true;
                     continue;
                 }
+            }
+            // A drum's note from outside (D329), past the controller's own: learned when asked, then the drum's own
+            // note for everything after.
+            if (m.isNoteOnOrOff())
+            {
+                const int learning = learningSlot.load(std::memory_order_acquire);
+                if (learning >= 0 && learning < drumSlots && m.isNoteOn())
+                {
+                    for (int s = 0; s < drumSlots; ++s)
+                        if (drumNoteOf[static_cast<std::size_t>(s)].load(std::memory_order_relaxed) == m.getNoteNumber())
+                            drumNoteOf[static_cast<std::size_t>(s)].store(-1, std::memory_order_relaxed);
+                    drumNoteOf[static_cast<std::size_t>(learning)].store(m.getNoteNumber(), std::memory_order_relaxed);
+                    rebuildDrumNotes();
+                    learningSlot.store(-1, std::memory_order_release);
+                    drumNotesChanged.fetch_add(1, std::memory_order_acq_rel);
+                }
+                const int own = engineNoteFrom[static_cast<std::size_t>(m.getNoteNumber() & 127)].load(std::memory_order_relaxed);
+                translated = true;
+                if (own < 0)
+                    continue; // a note no drum has
+                m.setNoteNumber(own);
             }
             keptBlock.addEvent(m, metadata.samplePosition);
         }
@@ -570,7 +641,7 @@ namespace cs808
             });
             lastBlockMilliseconds = now;
         }
-        if (changed)
+        if (changed || translated)
         {
             // Copied back rather than swapped: the reserved buffer stays the audio thread's (the review of D267).
             midi.clear();

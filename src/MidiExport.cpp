@@ -4,7 +4,7 @@
 
 namespace cs808
 {
-    juce::MidiFile patternToMidi(const SequencerPattern& pattern, const KitValues& kit, const PlaySettings& play)
+    juce::MidiFile patternToMidi(const SequencerPattern& pattern, const KitValues& kit, const PlaySettings& play, const DrumNotes& notes)
     {
         constexpr int ticksPerBeat = 960;
         // One sample a tick at 120 BPM: the sequencer's sample offsets are the file's ticks.
@@ -31,16 +31,23 @@ namespace cs808
         juce::MidiMessageSequence track;
         track.addEvent(juce::MidiMessage::tempoMetaEvent(juce::roundToInt(60000000.0 / play.tempo)), 0.0);
         track.addEvent(juce::MidiMessage::timeSignatureMetaEvent(4, 4), 0.0);
+        // each drum on its note from outside (D329)
+        const auto outside = [&notes](int own)
+        {
+            const int slot = drumSlotOfEngineNote(own);
+            const int n = slot >= 0 ? notes[static_cast<std::size_t>(slot)] : -1;
+            return n >= 0 ? n : own;
+        };
         for (int i = 0; i < count; ++i)
         {
             const auto& e = events[static_cast<std::size_t>(i)];
             if (e.type == coolsynth::synth::EngineMidiEventType::noteOn)
-                track.addEvent(juce::MidiMessage::noteOn(10, e.noteNumber, static_cast<juce::uint8>(e.value > 0.5f ? 127 : 100)), e.sampleOffset);
+                track.addEvent(juce::MidiMessage::noteOn(10, outside(e.noteNumber), static_cast<juce::uint8>(e.value > 0.5f ? 127 : 100)), e.sampleOffset);
             else
-                track.addEvent(juce::MidiMessage::noteOff(10, e.noteNumber), e.sampleOffset);
+                track.addEvent(juce::MidiMessage::noteOff(10, outside(e.noteNumber)), e.sampleOffset);
         }
         for (int i = 0; i < tailCount; ++i)
-            track.addEvent(juce::MidiMessage::noteOff(10, tail[static_cast<std::size_t>(i)].noteNumber), ticks);
+            track.addEvent(juce::MidiMessage::noteOff(10, outside(tail[static_cast<std::size_t>(i)].noteNumber)), ticks);
         track.updateMatchedPairs();
         track.addEvent(juce::MidiMessage::endOfTrack(), ticks);
 
@@ -50,7 +57,8 @@ namespace cs808
         return file;
     }
 
-    juce::File writePatternMidi(const SequencerPattern& pattern, const KitValues& kit, const PlaySettings& play, const juce::String& name)
+    juce::File writePatternMidi(const SequencerPattern& pattern, const KitValues& kit, const PlaySettings& play, const juce::String& name,
+                                const DrumNotes& notes)
     {
         const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("CoolSynth808");
         if (! folder.createDirectory())
@@ -61,7 +69,7 @@ namespace cs808
         juce::FileOutputStream out(file);
         if (! out.openedOk() || ! out.setPosition(0) || out.truncate().failed())
             return {};
-        auto midi = patternToMidi(pattern, kit, play);
+        auto midi = patternToMidi(pattern, kit, play, notes);
         if (! midi.writeTo(out, 1))
             return {};
         return file;

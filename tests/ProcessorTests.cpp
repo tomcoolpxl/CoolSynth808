@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+#include "MidiExport.h"
 #include "Processor.h"
 #include "Project.h"
 #include "ui/NodeSwing.h"
@@ -442,6 +443,47 @@ public:
             expect(p->isPlaying() && ! p->followingHost(), "not led by the host");
             expectWithinAbsoluteError(p->tempoNow(), 125.0, 1.0e-6, "at the host's tempo still");
             p->setPlayHead(nullptr);
+        }
+
+        beginTest("the_drums_answer_the_notes_learned_for_them");
+        {
+            // D329: from outside each drum comes on its own note: General MIDI's, a set in a row, or one learned from
+            // the next note played; a note no drum has plays nothing.
+            auto p = prepared();
+            const auto level = [&](int note)
+            {
+                return peak(render(*p, 9600, [note](juce::MidiBuffer& m, std::int64_t pos, int)
+                {
+                    if (pos == 0)
+                        m.addEvent(juce::MidiMessage::noteOn(10, note, static_cast<juce::uint8>(100)), 0);
+                }).left, 0, 9600);
+            };
+            expect(level(36) > 0.01f, "General MIDI: 36 the bass drum");
+            p->setDrumNotes(drumNoteSet(2));
+            (void) render(*p, 3 * 48000); // the bass drum rung out
+            expect(level(36) < 1.0e-4f, "in a row from 60: 36 plays nothing");
+            expect(level(60) > 0.01f, "in a row from 60: 60 the bass drum");
+            const auto snare = level(61);
+            expect(snare > 0.01f, "61 the snare");
+            p->learnDrumNote(1); // the snare, from the next note
+            (void) level(72);
+            expectEquals(p->learningDrumNote(), -1, "learned");
+            expectEquals(p->drumNotes()[1], 72, "the snare on 72");
+            expect(level(72) > 0.01f, "72 plays the snare");
+            (void) render(*p, 3 * 48000); // the snare rung out
+            expect(level(61) < 1.0e-4f, "61 no more");
+
+            // Drag MIDI writes them: the bass drum on 60.
+            SequencerPattern pattern;
+            pattern.lanes[0].a[0].on = true;
+            const auto file = patternToMidi(pattern, KitValues {}, PlaySettings {}, p->drumNotes());
+            int first = -1;
+            if (const auto* track = file.getTrack(0))
+                for (const auto* e : *track)
+                    if (e->message.isNoteOn() && first < 0)
+                        first = e->message.getNoteNumber();
+            expectEquals(first, 60, "Drag MIDI: the bass drum on its note from outside");
+            expect(drumNotesFromString(drumNotesToString(p->drumNotes())) == p->drumNotes(), "kept and read back as they were");
         }
 
         beginTest("a_switch_strikes_the_other_instrument");

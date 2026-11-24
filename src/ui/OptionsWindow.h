@@ -28,6 +28,11 @@ namespace cs808
         // In a DAW (D325): the host's Play leads the pattern, or not; the clock switches make way for it.
         std::function<bool()> plugin, followHostPlay;
         std::function<void(bool)> chooseFollowHostPlay;
+        // The drums' notes from outside (D329): the sixteen notes (BD to CH, then LC, MC, HC, CL, MA; -1 none), a
+        // ready set (0 General MIDI, 1 in a row from 36, 2 in a row from 60), learning a drum's note (-1 stops).
+        std::function<std::array<int, 16>()> drumNotes;
+        std::function<void(int)> chooseDrumSet, learnDrumNote;
+        std::function<int()> learningDrumNote;
         std::function<void()> controllerSetup;
         // The panel's circuit (D314): its electricity animated or still, and full (0), faint (1) or hidden (2).
         std::function<bool()> circuitAnimated;

@@ -4,6 +4,8 @@
 #include <array>
 #include <cmath>
 
+#include <juce_core/juce_core.h>
+
 #include "synth/v3/SoundUnit.h"
 
 /*
@@ -113,6 +115,30 @@ namespace cs808
 
     /** The key a lane strikes with its switch as set. */
     [[nodiscard]] int laneNote(int lane, const KitValues& kit) noexcept;
+
+    // ---- The drums' notes from outside (D329) -------------------------------------------------------------------
+    // Inside, every drum has its General MIDI note (the instruments' note and altNote above), as the engine plays
+    // them. From a DAW or a MIDI input each comes on the note the player has learned for it, kept for the whole app:
+    // translated to the drum's own note where it comes in, and written so in a Drag MIDI file.
+    /** The sixteen drums with a note: the eleven lanes, then the second instruments (congas, claves, maracas). */
+    inline constexpr int drumSlots = 16;
+    struct DrumSlot { int lane; bool alt; };
+    inline constexpr std::array<DrumSlot, drumSlots> drumSlotList { { { 0, false }, { 1, false }, { 2, false }, { 3, false },
+        { 4, false }, { 5, false }, { 6, false }, { 7, false }, { 8, false }, { 9, false }, { 10, false },
+        { 2, true }, { 3, true }, { 4, true }, { 5, true }, { 6, true } } };
+    /** Each slot's note from outside (-1: none). */
+    using DrumNotes = std::array<int, drumSlots>;
+    /** The ready sets: 0 General MIDI (the drums' own notes), 1 in a row from 36, 2 in a row from 60. */
+    [[nodiscard]] DrumNotes drumNoteSet(int set) noexcept;
+    /** Which ready set these are, or -1 (learned). */
+    [[nodiscard]] int drumNoteSetOf(const DrumNotes& notes) noexcept;
+    /** A slot's own note inside (its General MIDI note). */
+    [[nodiscard]] int drumSlotEngineNote(int slot) noexcept;
+    /** The slot a note from inside belongs to, or -1. */
+    [[nodiscard]] int drumSlotOfEngineNote(int note) noexcept;
+    /** As kept in the settings: the sixteen numbers with commas; and back (General MIDI where it does not read). */
+    [[nodiscard]] juce::String drumNotesToString(const DrumNotes& notes);
+    [[nodiscard]] DrumNotes drumNotesFromString(const juce::String& text);
 
     /** The engine's settings for the kit: layer A the three generators in the Kit mode, layer B silent. */
     void fillEngineSettings(const KitValues& kit, coolsynth::synth::v3::EngineSettings& out) noexcept;

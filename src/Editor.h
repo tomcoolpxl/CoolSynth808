@@ -157,6 +157,7 @@ namespace cs808
         std::unique_ptr<LidOverlay> lidOverlay;
         std::unique_ptr<LidView> lid;
         LiveBoard liveBoard; // the drums' board nodes as the engine plays them (D320)
+        unsigned int drumNotesSaved = 0; // the processor's drum notes as last kept in the settings (D329)
         std::unique_ptr<LibraryShelf> library;
         // An audition (D273): the project and the chain as they were, and whether the audition started playing.
         std::unique_ptr<Project> auditionSaved;

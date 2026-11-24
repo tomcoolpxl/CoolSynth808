@@ -102,6 +102,59 @@ namespace cs808
         return kit.alt[static_cast<std::size_t>(lane)] && inst.altNote >= 0 ? inst.altNote : inst.note;
     }
 
+    int drumSlotEngineNote(int slot) noexcept
+    {
+        if (slot < 0 || slot >= drumSlots)
+            return -1;
+        const auto& s = drumSlotList[static_cast<std::size_t>(slot)];
+        const auto& inst = instruments[static_cast<std::size_t>(s.lane)];
+        return s.alt ? inst.altNote : inst.note;
+    }
+
+    int drumSlotOfEngineNote(int note) noexcept
+    {
+        for (int s = 0; s < drumSlots; ++s)
+            if (drumSlotEngineNote(s) == note)
+                return s;
+        return -1;
+    }
+
+    DrumNotes drumNoteSet(int set) noexcept
+    {
+        DrumNotes out {};
+        for (int s = 0; s < drumSlots; ++s)
+            out[static_cast<std::size_t>(s)] = set == 1 ? 36 + s : set == 2 ? 60 + s : drumSlotEngineNote(s);
+        return out;
+    }
+
+    int drumNoteSetOf(const DrumNotes& notes) noexcept
+    {
+        for (int set = 0; set < 3; ++set)
+            if (notes == drumNoteSet(set))
+                return set;
+        return -1;
+    }
+
+    juce::String drumNotesToString(const DrumNotes& notes)
+    {
+        juce::StringArray parts;
+        for (const int n : notes)
+            parts.add(juce::String(n));
+        return parts.joinIntoString(",");
+    }
+
+    DrumNotes drumNotesFromString(const juce::String& text)
+    {
+        juce::StringArray parts;
+        parts.addTokens(text, ",", {});
+        if (parts.size() != drumSlots)
+            return drumNoteSet(0);
+        DrumNotes out {};
+        for (int s = 0; s < drumSlots; ++s)
+            out[static_cast<std::size_t>(s)] = juce::jlimit(-1, 127, parts[s].trim().getIntValue());
+        return out;
+    }
+
     void fillEngineSettings(const KitValues& kit, v3::EngineSettings& out) noexcept
     {
         out = {};

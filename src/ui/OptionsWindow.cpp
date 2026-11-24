@@ -244,6 +244,54 @@ namespace cs808
             showChoice.set = [this](int i) { hooks.chooseCircuitShow(i); };
             addAndMakeVisible(showChoice);
 
+            // The drums' notes from outside (D329): a ready set, or each drum learned from the note played next.
+            drumSet.options = { "General MIDI", "In a row from 36", "In a row from 60" };
+            drumSet.get = [this]
+            {
+                if (! hooks.drumNotes)
+                    return 0;
+                const auto notes = hooks.drumNotes();
+                for (int set = 0; set < 3; ++set)
+                {
+                    bool same = true;
+                    for (int s = 0; s < 16; ++s)
+                        same = same && notes[static_cast<std::size_t>(s)] == setNote(set, s);
+                    if (same)
+                        return set;
+                }
+                return -1; // learned
+            };
+            drumSet.set = [this](int i)
+            {
+                if (hooks.chooseDrumSet)
+                    hooks.chooseDrumSet(i);
+                repaint();
+            };
+            addAndMakeVisible(drumSet);
+            static constexpr std::array<const char*, 16> codes { "BD", "SD", "LT", "MT", "HT", "RS", "CP", "CB", "CY", "OH", "CH", "LC", "MC", "HC", "CL", "MA" };
+            for (int s = 0; s < 16; ++s)
+            {
+                auto* chip = drumChips.add(new Chip());
+                chip->filledWhenOn = false;
+                chip->fontHeight = 10.5f;
+                chip->isOn = [this, s] { return hooks.learningDrumNote && hooks.learningDrumNote() == s; };
+                chip->textOf = [this, s]
+                {
+                    const juce::String code(codes[static_cast<std::size_t>(s)]);
+                    if (hooks.learningDrumNote && hooks.learningDrumNote() == s)
+                        return code + "  play a note";
+                    const int n = hooks.drumNotes ? hooks.drumNotes()[static_cast<std::size_t>(s)] : -1;
+                    return code + "  " + (n >= 0 ? juce::String(n) : juce::String("none"));
+                };
+                chip->onClick = [this, s](const juce::MouseEvent&)
+                {
+                    if (hooks.learnDrumNote)
+                        hooks.learnDrumNote(hooks.learningDrumNote && hooks.learningDrumNote() == s ? -1 : s);
+                    repaint();
+                };
+                addAndMakeVisible(chip);
+            }
+
             controller.text = "Controller setup...";
             controller.onClick = [this](const juce::MouseEvent&) { hooks.controllerSetup(); };
             addAndMakeVisible(controller);
@@ -357,6 +405,23 @@ namespace cs808
             row(showChoice, "Circuit", 300);
             row(animateChip, "Electricity", 240);
             y += sectionGap - rowGap;
+            // The drums' notes (D329): a ready set, then the sixteen drums four to a row; a click learns its note.
+            heads.push_back({ "DRUM NOTES", y });
+            y += headHeight + 12;
+            row(drumSet, "Set");
+            {
+                const int cellWidth = (panelWidth - 2 * pad - labelWidth) / 4;
+                for (int s = 0; s < drumChips.size(); ++s)
+                {
+                    if (s % 4 == 0 && s > 0)
+                        y += rowHeight + rowGap;
+                    if (s == 0)
+                        labels.push_back({ "Learn", y });
+                    drumChips[s]->setBounds(pad + labelWidth + (s % 4) * cellWidth, y, cellWidth - 6, rowHeight);
+                }
+                y += rowHeight + rowGap;
+            }
+            y += sectionGap - rowGap;
             heads.push_back({ "CONTROLLER", y });
             y += headHeight + 12;
             row(controller, "Setup", 190);
@@ -424,6 +489,9 @@ namespace cs808
 
         void timerCallback() override
         {
+            for (auto* chip : drumChips)
+                chip->repaint(); // a note learned on the audio thread (D329)
+            drumSet.repaint();
             if (devices == nullptr)
                 return;
             if (juce::MidiInput::getAvailableDevices().size() != knownInputs)
@@ -444,6 +512,14 @@ namespace cs808
         int knownInputs = -1;
         Choices themeChoice, zoomChoice, showChoice;
         Chip animateChip;
+        Choices drumSet;
+        juce::OwnedArray<Chip> drumChips;
+        /** A ready set's note for a slot, as Kit.h's drumNoteSet. */
+        static int setNote(int set, int slot)
+        {
+            static constexpr std::array<int, 16> gm { 36, 38, 43, 47, 50, 37, 39, 56, 49, 46, 42, 64, 63, 62, 75, 70 };
+            return set == 1 ? 36 + slot : set == 2 ? 60 + slot : gm[static_cast<std::size_t>(slot)];
+        }
         std::vector<std::pair<juce::String, int>> heads, labels;
         int contentHeight = 400, readoutY = 0, inputsY = 0;
         juce::String status;

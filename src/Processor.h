@@ -163,6 +163,15 @@ namespace cs808
             with the DAW's project. */
         void setFollowHostPlay(bool on) noexcept { followHostPlayOn.store(on, std::memory_order_relaxed); }
         [[nodiscard]] bool followsHostPlay() const noexcept { return followHostPlayOn.load(std::memory_order_relaxed); }
+        // ---- The drums' notes from outside (D329) ----------------------------------------------------------------
+        /** The notes a DAW or a MIDI input plays the drums with (Kit.h's slots); any thread. */
+        void setDrumNotes(const DrumNotes& notes) noexcept;
+        [[nodiscard]] DrumNotes drumNotes() const noexcept;
+        /** The next note that comes in becomes this slot's (another slot on that note loses it); -1 stops learning. */
+        void learnDrumNote(int slot) noexcept { learningSlot.store(slot, std::memory_order_release); }
+        [[nodiscard]] int learningDrumNote() const noexcept { return learningSlot.load(std::memory_order_acquire); }
+        /** Counts every change of the notes, learned ones too: the editor keeps them when it moves. */
+        [[nodiscard]] unsigned int drumNotesVersion() const noexcept { return drumNotesChanged.load(std::memory_order_acquire); }
         /** Whether the host's transport leads the pattern now. */
         [[nodiscard]] bool followingHost() const noexcept { return hostFollowed.load(std::memory_order_acquire); }
         /** A plugin in a DAW, not the standalone app nor the tests. */
@@ -270,6 +279,12 @@ namespace cs808
         };
         std::atomic<bool> inputsRouted { false };
         std::atomic<bool> followClockOn { true }, sendClockOn { true }, followHostPlayOn { true };
+        // the drums' notes from outside (D329): each slot's, and for each note from outside the drum's own note
+        std::array<std::atomic<int>, drumSlots> drumNoteOf {};
+        std::array<std::atomic<int>, 128> engineNoteFrom {};
+        std::atomic<int> learningSlot { -1 };
+        std::atomic<unsigned int> drumNotesChanged { 0 };
+        void rebuildDrumNotes() noexcept;
         juce::SpinLock routedWriters; // one writer at a time: each input may have its own thread
         juce::AbstractFifo routedFifo { 256 };
         std::array<RoutedMessage, 256> routedMessages {};

@@ -54,6 +54,8 @@ To come.
   Ctrl+Y undo and redo any edit.
 - It is also a VST3 for a DAW: the pattern plays with the host's transport and tempo, and the host's notes play the
   drums. Options has "Follow the host's Play": off, the pattern waits for its own Play key, at the host's tempo.
+- Options' Drum notes set which note plays which drum from a DAW or a MIDI input: General MIDI, in a row from 36
+  or from 60, or each learned from a note played. Drag MIDI writes the same notes.
 
 ## Building from source
 

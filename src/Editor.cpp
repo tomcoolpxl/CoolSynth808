@@ -202,6 +202,7 @@ namespace cs808
         board->setCircuitLook(circuitAnimated, static_cast<EtchedBoard::CircuitShow>(circuitShow));
 
         lid = std::make_unique<LidView>(p);
+        drumNotesSaved = p.drumNotesVersion(); // as the processor read them: nothing to keep yet
         liveBoard = makeLiveBoard();
         {
             std::array<std::array<float, LiveBoard::slots>, LiveBoard::lanes> rests {};
@@ -372,6 +373,10 @@ namespace cs808
         hooks.plugin = [this] { return processor.isPlugin(); };
         hooks.followHostPlay = [this] { return processor.followsHostPlay(); };
         hooks.chooseFollowHostPlay = [this](bool on) { processor.setFollowHostPlay(on); }; // kept with the DAW's project
+        hooks.drumNotes = [this] { return processor.drumNotes(); };
+        hooks.chooseDrumSet = [this](int set) { processor.setDrumNotes(drumNoteSet(set)); };
+        hooks.learnDrumNote = [this](int slot) { processor.learnDrumNote(slot); };
+        hooks.learningDrumNote = [this] { return processor.learningDrumNote(); };
         hooks.controllerSetup = [this] { openControllerSetup(); };
         hooks.circuitAnimated = [this] { return circuitAnimated; };
         hooks.chooseCircuitAnimated = [this](bool on) { circuitAnimated = on; settings->setValue("circuitAnimated", on); applyCircuitLook(); };
@@ -1005,7 +1010,7 @@ namespace cs808
     {
         const auto& p = processor.project();
         const auto name = editPattern < 0 ? juce::String("Fill") : "Pattern " + juce::String(editPattern + 1).paddedLeft('0', 2);
-        const auto f = writePatternMidi(patternShown(), p.kit, p.play, "CoolSynth 808 " + name);
+        const auto f = writePatternMidi(patternShown(), p.kit, p.play, "CoolSynth 808 " + name, processor.drumNotes());
         if (f.existsAsFile())
         {
             midiDragging = true;
@@ -1096,6 +1101,13 @@ namespace cs808
         std::array<float, 12> lights {};
         processor.takeLights(lights);
         board->liveLevels(lights, processor.lightReports(), now);
+        // The drums' notes, set or learned, kept for the whole app (D329).
+        if (const auto v = processor.drumNotesVersion(); v != drumNotesSaved)
+        {
+            drumNotesSaved = v;
+            settings->setValue("drumNotes", drumNotesToString(processor.drumNotes()));
+            settings->saveIfNeeded();
+        }
         // The board's nodes as the drums play them, while the lid is lifted (D320).
         processor.circuitWatch().watchBoard(lidLifted);
         {
