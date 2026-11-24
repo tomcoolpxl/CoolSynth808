@@ -42,11 +42,10 @@ namespace cs808
     void drawSlotKey(juce::Graphics& g, juce::Rectangle<float> area, bool has, float radius = 3.0f);
     /** A step key that is off, in its beat group's colour; `opacity` dims it past its lane's length. */
     void drawStepKey(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour group, float opacity);
-    /** A step key that is on: an orange plastic cap as the Accent knob's, lit bright from inside while it sounds.
+    /** A step key that is on, in its beat group's colour as the theme has it (0 to 3; D307), lit bright from inside
+        while it sounds.
         No dark surround, so it keeps the size of the keys beside it (the mockup's .ksteps .key.on and .ph.on). */
-    void drawStepKeyOn(juce::Graphics& g, juce::Rectangle<float> area, bool sounding, float opacity);
-    /** A countersunk Phillips screw sitting flush in the board, its cross turned to ngle (radians) (D303). */
-    void drawScrew(juce::Graphics& g, juce::Point<float> centre, float diameter, float angle);
+    void drawStepKeyOn(juce::Graphics& g, juce::Rectangle<float> area, bool sounding, float opacity, int group);
     /** A polished cap that holds the glass to the board, with its shadow on the glass (D303). */
     void drawStandoff(juce::Graphics& g, juce::Point<float> centre, float diameter);
 }

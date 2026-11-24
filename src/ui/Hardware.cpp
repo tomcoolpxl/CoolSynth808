@@ -1,5 +1,6 @@
 #include "Hardware.h"
 #include "Text.h"
+#include "Theme.h"
 
 namespace cs808
 {
@@ -59,7 +60,7 @@ namespace cs808
             r = r.translated(0.0f, 1.0f);
         // the drop shadow under a raised key, and the glow round a lit one
         if (cap == Cap::backlit)
-            boxShadow(g, r, radius, 12.0f, {}, rgb(0xff8228, 0.55f));
+            boxShadow(g, r, radius, 12.0f, {}, boardLook().backlit[3].withAlpha(0.55f));
         else if (! pressed)
             boxShadow(g, r, radius, 4.0f, { 0.0f, 2.0f }, juce::Colours::black.withAlpha(0.55f));
         // the dark surround
@@ -69,22 +70,30 @@ namespace cs808
         switch (cap)
         {
             case Cap::plain:
-                g.setGradientFill(hover ? vertical(r, rgb(0x55514a), rgb(0x3c3934), 0.46f, rgb(0x2f2d29))
-                                        : vertical(r, rgb(0x4c4842), rgb(0x37342f), 0.46f, rgb(0x2c2a26)));
+            {
+                const auto& s = hover ? boardLook().capHover : boardLook().cap; // the theme's (D307)
+                g.setGradientFill(vertical(r, s[0], s[1], 0.46f, s[2]));
                 break;
+            }
             case Cap::selected:
-                g.setGradientFill(vertical(r, rgb(0x55504a), rgb(0x3d3a35), 0.48f, rgb(0x322f2b)));
+            {
+                const auto& s = boardLook().capSelected;
+                g.setGradientFill(vertical(r, s[0], s[1], 0.48f, s[2]));
                 break;
+            }
             case Cap::hot:
             case Cap::orange:
-                g.setGradientFill(hover ? vertical(r, rgb(0xf8aa72), rgb(0xec7c33), 0.5f, rgb(0xc95e20))
-                                        : vertical(r, rgb(0xf5a066), rgb(0xe8742a), 0.5f, rgb(0xc3581b)));
+            {
+                const auto& s = hover ? boardLook().hotHover : boardLook().hot; // the theme's signal colour (D307)
+                g.setGradientFill(vertical(r, s[0], s[1], 0.5f, s[2]));
                 break;
+            }
             case Cap::backlit:
             {
+                const auto& s = boardLook().backlit;
                 const auto c = juce::Point<float>(r.getCentreX(), r.getY() + r.getHeight() * 0.35f);
-                juce::ColourGradient grad(rgb(0xffc58a), c.x, c.y, rgb(0xc95b1d), r.getRight(), r.getBottom(), true);
-                grad.addColour(0.55, rgb(0xf08a3c));
+                juce::ColourGradient grad(s[0], c.x, c.y, s[2], r.getRight(), r.getBottom(), true);
+                grad.addColour(0.55, s[1]);
                 g.setGradientFill(grad);
                 break;
             }
@@ -187,7 +196,8 @@ namespace cs808
         const auto c = area.getCentre();
         const float r = size * 0.5f;
         // printed ticks, every tenth, the ends and the middle longer
-        g.setColour(silver ? rgb(0x2a2e33) : rgb(0xcfc7b3)); // printed dark on the silver board (D303)
+        const auto& look = boardLook();
+        g.setColour(silver ? look.tick : rgb(0xcfc7b3)); // printed on the board as the theme has it (D303, D307)
         for (int i = 0; i <= 10; ++i)
         {
             const float a = juce::degreesToRadians(-150.0f + 300.0f * static_cast<float>(i) / 10.0f);
@@ -200,9 +210,9 @@ namespace cs808
         g.fillEllipse(capArea.translated(0.0f, 1.5f));
         ellipseShadow(g, capArea, 4.0f, { 0.0f, 2.0f }, juce::Colours::black.withAlpha(0.6f));
         // the cap, lit from the upper left
-        // a silver cap on the silver board (D303), lit from the upper left as the dark ones are
-        juce::ColourGradient grad(accent ? rgb(0xf3a066) : silver ? rgb(0xf6f6f6) : rgb(0x4d4943), capArea.getX() + capArea.getWidth() * 0.4f, capArea.getY() + capArea.getHeight() * 0.3f,
-                                  accent ? rgb(0xb9541a) : silver ? rgb(0x9da2a8) : rgb(0x1d1b18), capArea.getRight(), capArea.getBottom(), true);
+        // a cap on the board in the theme's colours (D303, D307: silver on Silver), lit from the upper left
+        juce::ColourGradient grad(accent ? look.accentKnob[0] : silver ? look.knobTop : rgb(0x4d4943), capArea.getX() + capArea.getWidth() * 0.4f, capArea.getY() + capArea.getHeight() * 0.3f,
+                                  accent ? look.accentKnob[1] : silver ? look.knobBottom : rgb(0x1d1b18), capArea.getRight(), capArea.getBottom(), true);
         g.setGradientFill(grad);
         g.fillEllipse(capArea);
         g.setColour(rgb(0x0e0d0c));
@@ -211,7 +221,7 @@ namespace cs808
         g.drawEllipse(juce::Rectangle<float>(r * 1.24f, r * 1.24f).withCentre(c), 1.0f);
         // the pointer
         const float a = juce::degreesToRadians(-150.0f + 300.0f * juce::jlimit(0.0f, 1.0f, value));
-        g.setColour(accent ? rgb(0x1a1714) : silver ? rgb(0x1d2024) : rgb(0xece4d2));
+        g.setColour(accent ? rgb(0x1a1714) : silver ? look.pointer : rgb(0xece4d2));
         g.drawLine(juce::Line<float>(c.x + r * 0.2f * std::sin(a), c.y - r * 0.2f * std::cos(a), c.x + (r - 4.0f) * std::sin(a), c.y - (r - 4.0f) * std::cos(a)), 2.4f);
     }
 
@@ -225,7 +235,8 @@ namespace cs808
         // the plate: bevelled, lit from above
         const auto plate = box(0.5f, 0.5f, 27.0f, 45.0f);
         boxShadow(g, plate, 3.5f * k, 4.0f, { 0.0f, 2.0f }, juce::Colours::black.withAlpha(0.6f));
-        g.setGradientFill(vertical(plate, rgb(0xe4e6e8), rgb(0xc2c5c8), 0.5f, rgb(0xa2a6aa)) /* the silver board's plate (D303) */);
+        const auto& look = boardLook();
+        g.setGradientFill(vertical(plate, look.plateTop, look.plateMid, 0.5f, look.plateBottom) /* the board's plate (D303, D307) */);
         g.fillRoundedRectangle(plate, 3.5f * k);
         g.setColour(rgb(0x0b0a09));
         g.drawRoundedRectangle(plate, 3.5f * k, 1.0f);
@@ -242,7 +253,7 @@ namespace cs808
         g.setColour(juce::Colours::black.withAlpha(0.55f));
         g.fillRoundedRectangle(box(6.5f, ty + 2.0f, 15.0f, 16.0f), 2.5f * k);
         const auto thumb = box(6.0f, ty, 16.0f, 16.0f);
-        g.setGradientFill(vertical(thumb, rgb(0x3a3d42), rgb(0x23262a), 0.55f, rgb(0x131517)) /* a dark thumb on it */);
+        g.setGradientFill(vertical(thumb, look.thumbTop, look.thumbMid, 0.55f, look.thumbBottom) /* dark on Silver, light on Roland */);
         g.fillRoundedRectangle(thumb, 2.5f * k);
         g.setColour(rgb(0x0b0c0d));
         g.drawRoundedRectangle(thumb, 2.5f * k, 0.8f);
@@ -299,8 +310,8 @@ namespace cs808
         boxShadow(g, area, radius, 3.0f, { 0.0f, 2.0f }, juce::Colours::black.withAlpha(0.5f)); // no gradients (D306)
         g.setColour(rgb(0x0b0a09));
         g.fillRoundedRectangle(area.expanded(1.0f), radius + 1.0f);
-        g.setGradientFill(has ? vertical(area, rgb(0x4a4640), rgb(0x3f3b36), 0.5f, rgb(0x34312d))
-                              : vertical(area, rgb(0x3b3833), rgb(0x343129), 0.5f, rgb(0x2c2a26)));
+        const auto& s = has ? boardLook().slotHas : boardLook().slotEmpty; // the theme's (D307)
+        g.setGradientFill(vertical(area, s[0], s[1], 0.5f, s[2]));
         g.fillPath(shape);
         g.setColour(juce::Colours::white.withAlpha(0.12f));
         g.fillRect(area.getX() + radius * 0.6f, area.getY(), area.getWidth() - radius * 1.2f, 1.0f);
@@ -321,25 +332,27 @@ namespace cs808
         g.fillRect(area.getX() + 2.0f, area.getBottom() - 2.0f, area.getWidth() - 4.0f, 2.0f);
     }
 
-    void drawStepKeyOn(juce::Graphics& g, juce::Rectangle<float> area, bool sounding, float opacity)
+    void drawStepKeyOn(juce::Graphics& g, juce::Rectangle<float> area, bool sounding, float opacity, int group)
     {
+        // The beat group's colours as the theme has them (D307): all orange on Silver, the 808's four on Roland.
+        const auto& on = theme().stepOn[static_cast<std::size_t>(juce::jlimit(0, 3, group))];
         juce::Path shape;
         shape.addRoundedRectangle(area, 3.0f);
         // the dark line under the key, and over it the glow of one that sounds
         g.setColour(juce::Colours::black.withAlpha(0.6f * opacity));
         g.fillRoundedRectangle(area.translated(0.0f, 1.0f), 3.0f);
         if (sounding)
-            boxShadow(g, area, 3.0f, 18.0f, {}, rgb(0xffa046, 0.95f * opacity)); // no gradients (D306)
+            boxShadow(g, area, 3.0f, 18.0f, {}, on.glow.withAlpha(0.95f * opacity)); // no gradients (D306)
         juce::ColourGradient face;
         if (sounding)
         {
             // lit from inside, brightest a little above the middle
             const juce::Point<float> c(area.getCentreX(), area.getY() + area.getHeight() * 0.35f);
-            face = juce::ColourGradient(rgb(0xfff0dc), c, rgb(0xe8742a), { area.getRight(), area.getBottom() }, true);
-            face.addColour(0.55, rgb(0xffb067));
+            face = juce::ColourGradient(on.hotCentre, c, on.mid, { area.getRight(), area.getBottom() }, true);
+            face.addColour(0.55, on.hotMid);
         }
         else
-            face = vertical(area, rgb(0xf5a066), rgb(0xe8742a), 0.5f, rgb(0xc3581b));
+            face = vertical(area, on.top, on.mid, 0.5f, on.bottom);
         face.multiplyOpacity(opacity);
         g.setGradientFill(face);
         g.fillPath(shape);
@@ -349,7 +362,7 @@ namespace cs808
         g.fillRect(area.getX() + 2.0f, area.getBottom() - 2.0f, area.getWidth() - 4.0f, 2.0f);
     }
 
-    // ---- Screws and the glass's pins (D303) -----------------------------------------------------------------
+    // ---- The glass's pins (D303) -----------------------------------------------------------------
 
     namespace
     {
@@ -372,55 +385,6 @@ namespace cs808
             g.setGradientFill(edge);
             g.fillEllipse(outer);
         }
-    }
-
-    void drawScrew(juce::Graphics& g, juce::Point<float> c, float diameter, float angle)
-    {
-        // A countersunk Phillips screw sitting flush in the aluminium (D303). The countersink's cone is dark on the
-        // side facing the light and bright on the far side; the head is turned steel with a chamfered rim, lit from
-        // the upper left; the cross is two straight slots, square-ended, meeting in the deeper square of the recess.
-        const float d = diameter;
-        const auto sink = juce::Rectangle<float>(d + 3.0f, d + 3.0f).withCentre(c);
-        juce::ColourGradient cone(rgb(0x5d6166), sink.getX(), sink.getY(), rgb(0xf4f5f6), sink.getRight(), sink.getBottom(), false);
-        cone.addColour(0.5, rgb(0x9a9ea3));
-        g.setGradientFill(cone);
-        g.fillEllipse(sink);
-        g.setColour(juce::Colours::black.withAlpha(0.35f));
-        g.drawEllipse(sink.reduced(0.25f), 0.5f);
-
-        const auto head = juce::Rectangle<float>(d, d).withCentre(c);
-        chamfer(g, head, rgb(0xfbfbfb), rgb(0x6f757c));
-        const auto face = head.reduced(d * 0.09f);
-        juce::ColourGradient steel(rgb(0xeef0f2), face.getX(), face.getY(), rgb(0xa4aab1), face.getRight(), face.getBottom(), false);
-        steel.addColour(0.45, rgb(0xd2d6da));
-        g.setGradientFill(steel);
-        g.fillEllipse(face);
-        turnedRings(g, face, 4);
-
-        juce::Graphics::ScopedSaveState state(g);
-        g.addTransform(juce::AffineTransform::rotation(angle, c.x, c.y));
-        const float len = d * 0.62f, wid = d * 0.135f;
-        // the slots' walls: the lower right one catches the light, so each slot shows a bright lip on that side
-        for (const bool across : { false, true })
-        {
-            const auto slot = across ? juce::Rectangle<float>(wid, len).withCentre(c) : juce::Rectangle<float>(len, wid).withCentre(c);
-            g.setColour(juce::Colours::white.withAlpha(0.6f));
-            g.fillRoundedRectangle(slot.translated(0.35f, 0.45f), 0.3f);
-        }
-        for (const bool across : { false, true })
-        {
-            const auto slot = across ? juce::Rectangle<float>(wid, len).withCentre(c) : juce::Rectangle<float>(len, wid).withCentre(c);
-            juce::ColourGradient deep(rgb(0x1c1f22), slot.getX(), slot.getY(), rgb(0x4a4f55), slot.getRight(), slot.getBottom(), false);
-            g.setGradientFill(deep);
-            g.fillRoundedRectangle(slot, 0.3f);
-        }
-        // the recess's centre, a little wider and deepest, turned 45 degrees to the slots
-        const float sq = wid * 1.55f;
-        juce::Path centre;
-        centre.addRectangle(juce::Rectangle<float>(sq, sq).withCentre(c));
-        centre.applyTransform(juce::AffineTransform::rotation(juce::MathConstants<float>::pi * 0.25f, c.x, c.y));
-        g.setColour(rgb(0x101214));
-        g.fillPath(centre);
     }
 
     void drawStandoff(juce::Graphics& g, juce::Point<float> c, float diameter)

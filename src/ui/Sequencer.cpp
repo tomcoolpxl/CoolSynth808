@@ -573,7 +573,7 @@ namespace cs808
                     if (s.on)
                     {
                         // An orange cap, lit while it sounds; a step that may not play is paler, a roll notched.
-                        drawStepKeyOn(g, box, i == head, opacity * (0.4f + 0.6f * juce::jlimit(0.0f, 1.0f, s.chance)));
+                        drawStepKeyOn(g, box, i == head, opacity * (0.4f + 0.6f * juce::jlimit(0.0f, 1.0f, s.chance)), i / 4);
                         const int hits = juce::jlimit(1, 3, static_cast<int>(s.hits));
                         if (hits > 1)
                         {

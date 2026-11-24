@@ -24,9 +24,7 @@ namespace cs808
         float columnWidth(int c) { return columnUnit() * (c == 0 ? 0.85f : 1.0f); }
         float columnCentre(int c) { return columnX(c) + columnWidth(c) * 0.5f; }
 
-        // The words printed on the board.
-        const juce::Colour idInk = boardInk::ink;     // dark on the silver board (D303)
-        const juce::Colour nameInk = boardInk::label;
+        // The words printed on the board take the theme's board colours (D307).
 
         /** A word's box on the board, 5 px of clearance each side, for the copper to keep off. */
         KeepOut wordKeepOut(const juce::String& text, const juce::Font& font, float centreX, float top, float height)
@@ -60,11 +58,11 @@ namespace cs808
                 for (const auto d : { juce::Point<float>(-1.0f, 0.0f), { 1.0f, 0.0f }, { 0.0f, -1.0f }, { 0.0f, 1.0f } })
                     shapedText(g, id, idArea.translated(d.x, d.y), juce::Justification::centred, false);
             }
-            g.setColour(sel ? boardInk::accent : idInk);
+            g.setColour(sel ? boardLook().accent : boardLook().ink);
             shapedText(g, id, idArea, juce::Justification::centred, false);
             if (column > 0)
             {
-                g.setColour(nameInk);
+                g.setColour(boardLook().label);
                 g.setFont(labelFont(10.0f));
                 shapedText(g, laneName(column, kit).toUpperCase(), juce::Rectangle<float>(0.0f, 18.0f, w, 10.0f), juce::Justification::centred, false);
             }
@@ -93,12 +91,12 @@ namespace cs808
             const juce::String first = "CoolSynth ";
             const float w1 = shapedWidth(light, first), w2 = shapedWidth(bold, "808");
             const juce::Rectangle<float> line(14.0f, 5.0f, 300.0f, 20.0f);
-            g.setColour(boardInk::ink);
+            g.setColour(boardLook().ink);
             g.setFont(light);
             shapedText(g, first, line, juce::Justification::centredLeft, false);
             g.setFont(bold);
             shapedText(g, "808", line.withTrimmedLeft(w1), juce::Justification::centredLeft, false);
-            g.setColour(boardInk::label);
+            g.setColour(boardLook().label);
             g.setFont(labelFont(10.0f));
             shapedText(g, "BEAT COMPOSER", line.withTrimmedLeft(w1 + w2 + 4.0f + 10.0f).translated(0.0f, 1.0f), juce::Justification::centredLeft, false);
         }
@@ -145,7 +143,11 @@ namespace cs808
         options.folderName = "CoolSynth808";
         options.osxLibrarySubFolder = "Application Support";
         settings = std::make_unique<juce::PropertiesFile>(options);
-        themeIndex = juce::jlimit(0, 3, settings->getIntValue("theme", 0));
+        // The theme kept by its name (D307): the older setting counted the themes of the old layouts.
+        const auto keptTheme = settings->getValue("boardTheme", themes()[0].id);
+        for (int i = 0; i < static_cast<int>(themes().size()); ++i)
+            if (keptTheme == themes()[static_cast<std::size_t>(i)].id)
+                themeIndex = i;
         setTheme(themeIndex);
 
         board = std::make_unique<EtchedBoard>();
@@ -178,7 +180,7 @@ namespace cs808
     {
         stopAudition(); // the project as it was, before the state is kept
         controls.reset(); // its gesture closes while the panel is whole
-        settings->setValue("theme", themeIndex);
+        settings->setValue("boardTheme", themes()[static_cast<std::size_t>(themeIndex)].id);
         settings->saveIfNeeded();
         lidOverlay.reset(); // before the lid it shows
     }
@@ -298,8 +300,7 @@ namespace cs808
             const float cx = columnCentre(column);
             const int top = knobTop + row * knobPitch;
             knob.diameter = static_cast<float>(knobSize);
-            knob.silver = true; // mounted on the silver board (D303)
-            knob.labelColour = boardInk::label;
+            knob.silver = true; // mounted on the board (D303), coloured as the theme has it (D307)
             knob.setBounds(juce::roundToInt(cx - 30.0f), top - 8, 60, 8 + knobSize + 5 + 12);
             columnKeepOuts.push_back({ juce::Rectangle<float>(2.0f * (knobSize / 2 + 9), 2.0f * (knobSize / 2 + 9)).withCentre({ cx, top + knobSize * 0.5f }), true });
             columnKeepOuts.push_back(wordKeepOut(knob.label.toUpperCase(), labelFont(10.0f), cx, static_cast<float>(top + knobSize + 4), 14.0f));
@@ -549,7 +550,7 @@ namespace cs808
         banks.addItem(99, "New bank", static_cast<int>(p.banks.size()) < Project::maxBanks);
         m.addSubMenu("Bank", banks);
         juce::PopupMenu themeMenu;
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < static_cast<int>(themes().size()); ++i)
             themeMenu.addItem(200 + i, themes()[static_cast<std::size_t>(i)].name, true, i == themeIndex);
         m.addSubMenu("Theme", themeMenu);
         m.addItem(6, "Controller setup...", true, ! coolsynth::midi::ControllerSetup::instance().map().empty());
@@ -572,11 +573,12 @@ namespace cs808
             else if (r == 8) { e.processor.redo(); e.refresh(); }
             else if (r == 99) { e.processor.addBank(); e.refresh(); }
             else if (r >= 100 && r < 200) { e.processor.selectBank(r - 100); e.refresh(); }
-            else if (r >= 200 && r < 204)
+            else if (r >= 200 && r < 200 + static_cast<int>(themes().size()))
             {
                 e.themeIndex = r - 200;
                 setTheme(e.themeIndex);
-                e.settings->setValue("theme", e.themeIndex);
+                e.settings->setValue("boardTheme", themes()[static_cast<std::size_t>(e.themeIndex)].id);
+                e.board->themeChanged();
                 e.repaint();
                 e.refresh();
             }

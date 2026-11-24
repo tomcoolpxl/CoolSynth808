@@ -25,7 +25,7 @@ namespace cs808
         bool small = false;
         bool locked = false; // drawn in the lit colour
         bool accent = false; // an orange cap, as the Accent knob's (D292)
-        bool silver = false; // a silver cap, for the knobs on the silver board (D303)
+        bool silver = false; // mounted on the board (D303): its cap and printing in the theme's board colours (D307)
         // Laid out as the fifth layout's knobs (D292): a cap of this diameter at the top, 8 px below the top for its
         // ticks, its name 5 px under it and its value under that. 0 keeps the knob fitted to the box.
         float diameter = 0.0f;

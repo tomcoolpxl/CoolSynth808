@@ -13,7 +13,7 @@ column of copper: the bass drum's Level, Tone and Decay, the snare's Snappy, the
 Accent and Volume under Master. Slide switches choose the second instrument of a circuit: conga for tom, claves for
 rim shot, maracas for clap. As the beat plays, each drum's column lights the way its recorded circuit rings.
 
-The sequencer sits on smoked glass below it, held over the brushed aluminium by four pins.
+The sequencer sits on smoked glass below it, held over the board by four pins.
 
 - The patterns row: banks A to D, the sixteen patterns, F for the fill and Fill to play it once in the next bar; A,
   AB and B play the pattern's two halves. Click a pattern to play and edit it; right-click it for copy, paste, clear,
@@ -27,8 +27,8 @@ The sequencer sits on smoked glass below it, held over the brushed aluminium by 
 - On the right, the picked lane's length, Every 4, Every 2, Clear and a shift, and the pattern's tools.
 - The strip at the top right: Play, Rec (writes the drums you play onto the nearest step), the tempo (drag it), Tap,
   Swing (delays every second sixteenth, as Roger Linn's drum machines do), Library and File. Space starts and stops.
-- File also holds the banks, the themes, Controller (a MIDI controller: the main knob chooses the drum, knobs follow
-  it, pads play the drums or, after a press of the main knob, enter its steps), Undo and Redo.
+- File also holds the banks, the themes (Roland, the 808's own charcoal and colours; Silver; Steel; Olive),
+  Controller (a MIDI controller: the main knob chooses the drum, knobs follow it, pads play the drums or, after a press of the main knob, enter its steps), Undo and Redo.
 - Drag MIDI drags the pattern into your music software as a MIDI file.
 
 It follows a MIDI clock when one comes in (its start, stop and tempo), and sends its own when none does. The audio

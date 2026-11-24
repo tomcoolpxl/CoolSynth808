@@ -9,7 +9,7 @@
 
 /*
     The fifth layout's board (D292): the panel is a circuit board seen through its metal, the knobs and switches
-    mounted on it, the sequencer on smoked glass over it. This paints the metal, its screws, the name plate's faded
+    mounted on it, the sequencer on smoked glass over it. This paints the metal, the name plate's faded
     outline and the ground ring round the sequencer, which carries no signal and never lights.
 
     The etched circuit itself comes in the next step. Its copper stops short of everything mounted on the board, as
@@ -44,6 +44,8 @@ namespace cs808
 
         void paint(juce::Graphics& g) override;
         void resized() override { cache = {}; }
+        /** The theme changed (D307): the board is drawn again in its colours. */
+        void themeChanged() { cache = {}; repaint(); }
 
         /** Drums struck (bit l: the drum lane l, 0 the bass drum to 10 the closed hat, as the processor reports them):
             their columns light as their recordings' outputs do (D298). */
@@ -56,7 +58,6 @@ namespace cs808
 
     private:
         void paintMetal(juce::Graphics& g) const;
-        void paintScrews(juce::Graphics& g) const;
         void paintCopper(juce::Graphics& g) const;
         void paintGround(juce::Graphics& g) const;
         /** The glass's shadow on the metal, and the transport strip's (D303). */

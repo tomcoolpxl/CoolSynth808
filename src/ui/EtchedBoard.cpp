@@ -1,18 +1,13 @@
 #include "EtchedBoard.h"
 
 #include "Hardware.h"
+#include "Theme.h"
 
 namespace cs808
 {
     namespace
     {
         juce::Colour rgb(std::uint32_t c, float a = 1.0f) { return juce::Colour(0xff000000u | c).withAlpha(a); }
-
-        // The copper on the silver board (D303, the mockups' 5.4): darker than on the old dark metal, so it shows.
-        const juce::Colour copper = rgb(0x966834, 0.48f);
-        const juce::Colour padColour = rgb(0x8c6436, 0.7f);
-        // The name plate's faded outline, printed dark on the aluminium, its corners round.
-        const juce::Colour outline = rgb(0x1e2024, 0.32f);
     }
 
     EtchedBoard::EtchedBoard()
@@ -60,7 +55,6 @@ namespace cs808
             c.addTransform(juce::AffineTransform::scale(scale));
             paintMetal(c);
             paintCopper(c);
-            paintScrews(c);
             paintShadows(c);
         }
         g.drawImageTransformed(cache, juce::AffineTransform::scale(1.0f / cacheScale));
@@ -114,14 +108,16 @@ namespace cs808
     {
         // Brushed aluminium (D303, the mockups' 5.4): light, a little cooler at the foot.
         const auto w = static_cast<float>(width), h = static_cast<float>(height);
-        g.setGradientFill(juce::ColourGradient(rgb(0xc6c9cc), 0.0f, 0.0f, rgb(0xa9adb1), 0.0f, h, false));
+        // The theme's metal (D307): Silver's aluminium, Roland's charcoal.
+        const auto& look = boardLook();
+        g.setGradientFill(juce::ColourGradient(look.metalTop, 0.0f, 0.0f, look.metalBottom, 0.0f, h, false));
         g.fillRect(0.0f, 0.0f, w, h);
         // brushed: a faint light line every 3 px, the two between a shade darker
         for (int x = 0; x < width; x += 3)
         {
-            g.setColour(juce::Colours::white.withAlpha(0.05f));
+            g.setColour(juce::Colours::white.withAlpha(look.brushLight));
             g.fillRect(static_cast<float>(x), 0.0f, 1.0f, h);
-            g.setColour(juce::Colours::black.withAlpha(0.025f));
+            g.setColour(juce::Colours::black.withAlpha(look.brushDark));
             g.fillRect(static_cast<float>(x + 1), 0.0f, 2.0f, h);
         }
         // light falling on the upper left: an ellipse 1200 by 400 px round a point on the top edge
@@ -129,17 +125,10 @@ namespace cs808
             juce::Graphics::ScopedSaveState state(g);
             const juce::Point<float> c(w * 0.3f, 0.0f);
             g.addTransform(juce::AffineTransform::scale(1.0f, 400.0f / 1200.0f, c.x, c.y));
-            juce::ColourGradient sheen(juce::Colours::white.withAlpha(0.18f), c, juce::Colours::white.withAlpha(0.0f), c.translated(1200.0f * 0.7f, 0.0f), true);
+            juce::ColourGradient sheen(juce::Colours::white.withAlpha(look.sheen), c, juce::Colours::white.withAlpha(0.0f), c.translated(1200.0f * 0.7f, 0.0f), true);
             g.setGradientFill(sheen);
             g.fillRect(juce::Rectangle<float>(c.x - 1200.0f, -1200.0f, 2400.0f, 2400.0f));
         }
-    }
-
-    void EtchedBoard::paintScrews(juce::Graphics& g) const
-    {
-        // Two countersunk Phillips screws at the top corners, each turned its own way (D303).
-        drawScrew(g, { 16.0f, 16.0f }, 13.0f, 0.42f);
-        drawScrew(g, { static_cast<float>(width) - 16.0f, 16.0f }, 13.0f, 1.13f);
     }
 
     juce::Path EtchedBoard::tracePath(const std::vector<juce::Point<float>>& pts)
@@ -187,8 +176,8 @@ namespace cs808
             paintGround(g);
             paintCircuit(g);
         }
-        // The name plate keeps its faded outline where the copper was cut away round it.
-        g.setColour(outline);
+        // The name plate keeps its faded outline where the copper was cut away round it, in the board's ink.
+        g.setColour(boardLook().ink.withAlpha(0.32f));
         for (const auto& k : keeps)
             if (k.outlined)
             {
@@ -221,11 +210,11 @@ namespace cs808
         const std::vector<juce::Point<float>> ring {
             { 34.0f, top }, { 22.0f, top + 12.0f }, { 22.0f, 776.0f }, { 38.0f, 792.0f },
             { 1242.0f, 792.0f }, { 1258.0f, 776.0f }, { 1258.0f, top + 12.0f }, { 1246.0f, top } };
-        g.setColour(copper);
+        g.setColour(boardLook().copper);
         g.strokePath(tracePath(ring), juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         for (const auto end : { ring.front(), ring.back() })
         {
-            g.setColour(padColour);
+            g.setColour(boardLook().pad);
             g.fillEllipse(juce::Rectangle<float>(5.2f, 5.2f).withCentre(end));
             g.setColour(rgb(0x141210, 0.9f));
             g.fillEllipse(juce::Rectangle<float>(2.0f, 2.0f).withCentre(end));

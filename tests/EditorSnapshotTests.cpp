@@ -141,13 +141,15 @@ public:
                 out.truncate();
                 juce::PNGImageFormat().writeImageToStream(image, out);
             };
-            for (int t = 0; t < 4; ++t)
+            for (int t = 0; t < static_cast<int>(themes().size()); ++t)
             {
                 setTheme(t);
+                editor->boardForTesting().themeChanged();
                 editor->lidView = false;
                 shoot(juce::String("panel-") + themes()[static_cast<std::size_t>(t)].id);
             }
             setTheme(0);
+            editor->boardForTesting().themeChanged();
             editor->lidView = true;
             shoot("lid");
             // Every drum struck, 40 ms on: the board lit from the recordings (D280).
@@ -213,6 +215,13 @@ public:
             editor->boardForTesting().struck((1u << 0) | (1u << 1) | (1u << 10), 50000.0);
             editor->boardForTesting().tick(50030.0);
             shoot("panel-struck");
+            setTheme(1); // the same in the Silver theme (D307)
+            editor->boardForTesting().themeChanged();
+            editor->boardForTesting().struck((1u << 0) | (1u << 1) | (1u << 10), 51000.0);
+            editor->boardForTesting().tick(51030.0);
+            shoot("panel-struck-silver");
+            setTheme(0);
+            editor->boardForTesting().themeChanged();
             editor->boardForTesting().tick(60000.0);
             // Pattern 3 picked while 1 plays: it waits for the bar line, and the status says when it comes.
             editor->selectPatternKey(2, false);

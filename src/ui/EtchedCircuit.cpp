@@ -191,7 +191,7 @@ namespace cs808
 
     void EtchedCircuit::paintStill(juce::Graphics& g) const
     {
-        g.setColour(rgba(150, 104, 52, 0.48f));
+        g.setColour(boardLook().copper);
         for (std::size_t i = 0; i < wires.size(); ++i)
             g.strokePath(paths[i], stroke(widthOf(wires[i].inCell)));
         for (const auto& p : parts)
@@ -200,7 +200,7 @@ namespace cs808
         for (const auto& w : wires)
             for (const auto& q : { w.pts.front(), w.pts.back() })
             {
-                g.setColour(rgba(140, 100, 54, 0.7f));
+                g.setColour(boardLook().pad);
                 g.fillEllipse(juce::Rectangle<float>(5.2f, 5.2f).withCentre(q));
                 g.setColour(rgba(20, 18, 16, 0.9f));
                 g.fillEllipse(juce::Rectangle<float>(2.0f, 2.0f).withCentre(q));
@@ -221,11 +221,12 @@ namespace cs808
             heat[i] = std::max(lit[i], heat[i] * std::exp(-dt / 1600.0f));
             any = any || heat[i] > 0.02f;
         }
-        // the afterglow of the last bar
+        // the afterglow of the last bar; the light in the theme's colours (D307: yellow on Silver)
+        const auto& look = boardLook();
         for (std::size_t i = 0; i < wires.size(); ++i)
             if (const float h = heat[static_cast<std::size_t>(wires[i].owner)]; h > 0.02f)
             {
-                g.setColour(rgba(239, 107, 33, 0.14f * h));
+                g.setColour(look.heat.withAlpha(0.14f * h));
                 g.strokePath(paths[i], stroke(widthOf(wires[i].inCell) + 4.0f));
             }
         // lit copper, and current: dots running along it, faster for more
@@ -235,13 +236,13 @@ namespace cs808
             const float e = lit[static_cast<std::size_t>(w.owner)];
             if (e < 0.03f)
                 continue;
-            g.setColour(rgba(239, 100, 25, 0.06f * e));
+            g.setColour(look.flowWire.withAlpha(0.06f * e));
             g.strokePath(paths[i], stroke(widthOf(w.inCell) + 4.0f));
-            g.setColour(rgba(239, 100, 25, 0.42f * e));
+            g.setColour(look.flowWire.withAlpha(0.42f * e));
             g.strokePath(paths[i], stroke(widthOf(w.inCell) + 0.5f));
             if (e < 0.05f)
                 continue;
-            g.setColour(rgba(255, 140, 60, std::min(1.0f, e * 1.3f)));
+            g.setColour(look.flowDot.withAlpha(std::min(1.0f, e * 1.3f)));
             const float spacing = 11.0f, offset = static_cast<float>(std::fmod(nowMs * (0.02 + 0.07 * e), spacing));
             const float r = w.inCell ? 1.4f : 1.15f;
             for (float d = offset; d < w.length; d += spacing)
@@ -261,10 +262,10 @@ namespace cs808
         const float k = p.k;
         const auto pad = [&](float x, float y)
         {
-            g.setColour(rgba(140, 100, 54, 0.75f));
+            g.setColour(boardLook().pad.withMultipliedAlpha(0.75f / 0.7f));
             g.fillEllipse(juce::Rectangle<float>(4.8f, 4.8f).withCentre({ x, y }));
         };
-        const auto ink = e > 0.05f ? rgba(255, 140, 60, 0.45f + 0.55f * e) : rgba(30, 32, 36, 0.42f);
+        const auto ink = e > 0.05f ? boardLook().flowDot.withAlpha(0.45f + 0.55f * e) : boardLook().silk;
         const auto box = [&](float w, float h)
         {
             g.setColour(ink);
@@ -305,7 +306,7 @@ namespace cs808
                 }
                 if (e > 0.1f)
                 {
-                    g.setColour(rgba(255, 140, 60, 0.25f * e));
+                    g.setColour(boardLook().flowDot.withAlpha(0.25f * e));
                     g.fillRect(juce::Rectangle<float>(k * 2.2f, k * 2.8f).withCentre({}));
                 }
                 break;
@@ -326,7 +327,7 @@ namespace cs808
         const float fs = 6.0f;
         const auto font = monoFont(fs);
         g.setFont(font);
-        g.setColour(rgba(30, 32, 36, 0.78f));
+        g.setColour(boardLook().silkText);
         const auto boxOf = [](const Part& p)
         {
             const float w = (p.type == 'A' ? 1.2f : (p.type == 'R' || p.type == 'P') ? 1.35f : 1.0f) * p.k;
