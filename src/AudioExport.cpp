@@ -52,6 +52,7 @@ namespace cs808
                 if (lane >= 0)
                     processor->circuitWatch().hearOnly(1u << lightOfLane[static_cast<std::size_t>(lane)]);
                 processor->setChain(job.patterns);
+                processor->setAccuracy(job.accuracy);
                 processor->setPlayConfigDetails(0, 2, job.sampleRate, block);
                 processor->prepareToPlay(job.sampleRate, block);
             }

@@ -198,6 +198,13 @@ namespace cs808
             controller; anything else is not taken. */
         void takeControllerMessage(const juce::MidiMessage& message) noexcept;
 
+        /** The circuits' accuracy (D339): 0 Best; 1 Lighter, the metal drums' VCAs only while their drum sounds and a
+            looser Newton; 2 Lightest, and the voices at the host's own rate, not near 96 kHz. Kept in the app's
+            settings; message thread (a change of rate prepares the engine again, the sound paused for it). An export
+            renders at Best whatever this says. */
+        void setAccuracy(int level);
+        [[nodiscard]] int accuracy() const noexcept { return accuracyLevel; }
+
         /** The transport to this beat position at the next block while it plays, as a DAW's loop jumps: what rings
             rings on, every random number from its seed again. The WAV export's seamless loop (D331). Any thread. */
         void jumpTo(double beatPosition) noexcept { jumpRequest.store(beatPosition, std::memory_order_release); }
@@ -252,6 +259,9 @@ namespace cs808
         std::atomic<int> playRequest { -1 };
         std::atomic<bool> fillRequest { false };
         std::atomic<double> jumpRequest { -1.0 };
+        int accuracyLevel = 0;                 // message thread (D339)
+        int preparedBlock = 512;               // as prepareToPlay last set it
+        bool prepared = false;
         std::atomic<bool> recording { false };
         struct Strike
         {

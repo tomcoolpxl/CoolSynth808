@@ -54,6 +54,7 @@ namespace cs808
                 juce::PropertiesFile file(options);
                 if (file.containsKey("drumNotes"))
                     notes = drumNotesFromString(file.getValue("drumNotes"));
+                setAccuracy(file.getIntValue("accuracy", 0)); // D339
             }
             setDrumNotes(notes);
         }
@@ -128,7 +129,10 @@ namespace cs808
     void Processor::prepareToPlay(double sampleRate, int samplesPerBlock)
     {
         rate = sampleRate > 0.0 ? sampleRate : 48000.0;
+        preparedBlock = std::max(1, samplesPerBlock);
+        prepared = true;
         engine.setCircuitWatch(&watch); // the panel's lights follow the circuits as they play (D313)
+        engine.setOversampling(accuracyLevel < 2); // the Lightest accuracy runs the voices at the host's rate (D339)
         engine.prepare(rate, std::max(1, samplesPerBlock), std::max(1, getTotalNumOutputChannels()));
         clock.prepare(rate);
         keptBlock.ensureSize(8192);
@@ -368,6 +372,23 @@ namespace cs808
         if (cueing)
             pendingChainFromBar = true; // stays so while the edits wait, whatever chain joins them
         markCue();
+    }
+
+    void Processor::setAccuracy(int level)
+    {
+        level = juce::jlimit(0, 2, level);
+        const bool oversampledBefore = accuracyLevel < 2, oversampled = level < 2;
+        accuracyLevel = level;
+        watch.setLighter(level >= 1);
+        if (oversampled == oversampledBefore)
+            return;
+        engine.setOversampling(oversampled);
+        if (! prepared)
+            return;
+        // The voices' rate changes: the engine prepared again while the audio thread skips its blocks.
+        suspendProcessing(true);
+        engine.prepare(rate, preparedBlock, std::max(1, getTotalNumOutputChannels()));
+        suspendProcessing(false);
     }
 
     void Processor::startMcpServer()

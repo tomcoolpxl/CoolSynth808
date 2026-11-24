@@ -146,6 +146,18 @@ public:
             expectGreaterThan(long_, shortly + 5, "a longer Decay keeps the light longer");
         }
 
+        beginTest("a_closed_hat_alone_moves_the_hats_sheet");
+        {
+            // D339: the hats' sheet starts at a closed hat struck alone too, not only at an open hat.
+            using W = coolsynth::synth::v3::CircuitWatch;
+            auto p = prepared();
+            p->editBank([](SequencerBank& b) { b.pattern[0].lanes[10].a[0].on = true; }, false);
+            p->circuitWatch().watchCircuit(W::openHat);
+            p->setPlaying(true);
+            (void) render(*p, 48 * 500);
+            expectGreaterThan(p->circuitWatch().framesCaptured(), 100, "the closed hat captured");
+        }
+
         beginTest("each_sheet_lives_from_the_engine_as_its_recording_does");
         {
             // D317: each sheet of Under the Lid shows the engine's circuit as it plays. Struck at its recording's own

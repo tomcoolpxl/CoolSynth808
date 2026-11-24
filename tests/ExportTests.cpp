@@ -7,6 +7,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 
 #include "AudioExport.h"
+#include "Processor.h"
 #include "ui/ExportPanel.h"
 
 namespace
@@ -205,6 +206,51 @@ namespace
                     }
                 }
                 (void) folder.deleteRecursively();
+            }
+
+            beginTest("each_accuracy_plays_and_the_export_stays_at_best");
+            {
+                // D339: Lighter and Lightest still play the kit, a change of rate between them is taken while it
+                // runs, and the metal drums at Lighter differ only a little from Best.
+                const auto hats = [this](int accuracy)
+                {
+                    auto job = jobWith([](SequencerPattern& p) { p.lanes[10].a[0].on = true; p.lanes[9].a[4].on = true; p.lanes[1].a[8].on = true; });
+                    job.accuracy = accuracy;
+                    ExportResult r;
+                    render(job, r);
+                    return r.mix;
+                };
+                const auto best = hats(0), lighter = hats(1), lightest = hats(2);
+                for (const auto* a : { &best, &lighter, &lightest })
+                {
+                    expectEquals(a->getNumSamples(), 96000, "the same length");
+                    expectGreaterThan(peak(*a, 0, 2400), 0.01f, "the closed hat");
+                    expectGreaterThan(peak(*a, 24000, 26400), 0.01f, "the open hat");
+                    expectGreaterThan(peak(*a, 48000, 50400), 0.01f, "the snare");
+                }
+                const double e = energy(best, 0, 96000), el = energy(lighter, 0, 96000);
+                expectWithinAbsoluteError(10.0 * std::log10(el / e), 0.0, 0.5, "Lighter within half a dB of Best");
+
+                auto p = std::make_unique<Processor>(Processor::Offline {});
+                p->setPlayConfigDetails(0, 2, 48000.0, 512);
+                p->prepareToPlay(48000.0, 512);
+                p->editBank([](SequencerBank& b) { b.pattern[0].lanes[0].a[0].on = true; b.pattern[0].lanes[0].a[8].on = true; }, false);
+                p->setPlaying(true);
+                juce::AudioBuffer<float> buffer(2, 512);
+                juce::MidiBuffer midi;
+                float loudest = 0.0f;
+                for (int b = 0; b < 200; ++b)
+                {
+                    if (b == 60)
+                        p->setAccuracy(2);
+                    if (b == 140)
+                        p->setAccuracy(0);
+                    p->processBlock(buffer, midi);
+                    if (b > 140)
+                        loudest = std::max(loudest, buffer.getMagnitude(0, 0, 512));
+                }
+                expectEquals(p->accuracy(), 0);
+                expectGreaterThan(loudest, 0.01f, "still playing after Lightest and back");
             }
 
             beginTest("the_dialog_renders_and_writes_on_its_own_thread");

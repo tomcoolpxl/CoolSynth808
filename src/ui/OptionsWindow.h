@@ -35,6 +35,9 @@ namespace cs808
         std::function<void(int)> chooseDrumSet, learnDrumNote;
         std::function<int()> learningDrumNote;
         std::function<void()> controllerSetup;
+        // The circuits' accuracy (D339): 0 Best, 1 Lighter, 2 Lightest.
+        std::function<int()> accuracy;
+        std::function<void(int)> chooseAccuracy;
         // The panel's circuit (D314): its electricity animated or still, and full (0), faint (1) or hidden (2).
         std::function<bool()> circuitAnimated;
         std::function<void(bool)> chooseCircuitAnimated;

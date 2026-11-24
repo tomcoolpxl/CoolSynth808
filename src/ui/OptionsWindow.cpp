@@ -377,6 +377,17 @@ namespace cs808
                 addChildComponent(chip);
             }
 
+            // The circuits' accuracy (D339), on the Audio page (the Host page in a plugin).
+            accuracyChoice.options = { "Best", "Lighter", "Lightest" };
+            accuracyChoice.get = [this] { return hooks.accuracy ? hooks.accuracy() : 0; };
+            accuracyChoice.set = [this](int i)
+            {
+                if (hooks.chooseAccuracy)
+                    hooks.chooseAccuracy(i);
+                repaint();
+            };
+            addChildComponent(accuracyChoice);
+
             controller.text = "Controller setup...";
             controller.onClick = [this](const juce::MouseEvent&) { hooks.controllerSetup(); };
             addChildComponent(controller);
@@ -549,6 +560,7 @@ namespace cs808
                     row(rate, "Sample rate");
                     const bool asio = devices->getCurrentAudioDevice() != nullptr && devices->getCurrentAudioDevice()->hasControlPanel();
                     row(asio ? static_cast<juce::Component&>(controlPanel) : buffer, "Buffer");
+                    row(accuracyChoice, "Accuracy");
                     readoutY = y;
                     testTone.setBounds(x + w - 110, y, 110, rowHeight);
                     testTone.setVisible(true);
@@ -580,6 +592,7 @@ namespace cs808
                 }
                 case hostPage:
                     row(follow, "Play");
+                    row(accuracyChoice, "Accuracy");
                     break;
                 case drumsPage:
                 {
@@ -685,7 +698,7 @@ namespace cs808
         InputList inputList;
         juce::Viewport inputView;
         int knownInputs = -1;
-        Choices themeChoice, showChoice, animateChoice;
+        Choices themeChoice, showChoice, animateChoice, accuracyChoice;
         Choices drumSet;
         juce::OwnedArray<Chip> drumChips;
         /** A ready set's note for a slot, as Kit.h's drumNoteSet. */

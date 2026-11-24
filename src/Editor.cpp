@@ -391,6 +391,12 @@ namespace cs808
         hooks.learnDrumNote = [this](int slot) { processor.learnDrumNote(slot); };
         hooks.learningDrumNote = [this] { return processor.learningDrumNote(); };
         hooks.controllerSetup = [this] { openControllerSetup(); };
+        hooks.accuracy = [this] { return processor.accuracy(); };
+        hooks.chooseAccuracy = [this](int level)
+        {
+            processor.setAccuracy(level);
+            settings->setValue("accuracy", processor.accuracy());
+        };
         hooks.circuitAnimated = [this] { return circuitAnimated; };
         hooks.chooseCircuitAnimated = [this](bool on) { circuitAnimated = on; settings->setValue("circuitAnimated", on); applyCircuitLook(); };
         hooks.circuitShow = [this] { return circuitShow; };

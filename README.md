@@ -44,7 +44,8 @@ To come.
   drum's shows the engine's own voltages and currents from its last hit, with the ngspice recording until it is
   struck. The CPU board opens the CPU section's: our sequencer's step as the service notes describe it. A
   click on the sheet's empty space, or Escape, goes back.
-- Options opens a window of its own, its pages listed down the left: Audio (the driver, Windows Audio or ASIO), MIDI
+- Options opens a window of its own, its pages listed down the left: Audio (the driver, Windows Audio or ASIO, and the
+  circuits' accuracy: Best, Lighter or Lightest for a busy computer, an export always at Best), MIDI
   (the ports and the clock), Drum notes, Panel (the theme: Roland, Silver, Steel, Olive; the window's size; the
   circuit full, faint or hidden, its electricity animated or still) and a MIDI controller's setup.
 - It follows an incoming MIDI clock and sends its own when none comes in; both can be switched off.

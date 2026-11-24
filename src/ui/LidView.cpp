@@ -3139,9 +3139,12 @@ namespace cs808
         // through, as a scope's trigger holdoff does, or a beat restarts it every step and only the trigger shows.
         // A hit paused or moved on its slider stays where it is.
         // Its drum struck, the sheet runs the hit in real time from the strike (D326; it was slowed down, with a Play
-        // key and a slider). The hi-hats' closed hat is part of the open hat's hit: it does not start it again.
+        // key and a slider). The hi-hats' closed hat is part of an open hat's hit while that runs (400 ms, its
+        // recording's length); alone, it starts the sheet itself, as the engine starts its capture (D339).
+        const bool hats = impl->showFull && impl->full && impl->full->which == hiHats;
+        const bool closedAlone = hats && (lanes & (1u << 10)) != 0 && impl->now - impl->full->stepAt > 400.0;
         if (impl->showFull && impl->full && impl->full->which != cpuSection
-            && (lanes & (1u << laneOfDrum[impl->full->which])) != 0)
+            && ((lanes & (1u << laneOfDrum[impl->full->which])) != 0 || closedAlone))
         {
             impl->full->stepAt = impl->now;
             impl->full->following = true;

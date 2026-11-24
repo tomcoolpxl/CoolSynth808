@@ -33,6 +33,7 @@ namespace cs808
         bool stems = false;
         double sampleRate = 48000.0;
         double bpm = 120.0;
+        int accuracy = 0; // the circuits' accuracy (D339): the dialog always renders at Best (0); the tests measure the others
     };
 
     struct ExportResult
