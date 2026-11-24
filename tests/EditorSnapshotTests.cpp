@@ -307,6 +307,19 @@ public:
             editor->boardForTesting().hoverForTesting(1);
             shoot("lid-lifted-hover");
             editor->boardForTesting().hoverForTesting(-1);
+            // Live (D320): the engine playing the beat, the lid's copper and then the whole board's sheet from its nodes.
+            editor->frameForTesting();
+            playTo(static_cast<int>(p->playingSixteenth()) + 3);
+            editor->frameForTesting();
+            shoot("lid-lifted-live");
+            editor->lidForTesting().showSheet(0);
+            editor->lidView = true;
+            editor->layOut();
+            playTo(static_cast<int>(p->playingSixteenth()) + 1);
+            editor->frameForTesting();
+            shoot("lid-whole-board-live");
+            editor->lidView = false;
+            editor->layOut();
             editor->liftLid(false);
             editor->boardForTesting().setCircuitLook(true, EtchedBoard::CircuitShow::full);
             setTheme(1); // the same in the Silver theme (D307)

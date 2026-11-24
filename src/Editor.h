@@ -73,6 +73,8 @@ namespace cs808
         void layOut();
         [[nodiscard]] LidView& lidForTesting() noexcept { return *lid; }
         [[nodiscard]] EtchedBoard& boardForTesting() noexcept { return *board; }
+        /** For the snapshot tests: one frame of the editor's timer (the engine's lights and board nodes taken). */
+        void frameForTesting() { timerCallback(); }
         /** A pattern key pressed: that pattern plays next and is edited; `extend` makes a chain from the key held. */
         void selectPatternKey(int index, bool extend);
         [[nodiscard]] Controls& controlsForTesting() noexcept { return *controls; }
@@ -154,6 +156,7 @@ namespace cs808
         std::unique_ptr<TransportStrip> transport;
         std::unique_ptr<LidOverlay> lidOverlay;
         std::unique_ptr<LidView> lid;
+        LiveBoard liveBoard; // the drums' board nodes as the engine plays them (D320)
         std::unique_ptr<LibraryShelf> library;
         // An audition (D273): the project and the chain as they were, and whether the audition started playing.
         std::unique_ptr<Project> auditionSaved;

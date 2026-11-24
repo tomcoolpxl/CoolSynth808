@@ -128,6 +128,11 @@ namespace cs808
         [[nodiscard]] unsigned int lightReports() const noexcept { return watch.reportCount(); }
         /** The engine's watch on the circuits: a sheet of Under the Lid captures its drum's circuit there (D317). */
         [[nodiscard]] coolsynth::synth::v3::CircuitWatch& circuitWatch() noexcept { return watch; }
+        /** The board's nodes as the drums play them (D320), by the panel's lane (0 the bass drum to 10 the closed hat):
+            each lane's hit count, and each node's largest swing from its rest since the last take. Message thread. */
+        void takeBoard(std::array<unsigned int, 11>& hits, std::array<std::array<float, 9>, 11>& swings) noexcept;
+        /** The board's nodes' rests, by lane, from their recordings: the engine's swings are measured from them. */
+        void setBoardRests(const std::array<std::array<float, 9>, 11>& rests) noexcept;
         /** Writes the hits recorded while playing into the project; returns whether any came. */
         bool applyRecordedHits();
 

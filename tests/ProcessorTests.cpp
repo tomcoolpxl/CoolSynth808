@@ -9,6 +9,7 @@
 
 #include "Processor.h"
 #include "Project.h"
+#include "ui/NodeSwing.h"
 
 /*
     The processor offline: the 808 kit sounding where the steps are, MIDI clock out at 24 a beat, an incoming clock
@@ -307,6 +308,85 @@ public:
                 expectGreaterThan(good, checked * 4 / 5, juce::String(c.name) + ": four in five follow their recording");
                 expectEquals(turned, 0, juce::String(c.name) + ": none turned round (a sign or a port wrong)");
             }
+        }
+
+        beginTest("the_board_follows_the_engine_as_its_recordings_do");
+        {
+            // D320: with the lid lifted, every drum's board nodes are fed from the engine as it plays. Each drum struck
+            // alone: each node's largest swing from rest goes the way its recording's does, and comes near its size.
+            const auto board = cs808::makeLiveBoard();
+            int nodes = 0, sameWay = 0, nearSize = 0;
+            for (int lane = 0; lane < 11; ++lane)
+            {
+                auto p = prepared();
+                p->editKit([](KitValues& k)
+                {
+                    k.knob[1] = 0.8f; k.knob[2] = 0.5f; k.knob[3] = 0.6f;   // the bass drum as recorded
+                    k.knob[4] = 0.8f; k.knob[5] = 0.5f; k.knob[6] = 0.6f;   // the snare
+                    k.knob[13] = 0.8f; k.knob[14] = 0.8f; k.knob[15] = 0.8f; // rim shot, clap, cowbell
+                    k.knob[16] = 0.8f; k.knob[17] = 0.5f; k.knob[18] = 0.5f; // the cymbal
+                    k.knob[19] = 0.8f; k.knob[20] = 0.5f; k.knob[21] = 0.8f; // the hats
+                });
+                p->editBank([lane](SequencerBank& b) { b.pattern[0].lanes[static_cast<std::size_t>(lane)].a[0].on = true; }, false);
+                {
+                    std::array<std::array<float, 9>, 11> rests {};
+                    for (std::size_t l = 0; l < rests.size(); ++l)
+                        for (std::size_t k = 0; k < 9; ++k)
+                            rests[l][k] = board.nodes[l][k].recordedRest;
+                    p->setBoardRests(rests);
+                }
+                p->circuitWatch().watchBoard(true);
+                p->setPlaying(true);
+                std::array<float, 9> extreme {};
+                const auto take = [&]
+                {
+                    std::array<unsigned int, 11> hits {};
+                    std::array<std::array<float, 9>, 11> swings {};
+                    p->takeBoard(hits, swings);
+                    for (std::size_t k = 0; k < 9; ++k)
+                        if (std::abs(swings[static_cast<std::size_t>(lane)][k]) > std::abs(extreme[k]))
+                            extreme[k] = swings[static_cast<std::size_t>(lane)][k];
+                };
+                (void) render(*p, 48000, [&](juce::MidiBuffer&, std::int64_t, int) { take(); });
+                take();
+                juce::String line = "lane " + juce::String(lane) + ":";
+                for (std::size_t k = 0; k < 9; ++k)
+                {
+                    const auto& n = board.nodes[static_cast<std::size_t>(lane)][k];
+                    if (n.name.empty() || n.recordedPeak < 1.0e-3f)
+                        continue;
+                    ++nodes;
+                    const float ratio = std::abs(extreme[k]) / n.recordedPeak;
+                    const bool way = (extreme[k] >= 0.0f ? 1.0f : -1.0f) == n.recordedSign;
+                    sameWay += way ? 1 : 0;
+                    nearSize += ratio > 1.0f / 3.0f && ratio < 3.0f ? 1 : 0;
+                    line << "  " << juce::String(n.name) << " x" << juce::String(ratio, 2) << (way ? "" : " (turned)");
+                }
+                logMessage(line);
+            }
+            logMessage("board nodes " + juce::String(nodes) + ": the same way " + juce::String(sameWay) + ", near their size " + juce::String(nearSize));
+            expectGreaterThan(nodes, 50, "the drums' board nodes");
+            expectGreaterThan(sameWay, nodes * 9 / 10, "nine in ten swing the way their recording does (a ringing output's largest swing may go either way)");
+            expectGreaterThan(nearSize, nodes * 9 / 10, "nine in ten come within three times of their recording's size");
+
+            // What the feed costs: a bar of every drum, the board shown and not.
+            const auto timed = [&](bool shown)
+            {
+                auto p = prepared();
+                p->editBank([](SequencerBank& b)
+                {
+                    for (int lane = 0; lane < 11; ++lane)
+                        for (int step = 0; step < 16; step += 2)
+                            b.pattern[0].lanes[static_cast<std::size_t>(lane)].a[static_cast<std::size_t>(step)].on = true;
+                }, false);
+                p->circuitWatch().watchBoard(shown);
+                p->setPlaying(true);
+                const auto start = juce::Time::getMillisecondCounterHiRes();
+                (void) render(*p, 96000);
+                return juce::Time::getMillisecondCounterHiRes() - start;
+            };
+            const double off = timed(false), on = timed(true);
+            logMessage("two seconds of every drum: " + juce::String(off, 0) + " ms without the board, " + juce::String(on, 0) + " ms with it");
         }
 
         beginTest("a_switch_strikes_the_other_instrument");

@@ -81,6 +81,7 @@ namespace cs808
             // Played from a recording (D280): which stage of its drum it is (-1 the drum's own trigger or output), and
             // once bound, how far its node is from rest (0..1, with an afterglow) and which way, at the recording's times.
             int stage = -1;
+            std::string node; // the node of its drum it stands for, once bound (D280; live from the engine: D320)
             std::vector<float> ms, level01, sign;
             float tailTau = 60.0f; // ms: how the recording's last value fades on past its end
             double recordedRing = 0.0; // the ring length the recording was made at, for the Decay knobs
@@ -998,6 +999,7 @@ namespace cs808
                     ++unbound;
                     continue;
                 }
+                f.node = src->node;
                 auto swing = NodeSwing::of(rec.ms, series->second);
                 if (! swing.bound())
                 {
@@ -2601,6 +2603,7 @@ namespace cs808
             return *d;
         }
         double now = 0.0, last = 0.0;
+        const LiveBoard* liveBoard = nullptr; // the editor's (D320)
         int selected = -1;
         juce::Random random { 1980 };
         // Which sheet: a button showing it, a menu of them all (ten no longer fit side by side, D278).
@@ -2762,6 +2765,8 @@ namespace cs808
             }
         }
     }
+
+    void LidView::setLiveBoard(const LiveBoard* board) { impl->liveBoard = board; }
 
     bool LidView::showMomentForTesting(double ms)
     {
@@ -3085,15 +3090,22 @@ namespace cs808
 
         // The voltage tints and the current: from the recordings where a wire stands for a node of its drum (D280),
         // otherwise as the mockup animates them (the noise, the oscillators, the common trigger).
+        // While the engine plays, a bound wire follows its node as the engine moves it (D320), on its recording's scale.
+        const bool liveNow = impl->liveBoard != nullptr && impl->liveBoard->live(now);
         for (const auto& f : b.flows)
         {
             const double el = f.t0 >= 0.0 ? now - f.t0 : -1.0;
             const double elData = el < 10.0 ? el : 10.0 + (el - 10.0) / f.stretch; // the Decay knob stretches the ring
             float sign = 1.0f;
+            const int slot = liveNow && f.bound() ? impl->liveBoard->slotOf(f.key, f.node) : -1;
+            const float liveValue = slot >= 0 ? impl->liveBoard->value(f.key, slot) : 0.0f;
             if (f.kind == Kind::volt)
             {
                 double v = f.idle;
-                if (el >= 0.0 && f.bound())
+                if (slot >= 0)
+                    v = f.mode == Mode::ac ? std::abs(liveValue) * 0.9 * std::sin(now / 1000.0 * juce::MathConstants<double>::twoPi * f.frequency + f.phase)
+                                           : liveValue * 0.9;
+                else if (el >= 0.0 && f.bound())
                 {
                     const double m = f.at(elData, sign);
                     v = f.mode == Mode::ac ? m * 0.9 * std::sin(now / 1000.0 * juce::MathConstants<double>::twoPi * f.frequency + f.phase)
@@ -3118,7 +3130,12 @@ namespace cs808
                 continue;
             }
             double a = f.idle;
-            if (el >= 0.0 && f.bound())
+            if (slot >= 0)
+            {
+                const double peak = f.kind == Kind::pulse ? 1.0 : f.kind == Kind::env ? 0.6 : f.kind == Kind::burst || f.burstEnvelope ? 0.7 : 1.4 * f.level;
+                a = std::max(a, peak * std::abs(liveValue));
+            }
+            else if (el >= 0.0 && f.bound())
             {
                 const double peak = f.kind == Kind::pulse ? 1.0 : f.kind == Kind::env ? 0.6 : f.kind == Kind::burst || f.burstEnvelope ? 0.7 : 1.4 * f.level;
                 a = std::max(a, peak * f.at(elData, sign));
@@ -3245,8 +3262,47 @@ namespace cs808
             if (it == recordings.end())
                 it = recordings.emplace(nodes[lane][0], boardRecording(nodes[lane][0])).first;
             for (std::size_t role = 0; role < PanelSwings::roleCount; ++role)
+            {
+                out.names[lane][role] = nodes[lane][role + 1];
                 if (const auto s = it->second.series.find(nodes[lane][role + 1]); s != it->second.series.end())
                     out.lanes[lane][role] = NodeSwing::of(it->second.ms, s->second);
+            }
+        }
+        return out;
+    }
+
+    LiveBoard makeLiveBoard()
+    {
+        // The engine's board nodes by the panel's lanes (D320), each on its recording's scale: the largest swing from
+        // rest that its recording has.
+        using W = coolsynth::synth::v3::CircuitWatch;
+        static constexpr std::array<int, 11> lightOfLane { W::bassDrum, W::snare, W::lowTom, W::midTom, W::highTom, W::rimShot,
+                                                           W::clap, W::cowbell, W::cymbal, W::openHat, W::closedHat };
+        static constexpr std::array<const char*, 11> recordingOfLane { "bd", "sd", "lt", "mt", "ht", "rs", "cp", "cb", "cy", "oh", "ch" };
+        LiveBoard out;
+        std::map<std::string, Recording> recordings;
+        for (std::size_t lane = 0; lane < lightOfLane.size(); ++lane)
+        {
+            auto it = recordings.find(recordingOfLane[lane]);
+            if (it == recordings.end())
+                it = recordings.emplace(recordingOfLane[lane], boardRecording(recordingOfLane[lane])).first;
+            for (std::size_t k = 0; k < static_cast<std::size_t>(LiveBoard::slots); ++k)
+            {
+                auto& node = out.nodes[lane][k];
+                node.name = std::string(W::boardNodes[static_cast<std::size_t>(lightOfLane[lane])][k]);
+                if (node.name.empty())
+                    continue;
+                if (const auto s = it->second.series.find(node.name); s != it->second.series.end() && ! s->second.empty())
+                {
+                    node.recordedRest = s->second.front();
+                    for (const float v : s->second)
+                        if (const float d = v - s->second.front(); std::abs(d) > node.recordedPeak)
+                        {
+                            node.recordedPeak = std::abs(d);
+                            node.recordedSign = d >= 0.0f ? 1.0f : -1.0f;
+                        }
+                }
+            }
         }
         return out;
     }

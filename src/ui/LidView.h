@@ -5,6 +5,7 @@
 namespace cs808
 {
     class Processor;
+    class LiveBoard;
 
     /** Under the Lid: the whole board as one reduced schematic, the current on its wires (D263, D264). */
     class LidView final : public juce::Component
@@ -28,6 +29,8 @@ namespace cs808
         bool showMomentForTesting(double ms);
         /** A click on the sheet that is not on a part: back to the lifted lid (D319). */
         std::function<void()> onBack;
+        /** The drums' board nodes as the engine plays them, for the whole board's sheet (D320); the editor's. */
+        void setLiveBoard(const LiveBoard* board);
 
     private:
         [[nodiscard]] juce::AffineTransform sheetTransform() const;

@@ -74,6 +74,30 @@ namespace cs808
             byLane[lane] = lightOfLane[lane] < 0 ? 0.0f : watch.take(lightOfLane[lane]);
     }
 
+    void Processor::setBoardRests(const std::array<std::array<float, 9>, 11>& rests) noexcept
+    {
+        using W = coolsynth::synth::v3::CircuitWatch;
+        static constexpr std::array<int, 11> lightOfLane { W::bassDrum, W::snare, W::lowTom, W::midTom, W::highTom, W::rimShot,
+                                                           W::clap, W::cowbell, W::cymbal, W::openHat, W::closedHat };
+        for (std::size_t lane = 0; lane < rests.size(); ++lane)
+            for (int k = 0; k < W::boardSlots; ++k)
+                watch.setBoardRest(lightOfLane[lane], k, rests[lane][static_cast<std::size_t>(k)]);
+    }
+
+    void Processor::takeBoard(std::array<unsigned int, 11>& hits, std::array<std::array<float, 9>, 11>& swings) noexcept
+    {
+        using W = coolsynth::synth::v3::CircuitWatch;
+        static_assert(W::boardSlots == 9, "the panel takes nine nodes a drum");
+        static constexpr std::array<int, 11> lightOfLane { W::bassDrum, W::snare, W::lowTom, W::midTom, W::highTom, W::rimShot,
+                                                           W::clap, W::cowbell, W::cymbal, W::openHat, W::closedHat };
+        for (std::size_t lane = 0; lane < hits.size(); ++lane)
+        {
+            hits[lane] = watch.boardHitCount(lightOfLane[lane]);
+            for (int k = 0; k < W::boardSlots; ++k)
+                swings[lane][static_cast<std::size_t>(k)] = watch.takeBoardSwing(lightOfLane[lane], k);
+        }
+    }
+
     void Processor::prepareToPlay(double sampleRate, int samplesPerBlock)
     {
         rate = sampleRate > 0.0 ? sampleRate : 48000.0;

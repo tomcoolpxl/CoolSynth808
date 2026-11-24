@@ -202,6 +202,16 @@ namespace cs808
         board->setCircuitLook(circuitAnimated, static_cast<EtchedBoard::CircuitShow>(circuitShow));
 
         lid = std::make_unique<LidView>(p);
+        liveBoard = makeLiveBoard();
+        {
+            std::array<std::array<float, LiveBoard::slots>, LiveBoard::lanes> rests {};
+            for (std::size_t l = 0; l < rests.size(); ++l)
+                for (std::size_t k = 0; k < rests[l].size(); ++k)
+                    rests[l][k] = liveBoard.nodes[l][k].recordedRest;
+            p.setBoardRests(rests);
+        }
+        board->setLiveBoard(&liveBoard);
+        lid->setLiveBoard(&liveBoard);
         lidOverlay = std::make_unique<LidOverlay>(*lid, [this] { showLid(false); });
         addChildComponent(*lidOverlay);
 
@@ -1083,6 +1093,14 @@ namespace cs808
         std::array<float, 12> lights {};
         processor.takeLights(lights);
         board->liveLevels(lights, processor.lightReports(), now);
+        // The board's nodes as the drums play them, while the lid is lifted (D320).
+        processor.circuitWatch().watchBoard(lidLifted);
+        {
+            std::array<unsigned int, LiveBoard::lanes> hits {};
+            std::array<std::array<float, LiveBoard::slots>, LiveBoard::lanes> swings {};
+            processor.takeBoard(hits, swings);
+            liveBoard.update(processor.lightReports(), hits, swings, now);
+        }
         board->tick(now);
         followTransport();
         // The panel is drawn again only when something it shows changed (the review of D267: it was drawn whole 30

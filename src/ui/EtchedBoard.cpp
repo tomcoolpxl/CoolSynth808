@@ -103,8 +103,15 @@ namespace cs808
     {
         if (role < 0 || role >= PanelSwings::roleCount)
             return 0.0f;
+        const bool liveNow = liveBoard != nullptr && liveBoard->live(now);
         const auto of = [&](int column)
         {
+            const auto lane = static_cast<std::size_t>(column - 1);
+            if (liveNow) // as the engine moves the node (D320)
+            {
+                const int slot = liveBoard->slotOf(column - 1, swings.names[lane][static_cast<std::size_t>(role)]);
+                return slot >= 0 ? liveBoard->value(column - 1, slot) : 0.0f;
+            }
             const double el = now - hitAt[static_cast<std::size_t>(column)];
             if (el < 0.0 || el > 5000.0)
                 return 0.0f;
