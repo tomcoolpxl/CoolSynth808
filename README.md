@@ -18,6 +18,7 @@ TR-808's eleven drum circuits, solved in real time as wave digital filters with 
   at the service notes' level. Each circuit's file in the engine lists them. Fuller models (a measured transistor
   card, the op-amps' slew) were rendered in ngspice and compared with both real units; today's matched them as well
   or better, so they stay.
+- Every part runs at 25 °C, as SPICE assumes: the circuits never warm up, drift or age forty years.
 
 TR-808 is a trademark of Roland Corporation. CoolSynth 808 is not made, approved or endorsed by Roland.
 
