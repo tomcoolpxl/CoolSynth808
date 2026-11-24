@@ -13,7 +13,7 @@ column of copper: the bass drum's Level, Tone and Decay, the snare's Snappy, the
 Accent and Volume under Master. Slide switches choose the second instrument of a circuit: conga for tom, claves for
 rim shot, maracas for clap. As the beat plays, each drum's column lights the way its recorded circuit rings.
 
-The sequencer sits on smoked glass below it.
+The sequencer sits on smoked glass below it, held over the brushed aluminium by four pins.
 
 - The patterns row: banks A to D, the sixteen patterns, F for the fill and Fill to play it once in the next bar; A,
   AB and B play the pattern's two halves. Click a pattern to play and edit it; right-click it for copy, paste, clear,

@@ -1,15 +1,18 @@
 #include "EtchedBoard.h"
 
+#include "Hardware.h"
+
 namespace cs808
 {
     namespace
     {
         juce::Colour rgb(std::uint32_t c, float a = 1.0f) { return juce::Colour(0xff000000u | c).withAlpha(a); }
 
-        // The copper as the mockup's etched look has it: dull, a little warmer than the metal (D292).
-        const juce::Colour copper = rgb(0xb08c5c, 0.32f);
-        const juce::Colour padColour = rgb(0xbe9660, 0.55f);
-        const juce::Colour outline = rgb(0xbe9660, 0.28f);
+        // The copper on the silver board (D303, the mockups' 5.4): darker than on the old dark metal, so it shows.
+        const juce::Colour copper = rgb(0x966834, 0.48f);
+        const juce::Colour padColour = rgb(0x8c6436, 0.7f);
+        // The name plate's faded outline, printed dark on the aluminium, its corners round.
+        const juce::Colour outline = rgb(0x1e2024, 0.32f);
     }
 
     EtchedBoard::EtchedBoard()
@@ -58,6 +61,7 @@ namespace cs808
             paintMetal(c);
             paintCopper(c);
             paintScrews(c);
+            paintShadows(c);
         }
         g.drawImageTransformed(cache, juce::AffineTransform::scale(1.0f / cacheScale));
         // The circuit lit over its still self, cut round the controls as the copper is (D298).
@@ -108,15 +112,16 @@ namespace cs808
 
     void EtchedBoard::paintMetal(juce::Graphics& g) const
     {
+        // Brushed aluminium (D303, the mockups' 5.4): light, a little cooler at the foot.
         const auto w = static_cast<float>(width), h = static_cast<float>(height);
-        g.setGradientFill(juce::ColourGradient(rgb(0x2c2a27), 0.0f, 0.0f, rgb(0x23211e), 0.0f, h, false));
+        g.setGradientFill(juce::ColourGradient(rgb(0xc6c9cc), 0.0f, 0.0f, rgb(0xa9adb1), 0.0f, h, false));
         g.fillRect(0.0f, 0.0f, w, h);
         // brushed: a faint light line every 3 px, the two between a shade darker
         for (int x = 0; x < width; x += 3)
         {
-            g.setColour(juce::Colours::white.withAlpha(0.012f));
+            g.setColour(juce::Colours::white.withAlpha(0.05f));
             g.fillRect(static_cast<float>(x), 0.0f, 1.0f, h);
-            g.setColour(juce::Colours::black.withAlpha(0.02f));
+            g.setColour(juce::Colours::black.withAlpha(0.025f));
             g.fillRect(static_cast<float>(x + 1), 0.0f, 2.0f, h);
         }
         // light falling on the upper left: an ellipse 1200 by 400 px round a point on the top edge
@@ -124,7 +129,7 @@ namespace cs808
             juce::Graphics::ScopedSaveState state(g);
             const juce::Point<float> c(w * 0.3f, 0.0f);
             g.addTransform(juce::AffineTransform::scale(1.0f, 400.0f / 1200.0f, c.x, c.y));
-            juce::ColourGradient sheen(juce::Colours::white.withAlpha(0.05f), c, juce::Colours::white.withAlpha(0.0f), c.translated(1200.0f * 0.7f, 0.0f), true);
+            juce::ColourGradient sheen(juce::Colours::white.withAlpha(0.18f), c, juce::Colours::white.withAlpha(0.0f), c.translated(1200.0f * 0.7f, 0.0f), true);
             g.setGradientFill(sheen);
             g.fillRect(juce::Rectangle<float>(c.x - 1200.0f, -1200.0f, 2400.0f, 2400.0f));
         }
@@ -132,15 +137,9 @@ namespace cs808
 
     void EtchedBoard::paintScrews(juce::Graphics& g) const
     {
-        for (const float x : { 16.0f, static_cast<float>(width) - 16.0f })
-        {
-            const auto r = juce::Rectangle<float>(12.0f, 12.0f).withCentre({ x, 16.0f });
-            g.setColour(juce::Colours::black);
-            g.fillEllipse(r.translated(0.0f, 1.0f));
-            g.setGradientFill(juce::ColourGradient(rgb(0x8a857c), r.getX() + r.getWidth() * 0.4f, r.getY() + r.getHeight() * 0.35f,
-                                                   rgb(0x3b3833), r.getRight(), r.getBottom(), true));
-            g.fillEllipse(r);
-        }
+        // Two countersunk Phillips screws at the top corners, each turned its own way (D303).
+        drawScrew(g, { 16.0f, 16.0f }, 13.0f, 0.42f);
+        drawScrew(g, { static_cast<float>(width) - 16.0f, 16.0f }, 13.0f, 1.13f);
     }
 
     juce::Path EtchedBoard::tracePath(const std::vector<juce::Point<float>>& pts)
@@ -196,8 +195,19 @@ namespace cs808
                 if (k.round)
                     g.drawEllipse(k.area, 1.0f);
                 else
-                    g.drawRoundedRectangle(k.area, 4.0f, 1.0f);
+                    g.drawRoundedRectangle(k.area, 6.0f, 1.0f);
             }
+    }
+
+    void EtchedBoard::paintShadows(juce::Graphics& g) const
+    {
+        // The sequencer's glass floats a little above the board on its four pins: its shadow falls on the metal,
+        // offset down and soft; the transport strip, closer to the board, casts a smaller one (D303).
+        const juce::Rectangle<int> glass { 14, 344, 1252, 442 };
+        juce::DropShadow(juce::Colours::black.withAlpha(0.42f), 22, { 0, 9 }).drawForRectangle(g, glass);
+        juce::DropShadow(juce::Colours::black.withAlpha(0.25f), 6, { 0, 2 }).drawForRectangle(g, glass);
+        if (! stripArea.isEmpty())
+            juce::DropShadow(juce::Colours::black.withAlpha(0.3f), 8, { 0, 3 }).drawForRectangle(g, stripArea.toNearestInt());
     }
 
     void EtchedBoard::paintGround(juce::Graphics& g) const

@@ -22,9 +22,16 @@ namespace cs808
         bool grid = false;
     };
 
-    inline const std::array<Theme, 4>& themes()
+    inline const std::array<Theme, 5>& themes()
     {
-        static const std::array<Theme, 4> list { {
+        static const std::array<Theme, 5> list { {
+            // The user's choice (D303): the mockups' 5.4, brushed aluminium on top; under the glass cool greys and the
+            // same orange.
+            { "silver", "Silver",
+              juce::Colour(0xff2b2d30), juce::Colour(0xff2f3236), juce::Colour(0xffeef0f2), juce::Colour(0xffa3a9b0),
+              juce::Colour(0xff4a4e54), juce::Colour(0xffef6b21), juce::Colour(0xffef6b21), juce::Colour(0xff1a1714),
+              juce::Colour(0xffffa04a), juce::Colour(0xffff8c3a), juce::Colour(0xff8fd694), juce::Colour(0xffe8685a),
+              { juce::Colour(0xff464a50), juce::Colour(0xff51555b), juce::Colour(0xff5c6066), juce::Colour(0xff686c72) }, false },
             { "studio", "Studio 1982",
               juce::Colour(0xff171615), juce::Colour(0xff2d2b28), juce::Colour(0xffece4d2), juce::Colour(0xff9a927f),
               juce::Colour(0xff4a463f), juce::Colour(0xffe8742a), juce::Colour(0xffe8742a), juce::Colour(0xff1a1512),
@@ -56,7 +63,13 @@ namespace cs808
         return current;
     }
     inline const Theme& theme() { return *currentThemePointer(); }
-    inline void setTheme(int index) { currentThemePointer() = &themes()[static_cast<std::size_t>(juce::jlimit(0, 3, index))]; }
+    inline void setTheme(int index) { currentThemePointer() = &themes()[static_cast<std::size_t>(juce::jlimit(0, static_cast<int>(themes().size()) - 1, index))]; }
+
+    /** What is printed on the silver board (D303): dark on the aluminium. Under the glass the theme's colours. */
+    namespace boardInk
+    {
+        inline const juce::Colour ink { 0xff1d2024 }, label { 0xff2a2e33 }, dim { 0xff6c7178 }, accent { 0xffd9581a };
+    }
 
     // The panel's type (D292): one family, Archivo, condensed for labels as an instrument's printing is, and IBM Plex
     // Mono for numbers, so digits keep their width. Embedded, so it looks the same on every computer. Sizes are point

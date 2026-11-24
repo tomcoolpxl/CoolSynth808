@@ -43,11 +43,11 @@ namespace cs808
         {
             const float w = static_cast<float>(getWidth());
             constexpr float top = 8.0f; // room for the ticks
-            drawHardwareKnob(g, juce::Rectangle<float>(diameter, diameter).withCentre({ w * 0.5f, top + diameter * 0.5f }), get ? get() : 0.0f, accent || locked);
+            drawHardwareKnob(g, juce::Rectangle<float>(diameter, diameter).withCentre({ w * 0.5f, top + diameter * 0.5f }), get ? get() : 0.0f, accent || locked, silver);
             float y = top + diameter + 5.0f;
             if (label.isNotEmpty())
             {
-                g.setColour(dragging || isMouseOver() ? juce::Colours::white : labelColour);
+                g.setColour(dragging || isMouseOver() ? (silver ? juce::Colours::black : juce::Colours::white) : labelColour);
                 g.setFont(labelFont(10.0f));
                 const auto shown = dragging && get && ! valueText ? juce::String(get() * 10.0f, 1) : label.toUpperCase();
                 g.drawText(shown, juce::Rectangle<float>(-20.0f, y, w + 40.0f, 10.0f), juce::Justification::centred, false);
@@ -247,7 +247,7 @@ namespace cs808
         g.setFont(font);
         const auto word = [&](const juce::String& text, float y, bool lit)
         {
-            g.setColour(lit ? juce::Colour(0xfff4efe4) : juce::Colour(0xff8f8877));
+            g.setColour(lit ? boardInk::label : boardInk::dim); // printed on the silver board (D303)
             g.drawText(text.toUpperCase(), juce::Rectangle<float>(-20.0f, y, w + 40.0f, static_cast<float>(wordHeight)), juce::Justification::centred, false);
         };
         word(first, 0.0f, ! down);

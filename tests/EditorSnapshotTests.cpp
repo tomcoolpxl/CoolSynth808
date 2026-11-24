@@ -51,6 +51,31 @@ public:
             expectEquals(dynamic_cast<Editor*>(e.get())->lidForTesting().boardFlowsUnbound(), 0);
         }
 
+        beginTest("a_pattern_key_picked_while_playing_lights_at_once_not_at_the_bar_line");
+        {
+            // D303: with Change at the bar, the pick reaches the processor only at the bar line; its key lit only then.
+            auto p = std::make_unique<Processor>();
+            p->setPlayConfigDetails(0, 2, 48000.0, 512);
+            p->prepareToPlay(48000.0, 512);
+            p->editPlay([](PlaySettings& s) { s.changeAtBar = true; });
+            p->setChain({ 0 });
+            std::unique_ptr<juce::AudioProcessorEditor> e(p->createEditor());
+            auto* editor = dynamic_cast<Editor*>(e.get());
+            juce::AudioBuffer<float> buffer(2, 512);
+            juce::MidiBuffer midi;
+            p->setPlaying(true);
+            for (int block = 0; block < 2000 && ! (p->isPlaying() && p->playingSixteenth() >= 2); ++block)
+            {
+                buffer.clear();
+                midi.clear();
+                p->processBlock(buffer, midi);
+            }
+            expect(p->isPlaying());
+            editor->selectPatternKey(3, false);
+            expectEquals(p->playingPattern(), 0);
+            expectEquals(editor->queuedPattern(), 3);
+        }
+
         if (folderName.isEmpty())
             return;
         const juce::File folder(folderName);

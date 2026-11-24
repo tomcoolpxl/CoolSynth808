@@ -24,8 +24,8 @@ namespace cs808
         float columnCentre(int c) { return columnX(c) + columnWidth(c) * 0.5f; }
 
         // The words printed on the board.
-        const juce::Colour idInk(0xfff7f2e8);
-        const juce::Colour nameInk(0xffe3dccb);
+        const juce::Colour idInk = boardInk::ink;     // dark on the silver board (D303)
+        const juce::Colour nameInk = boardInk::label;
 
         /** A word's box on the board, 5 px of clearance each side, for the copper to keep off. */
         KeepOut wordKeepOut(const juce::String& text, const juce::Font& font, float centreX, float top, float height)
@@ -59,7 +59,7 @@ namespace cs808
                 for (const auto d : { juce::Point<float>(-1.0f, 0.0f), { 1.0f, 0.0f }, { 0.0f, -1.0f }, { 0.0f, 1.0f } })
                     g.drawText(id, idArea.translated(d.x, d.y), juce::Justification::centred, false);
             }
-            g.setColour(sel ? theme().lit : idInk);
+            g.setColour(sel ? boardInk::accent : idInk);
             g.drawText(id, idArea, juce::Justification::centred, false);
             if (column > 0)
             {
@@ -92,12 +92,12 @@ namespace cs808
             const juce::String first = "CoolSynth ";
             const float w1 = juce::GlyphArrangement::getStringWidth(light, first), w2 = juce::GlyphArrangement::getStringWidth(bold, "808");
             const juce::Rectangle<float> line(14.0f, 5.0f, 300.0f, 20.0f);
-            g.setColour(juce::Colour(0xffece4d2));
+            g.setColour(boardInk::ink);
             g.setFont(light);
             g.drawText(first, line, juce::Justification::centredLeft, false);
             g.setFont(bold);
             g.drawText("808", line.withTrimmedLeft(w1), juce::Justification::centredLeft, false);
-            g.setColour(juce::Colour(0xffddd5c3));
+            g.setColour(boardInk::label);
             g.setFont(labelFont(10.0f));
             g.drawText("BEAT COMPOSER", line.withTrimmedLeft(w1 + w2 + 4.0f + 10.0f).translated(0.0f, 1.0f), juce::Justification::centredLeft, false);
         }
@@ -229,8 +229,11 @@ namespace cs808
         // A pattern picked while another plays is the whole chain until the bar line takes it.
         if (! processor.isPlaying())
             return -1;
-        const auto chain = processor.chain();
         const int heard = processor.playingPattern();
+        // Picked for the next bar line: the processor has not got it yet, but the key lights at the press (D303).
+        if (pickedPattern >= 0 && pickedPattern != heard)
+            return pickedPattern;
+        const auto chain = processor.chain();
         return chain.size() == 1 && heard >= 0 && chain.front() != heard ? chain.front() : -1;
     }
 
@@ -287,6 +290,8 @@ namespace cs808
             const float cx = columnCentre(column);
             const int top = knobTop + row * knobPitch;
             knob.diameter = static_cast<float>(knobSize);
+            knob.silver = true; // mounted on the silver board (D303)
+            knob.labelColour = boardInk::label;
             knob.setBounds(juce::roundToInt(cx - 30.0f), top - 8, 60, 8 + knobSize + 5 + 12);
             columnKeepOuts.push_back({ juce::Rectangle<float>(2.0f * (knobSize / 2 + 9), 2.0f * (knobSize / 2 + 9)).withCentre({ cx, top + knobSize * 0.5f }), true });
             columnKeepOuts.push_back(wordKeepOut(knob.label.toUpperCase(), labelFont(10.0f), cx, static_cast<float>(top + knobSize + 4), 14.0f));
@@ -364,6 +369,7 @@ namespace cs808
         board->addAndMakeVisible(*transport);
         const int w = transport->preferredWidth();
         transport->setBounds(baseWidth - 30 - w, 5, w, TransportStrip::height);
+        board->setStripArea(transport->getBounds().toFloat());
     }
 
     void Editor::updateKeepOuts()
@@ -404,6 +410,7 @@ namespace cs808
             firstChainKey = index;
             setChain({ index });
         }
+        pickedPattern = processor.isPlaying() && ! extend ? index : -1;
         editPattern = index;
         refresh();
     }
@@ -815,6 +822,7 @@ namespace cs808
         editB = false;
         selectedStep = -1;
         firstChainKey = -1;
+        pickedPattern = -1;
         refresh();
     }
 
@@ -925,8 +933,10 @@ namespace cs808
         fold(beat, processor.followingClock() ? juce::roundToInt(processor.tempoNow() * 10.0) : -1);
         fold(beat, fillAsked);
         fold(beat, chainPlace);
-        if (fillAsked || queuedPattern() >= 0)
-            fold(beat, static_cast<std::int64_t>(juce::Time::getMillisecondCounter() / 250u)); // the queued slot blinks
+        // A pick that has come in, or a stopped transport, ends the wait (D303).
+        if (pickedPattern >= 0 && (! processor.isPlaying() || processor.playingPattern() == pickedPattern))
+            pickedPattern = -1;
+        fold(beat, queuedPattern()); // the queued slot is lit steady, no longer blinking
         if (edited || look != lastLook)
         {
             lastLook = look;

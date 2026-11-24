@@ -38,6 +38,8 @@ namespace cs808
 
         /** What the controls cover; the panel fills it after laying them out. */
         void setKeepOuts(std::vector<KeepOut> list);
+        /** Where the transport strip sits, for its shadow (D303). */
+        void setStripArea(juce::Rectangle<float> area) { stripArea = area; cache = {}; }
         [[nodiscard]] const std::vector<KeepOut>& keepOuts() const noexcept { return keeps; }
 
         void paint(juce::Graphics& g) override;
@@ -57,10 +59,13 @@ namespace cs808
         void paintScrews(juce::Graphics& g) const;
         void paintCopper(juce::Graphics& g) const;
         void paintGround(juce::Graphics& g) const;
+        /** The glass's shadow on the metal, and the transport strip's (D303). */
+        void paintShadows(juce::Graphics& g) const;
         /** The etched circuit unlit (D298), under the keep-outs' clip; its light is drawn over it in paint. */
         void paintCircuit(juce::Graphics& g) const;
 
         std::vector<KeepOut> keeps;
+        juce::Rectangle<float> stripArea;
         // The board changes only when the keep-outs do: drawn once per pixel scale, then copied.
         juce::Image cache;
         float cacheScale = 0.0f;

@@ -31,7 +31,7 @@ namespace cs808
     /** A small round lens centred on a point; lit lenses glow. */
     void drawLens(juce::Graphics& g, juce::Point<float> centre, float diameter, Lens lens);
     /** A knob: printed ticks, a shadow, a solid cap and a pointer. An accent knob is orange. */
-    void drawHardwareKnob(juce::Graphics& g, juce::Rectangle<float> area, float value, bool accent);
+    void drawHardwareKnob(juce::Graphics& g, juce::Rectangle<float> area, float value, bool accent, bool silver = false);
     /** A vertical slide switch, its thumb up (first) or down (second), in a 28 by 46 box scaled to the area. */
     void drawSlideSwitch(juce::Graphics& g, juce::Rectangle<float> area, bool second);
 
@@ -45,4 +45,8 @@ namespace cs808
     /** A step key that is on: an orange plastic cap as the Accent knob's, lit bright from inside while it sounds.
         No dark surround, so it keeps the size of the keys beside it (the mockup's .ksteps .key.on and .ph.on). */
     void drawStepKeyOn(juce::Graphics& g, juce::Rectangle<float> area, bool sounding, float opacity);
+    /** A countersunk Phillips screw sitting flush in the board, its cross turned to ngle (radians) (D303). */
+    void drawScrew(juce::Graphics& g, juce::Point<float> centre, float diameter, float angle);
+    /** A polished cap that holds the glass to the board, with its shadow on the glass (D303). */
+    void drawStandoff(juce::Graphics& g, juce::Point<float> centre, float diameter);
 }

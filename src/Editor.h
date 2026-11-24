@@ -154,6 +154,7 @@ namespace cs808
         std::uint64_t lastBeat = 0; // and what moves with the beat
         int patternBeforeFill = 0;
         int firstChainKey = -1; // the pattern key held for a chain
+        int pickedPattern = -1; // picked while playing, waiting for its bar line (D303)
         bool fillAsked = false;
         std::vector<double> taps; // Tap's last presses (ms)
         // Following the chain (followTransport).

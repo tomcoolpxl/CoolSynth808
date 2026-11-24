@@ -56,19 +56,18 @@ namespace cs808
             }
             else
             {
-                drawSlotKey(g, box, has);
+                // Picked and waiting for its bar line: lit at once, a steady orange cap, so the press shows at once (D303).
                 if (queuedLit)
-                {
-                    g.setColour(rgb(0x6a3a18));
-                    g.fillRoundedRectangle(box, 3.0f);
-                }
+                    drawKeyCap(g, box, Cap::orange, false, false, 3.0f);
+                else
+                    drawSlotKey(g, box, has);
             }
             if (edited)
             {
                 g.setColour(ink);
                 g.drawRoundedRectangle(box.expanded(2.0f), 5.0f, 2.0f);
             }
-            word(g, text, box, playing ? backlitInk : (has || queuedLit) ? keyInk : emptyInk, monoFont(11.0f), juce::Justification::centred);
+            word(g, text, box, playing || queuedLit ? backlitInk : has ? keyInk : emptyInk, monoFont(11.0f), juce::Justification::centred);
         }
 
         /** The lane's Level knob, the Accent's for the accent lane: what its level bar shows. */
@@ -215,28 +214,24 @@ namespace cs808
             const int heard = playing ? p.playingPattern() : -2;
             const int step = editor.stepInBar();
             const float progress = static_cast<float>(step + 1) / 16.0f;
-            const bool blinkLit = (juce::Time::getMillisecondCounter() / 250u) % 2u == 0u;
             const int queued = editor.queuedPattern();
             const auto& bank = project.currentBank();
             for (int i = 0; i < SequencerBank::patterns; ++i)
                 paintSlot(g, slotBox(i), patternLabel(i), hasContent(bank.pattern[static_cast<std::size_t>(i)]), editor.editPattern == i,
-                          heard == i, queued == i && blinkLit, progress);
-            paintSlot(g, fillBox(), "F", hasContent(bank.fill), editor.editPattern == -1, heard == -1, editor.fillQueued() && blinkLit, progress);
+                          heard == i, queued == i, progress);
+            paintSlot(g, fillBox(), "F", hasContent(bank.fill), editor.editPattern == -1, heard == -1, editor.fillQueued(), progress);
         }
 
+        // A key acts as it goes down, as a hardware key does: no wait for the release (D303).
         void mouseDown(const juce::MouseEvent& e) override
         {
-            if (! e.mods.isPopupMenu())
+            if (e.mods.isPopupMenu())
+            {
+                for (int i = 0; i < SequencerBank::patterns; ++i)
+                    if (slotBox(i).contains(e.position))
+                        showSlotMenu(i);
                 return;
-            for (int i = 0; i < SequencerBank::patterns; ++i)
-                if (slotBox(i).contains(e.position))
-                    showSlotMenu(i);
-        }
-
-        void mouseUp(const juce::MouseEvent& e) override
-        {
-            if (e.mods.isPopupMenu() || ! e.mouseWasClicked())
-                return;
+            }
             for (int i = 0; i < 4; ++i)
                 if (bankBox(i).contains(e.position))
                     editor.selectBankTab(i);
@@ -960,6 +955,10 @@ namespace cs808
     void SequencerGlass::paint(juce::Graphics& g)
     {
         drawSmokedGlass(g, getLocalBounds().toFloat(), 6.0f, false);
+        // The pane is held to the board by four polished pins at its corners (D303).
+        const float w = static_cast<float>(getWidth()), h = static_cast<float>(getHeight()), in = 9.0f;
+        for (const auto c : { juce::Point<float>(in, in), { w - in, in }, { in, h - in }, { w - in, h - in } })
+            drawStandoff(g, c, 9.0f);
     }
 
     void SequencerGlass::repaintPlaying()
