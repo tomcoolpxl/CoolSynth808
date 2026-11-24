@@ -26,6 +26,8 @@ namespace cs808
         [[nodiscard]] int boardFlowsUnbound() const;
         /** For the snapshot tests: the complete drum's sheet at this many ms into its hit, and whether it is live. */
         bool showMomentForTesting(double ms);
+        /** A click on the sheet that is not on a part: back to the lifted lid (D319). */
+        std::function<void()> onBack;
 
     private:
         [[nodiscard]] juce::AffineTransform sheetTransform() const;

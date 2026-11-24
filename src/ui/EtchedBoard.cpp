@@ -94,6 +94,54 @@ namespace cs808
             g.reduceClipRegion(juce::Rectangle<int>(14, juce::roundToInt(glassTop), 1252, 442));
             cpu.paintLit(g, now, [this](int owner) { return energyOf(owner); });
         }
+        if (lifted)
+            paintOpenFrames(g);
+    }
+
+    juce::Rectangle<float> EtchedBoard::openArea(int column) const
+    {
+        const auto& span = columnSpans[static_cast<std::size_t>(column)];
+        return { span.getStart() + 3.0f, 40.0f, span.getLength() - 6.0f, glassTop - 40.0f };
+    }
+
+    int EtchedBoard::columnAt(juce::Point<float> p) const
+    {
+        for (int c = 0; c < static_cast<int>(columnSpans.size()); ++c)
+            if (openArea(c).contains(p))
+                return c;
+        return -1;
+    }
+
+    void EtchedBoard::paintOpenFrames(juce::Graphics& g) const
+    {
+        // What opens (D319): each column (the master's opens the whole board) in a faint frame, bright under the
+        // mouse; most people never click when the only hint is a hover.
+        const auto& look = boardLook();
+        for (int c = 0; c < static_cast<int>(columnSpans.size()); ++c)
+        {
+            const bool over = c == hovered;
+            g.setColour(look.ink.withAlpha(over ? 0.75f : 0.16f));
+            g.drawRoundedRectangle(openArea(c), 6.0f, over ? 1.6f : 1.0f);
+        }
+    }
+
+    void EtchedBoard::mouseMove(const juce::MouseEvent& e)
+    {
+        const int now = lifted ? columnAt(e.position) : -1;
+        if (now == hovered)
+            return;
+        hovered = now;
+        setMouseCursor(now >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+        repaint();
+    }
+
+    void EtchedBoard::mouseExit(const juce::MouseEvent&)
+    {
+        if (hovered < 0)
+            return;
+        hovered = -1;
+        setMouseCursor(juce::MouseCursor::NormalCursor);
+        repaint();
     }
 
     void EtchedBoard::struck(std::uint32_t lanes, double nowMs)
@@ -494,12 +542,8 @@ namespace cs808
             onPartClicked(-1); // the CPU board
             return;
         }
-        for (std::size_t c = 0; c < columnSpans.size(); ++c)
-            if (columnSpans[c].contains(e.position.x))
-            {
-                onPartClicked(static_cast<int>(c));
-                return;
-            }
+        if (const int c = columnAt(e.position); c >= 0)
+            onPartClicked(c);
     }
 
     void EtchedBoard::paintFootprints(juce::Graphics& g) const

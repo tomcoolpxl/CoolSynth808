@@ -36,8 +36,9 @@ To come.
 - The strip at the top right: Play, Rec, the tempo, Tap, Swing, Lid, Library, File and Options. Space starts and
   stops.
 - Lid lifts the lid: the knobs and the glass go, the panel's circuit stays with its electricity, and the 808's CPU
-  board is drawn below it. A click on a drum's column, or on the CPU, opens its schematic; a drum's shows the engine's
-  own voltages and currents from its last hit, with the ngspice recording until it is struck.
+  board is drawn below it. Each column that opens is framed; a click opens its schematic, MASTER's the whole board. A
+  drum's shows the engine's own voltages and currents from its last hit, with the ngspice recording until it is
+  struck. A click on the sheet's empty space, or Escape, goes back.
 - Options opens a window of its own: the audio driver (Windows Audio, or ASIO), the MIDI ports, the theme (Roland,
   Silver, Steel, Olive), the panel's circuit (full, faint or hidden) and its electricity (animated or still), the
   window's size and a MIDI controller's setup.

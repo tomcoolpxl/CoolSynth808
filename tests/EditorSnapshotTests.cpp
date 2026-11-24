@@ -303,6 +303,10 @@ public:
             editor->boardForTesting().sequencerState(-1, 4, 70000.0);
             editor->boardForTesting().tick(70000.0);
             shoot("lid-lifted-rest");
+            // What opens (D319): each column framed faintly, the bass drum's bright under the mouse.
+            editor->boardForTesting().hoverForTesting(1);
+            shoot("lid-lifted-hover");
+            editor->boardForTesting().hoverForTesting(-1);
             editor->liftLid(false);
             editor->boardForTesting().setCircuitLook(true, EtchedBoard::CircuitShow::full);
             setTheme(1); // the same in the Silver theme (D307)

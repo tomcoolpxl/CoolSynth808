@@ -111,13 +111,18 @@ namespace cs808
     class Editor::LidOverlay final : public juce::Component
     {
     public:
-        LidOverlay(LidView& lidView, std::function<void()> close) : lid(lidView)
+        LidOverlay(LidView& lidView, std::function<void()> closeIt) : lid(lidView), close(std::move(closeIt))
         {
             setOpaque(true);
             addAndMakeVisible(lid);
-            back.text = "Back to the board"; // the sheets open from the lifted lid (D315)
-            back.onClick = [close = std::move(close)](const juce::MouseEvent&) { close(); };
-            addAndMakeVisible(back);
+            // Back to the lifted lid (D319): a click anywhere but on a part or a control, or Escape; no button.
+            lid.onBack = [this] { close(); };
+        }
+
+        void mouseUp(const juce::MouseEvent& e) override
+        {
+            if (e.mouseWasClicked())
+                close(); // the margin round the sheet
         }
 
         void paint(juce::Graphics& g) override
@@ -148,13 +153,11 @@ namespace cs808
         void resized() override
         {
             lid.setBounds(getLocalBounds().withTrimmedTop(44).reduced(16, 0).withTrimmedBottom(12));
-            const int w = juce::roundToInt(shapedWidth(labelFont(11.0f), "BACK TO THE BOARD") + 28.0f);
-            back.setBounds(getWidth() - 16 - w, 8, w, 28);
         }
 
     private:
         LidView& lid;
-        Chip back;
+        std::function<void()> close;
         juce::Image metal;
         const Theme* metalTheme = nullptr;
     };
@@ -191,7 +194,8 @@ namespace cs808
         board->addAndMakeVisible(*sequencer);
         sequencer->setBounds(SequencerGlass::boardArea());
         updateKeepOuts();
-        board->onPartClicked = [this](int column) { if (lidLifted) openSheet(column); };
+        // a column's sheet, the master's the whole board; the CPU board's click waits for its own sheet (D319)
+        board->onPartClicked = [this](int column) { if (lidLifted && column >= 0) openSheet(column); };
         circuitAnimated = settings->getBoolValue("circuitAnimated", true);
         circuitShow = juce::jlimit(0, 2, settings->getIntValue("circuitShow", 1)); // faint unless chosen otherwise (the user)
         board->setCircuitLook(circuitAnimated, static_cast<EtchedBoard::CircuitShow>(circuitShow));
@@ -324,7 +328,7 @@ namespace cs808
 
     void Editor::openSheet(int column)
     {
-        // A column's drum, or the whole board for the master and the CPU (its own sheet comes with the redesign): the
+        // A column's drum, or the whole board for the master (D319; the CPU's own sheet comes next): the
         // sheets are 0 the whole board, 1 bass drum, 2 snare, 3 low tom (the toms share it), 4 rim shot, 5 hand
         // clap, 6 cowbell, 7 the metal oscillators, 8 cymbal, 9 hi-hats.
         static constexpr std::array<int, 12> sheetOf { 0, 1, 2, 3, 3, 3, 4, 5, 6, 8, 9, 9 };

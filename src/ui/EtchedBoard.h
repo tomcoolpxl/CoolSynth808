@@ -102,10 +102,16 @@ namespace cs808
         void paintCpuGlow(juce::Graphics& g, juce::Point<float> origin);
         /** Lift the Lid (D315): the board alone, the knobs and the glass gone, the CPU board whole and lit; the
             panel's circuit options do not apply. */
-        void setLifted(bool on) { if (on != lifted) { lifted = on; cache = {}; repaint(); } }
+        void setLifted(bool on) { if (on != lifted) { lifted = on; hovered = -1; setMouseCursor(juce::MouseCursor::NormalCursor); cache = {}; repaint(); } }
         /** With the lid lifted, a click on a column (0 the master, 1 to 11 the drums) or on the CPU board (-1). */
         std::function<void(int)> onPartClicked;
         void mouseUp(const juce::MouseEvent& e) override;
+        void mouseMove(const juce::MouseEvent& e) override;
+        void mouseExit(const juce::MouseEvent& e) override;
+        /** With the lid lifted (D319): the area of a column that opens its sheet, framed faintly, bright under the mouse. */
+        [[nodiscard]] juce::Rectangle<float> openArea(int column) const;
+        /** For the snapshot tests: the mouse over a column (-1 none). */
+        void hoverForTesting(int column) { hovered = column; repaint(); }
         [[nodiscard]] bool isLifted() const noexcept { return lifted; }
 
     private:
@@ -137,6 +143,9 @@ namespace cs808
         bool lifted = false;
         void buildCpu(const std::vector<float>& columnCentres);
         std::vector<juce::Range<float>> columnSpans; // each column's x, for a click with the lid lifted
+        int hovered = -1; // the column under the mouse with the lid lifted (D319)
+        [[nodiscard]] int columnAt(juce::Point<float> p) const;
+        void paintOpenFrames(juce::Graphics& g) const;
         [[nodiscard]] float energyOf(int owner) const noexcept;
     };
 }

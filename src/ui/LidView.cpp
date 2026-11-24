@@ -2937,6 +2937,8 @@ namespace cs808
         return juce::AffineTransform::scale(scale).translated((getWidth() - w * scale) / 2.0f, 0.0f);
     }
 
+    static constexpr float backHintWidth = 210.0f; // the footer's way back (D319)
+
     void LidView::paintFull(juce::Graphics& g)
     {
         const auto& th = theme();
@@ -3057,7 +3059,7 @@ namespace cs808
         g.drawText(juce::String(ms, ms < 10.0 ? 2 : 0) + " ms, " + phase, bar.removeFromRight(320.0f), juce::Justification::centredLeft);
         if (impl->selected < 0)
         {
-            auto caption = getLocalBounds().removeFromBottom(24).toFloat().withTrimmedRight(260.0f);
+            auto caption = getLocalBounds().removeFromBottom(24).toFloat().withTrimmedRight(260.0f + backHintWidth);
             g.setColour(look.dim);
             g.setFont(uiFont(10.5f));
             g.drawFittedText((f.live ? juce::String("Live from the engine's circuit at ") + f.rec.setting + "; the parts it leaves out from ngspice. "
@@ -3192,7 +3194,14 @@ namespace cs808
     {
         const auto& th = theme();
         const auto& b = impl->showFull && impl->full ? impl->full->drawing : impl->board;
-        auto caption = getLocalBounds().removeFromBottom(24).toFloat().withTrimmedRight(260.0f);
+        auto caption = getLocalBounds().removeFromBottom(24).toFloat().withTrimmedRight(260.0f + backHintWidth);
+        // The way back, in the footer beside the sheet switch (D319): the button is gone.
+        {
+            auto hint = getLocalBounds().removeFromBottom(24).toFloat().withTrimmedRight(260.0f).removeFromRight(backHintWidth);
+            g.setColour(th.dim);
+            g.setFont(uiFont(10.5f));
+            g.drawText("Click anywhere else, or Esc: back", hint.withTrimmedRight(12.0f), juce::Justification::centredRight);
+        }
         if (impl->selected < 0 && impl->showFull && impl->full)
             return; // the complete drum writes its own: where its numbers come from
         if (impl->selected >= 0 && impl->selected < static_cast<int>(b.parts.size()))
@@ -3237,6 +3246,11 @@ namespace cs808
                     found = static_cast<int>(i);
                 }
             }
+        }
+        if (found < 0 && e.mouseWasClicked() && onBack)
+        {
+            onBack(); // the sheet's empty space: back to the lifted lid (D319)
+            return;
         }
         impl->selected = found;
         repaint();
