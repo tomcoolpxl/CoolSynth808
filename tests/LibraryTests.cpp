@@ -156,6 +156,37 @@ public:
             expect(patternsEqual(p->project().currentBank().pattern[0], beat.pattern.pattern), "loaded");
             expect(p->undo(), "one step");
             expect(patternsEqual(p->project().currentBank().pattern[0], before), "and undo takes it back");
+
+            // D354: walking the list while listening keeps the transport going and the key on Stop; stopping and
+            // auditioning again at once, before the audio thread has taken the stop, still stops what it started.
+            const auto run = [&p]
+            {
+                juce::AudioBuffer<float> buffer(2, 480);
+                for (int b = 0; b < 4; ++b)
+                {
+                    juce::MidiBuffer midi;
+                    p->processBlock(buffer, midi);
+                }
+            };
+            run();
+            expect(! p->isPlaying());
+            shelf->selectForTesting(5);
+            shelf->toggleAudition();
+            run();
+            expect(p->isPlaying() && shelf->isAuditioning() && editor.isAuditioning(), "the audition starts the transport");
+            shelf->selectForTesting(6);
+            run();
+            expect(p->isPlaying() && shelf->isAuditioning() && editor.isAuditioning(), "the next beat, no stop between");
+            shelf->toggleAudition();
+            shelf->toggleAudition();
+            expect(shelf->isAuditioning() && editor.isAuditioning(), "auditioning again at once");
+            run();
+            expect(p->isPlaying());
+            shelf->toggleAudition();
+            run();
+            expect(! p->isPlaying(), "Stop stops the transport the audition started");
+            expect(! shelf->isAuditioning() && ! editor.isAuditioning());
+            expect(patternsEqual(p->project().currentBank().pattern[0], before), "yours back as it was");
             ed.reset();
         }
 

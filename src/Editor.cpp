@@ -882,6 +882,7 @@ namespace cs808
             else
                 stopAudition();
         };
+        library->auditionedKey = [this] { return auditionKey; }; // the editor alone holds the audition (D354)
         addAndMakeVisible(*library);
         resized();
         library->grabKeyboardFocus();
@@ -1001,7 +1002,7 @@ namespace cs808
             {
                 auditionSaved = std::make_unique<Project>(processor.project());
                 auditionChain = processor.chain();
-                auditionStartedPlaying = ! processor.isPlaying();
+                auditionStartedPlaying = ! processor.willPlay();
             }
             else
             {

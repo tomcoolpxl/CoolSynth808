@@ -187,10 +187,7 @@ namespace cs808
         // Listening follows the choice, as a browser's preview does.
         if (isAuditioning())
             if (const auto* e = selectedEntry(); e != nullptr && onAudition)
-            {
-                auditioningKey = key;
-                onAudition(e);
-            }
+                onAudition(e); // in one step: the editor swaps the beat, the transport untouched
         layoutDetail();
         repaint();
     }
@@ -215,22 +212,17 @@ namespace cs808
     {
         if (isAuditioning())
         {
-            auditioningKey = {};
             if (onAudition)
                 onAudition(nullptr);
         }
         else if (const auto* e = selectedEntry(); e != nullptr && onAudition)
-        {
-            auditioningKey = selectedKey;
             onAudition(e);
-        }
         layoutDetail();
         repaint();
     }
 
     void LibraryShelf::auditionEnded()
     {
-        auditioningKey = {};
         layoutDetail();
         repaint();
     }
@@ -601,7 +593,7 @@ namespace cs808
             g.setColour(th.ink.withAlpha(0.11f));
             g.fillRoundedRectangle(0.0f, 1.0f, static_cast<float>(width), static_cast<float>(height - 2), 4.0f);
         }
-        if (libraryKey(e) == auditioningKey)
+        if (libraryKey(e) == auditioningKey())
         {
             g.setColour(th.on);
             g.fillRoundedRectangle(2.0f, 8.0f, 3.0f, static_cast<float>(height - 16), 1.5f);

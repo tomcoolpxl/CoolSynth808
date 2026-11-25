@@ -106,6 +106,13 @@ namespace cs808
         // ---- Transport, message thread -----------------------------------------------------------------------
         void setPlaying(bool shouldPlay) noexcept { playRequest.store(shouldPlay ? 1 : 0, std::memory_order_release); }
         [[nodiscard]] bool isPlaying() const noexcept { return playingNow.load(std::memory_order_acquire); }
+        /** The transport as it will be once a request the audio thread has not yet taken is: what to decide on right
+            after asking (CoolSynth's D354: an audition read isPlaying() just after a stop and kept the transport going). */
+        [[nodiscard]] bool willPlay() const noexcept
+        {
+            const int r = playRequest.load(std::memory_order_acquire);
+            return r >= 0 ? r == 1 : playingNow.load(std::memory_order_acquire);
+        }
         void requestFill() noexcept { fillRequest.store(true, std::memory_order_release); }
         void setChain(const std::vector<int>& patterns);
         [[nodiscard]] std::vector<int> chain() const { return chainOnUi; }

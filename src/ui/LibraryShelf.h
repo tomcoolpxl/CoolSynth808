@@ -27,6 +27,9 @@ namespace cs808
         std::function<void(const LibraryEntry&)> onLoad;     // into the pattern being edited
         std::function<void(const LibraryEntry*)> onAudition; // in place of that pattern; null: back to yours
         std::function<void()> onClose;
+        // The beat sounding in an audition, asked of the editor, which alone holds it (D354: the shelf's own copy fell
+        // out of step with it); empty when none is.
+        std::function<juce::String()> auditionedKey;
         std::unique_ptr<juce::Button> closeKey; // the cross at the top right
         juce::String loadTarget = "pattern 1"; // what Load fills, as its button says it
 
@@ -47,7 +50,8 @@ namespace cs808
         void selectForTesting(int row);
         [[nodiscard]] int shownCount() const noexcept { return static_cast<int>(shown.size()); }
         [[nodiscard]] const LibraryEntry* selectedEntry() const noexcept;
-        [[nodiscard]] bool isAuditioning() const noexcept { return auditioningKey.isNotEmpty(); }
+        [[nodiscard]] juce::String auditioningKey() const { return auditionedKey ? auditionedKey() : juce::String(); }
+        [[nodiscard]] bool isAuditioning() const { return auditioningKey().isNotEmpty(); }
         void toggleAudition();
         void keepCopy();
 
@@ -85,7 +89,7 @@ namespace cs808
         juce::String shelf = "all";
         int decade = 0;
         std::vector<int> decades;
-        juce::String selectedKey, auditioningKey, status;
+        juce::String selectedKey, status;
         int partShown = 0;
         bool bShown = false;
 
