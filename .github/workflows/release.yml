@@ -1,6 +1,7 @@
 name: Release
 
-# A version tag builds, tests and packages CoolSynth 808 for Windows (x64), then publishes it on a GitHub release
+# A version tag builds, tests and packages CoolSynth 808 for Windows (x64) and macOS (Apple silicon, CoolSynth's D370),
+# then publishes both on one GitHub release
 # (CoolSynth's D363, as CoolSynth's own release.yml): the installer, one zip of the app, the VST3 and the notices,
 # one of the CLAP (CoolSynth's D367), and their checksums. Actions are pinned by commit, as CoolSynth's.
 
@@ -61,8 +62,46 @@ jobs:
           retention-days: 7
           path: build/ci-release/packages/**
 
+  # The Mac: GitHub's Apple silicon runner with Xcode 27. The installer is an unsigned .pkg (CoolSynth's D370).
+  build-macos-assets:
+    runs-on: xcode-27
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install Ninja
+        shell: bash
+        run: command -v ninja || brew install ninja
+
+      - name: Build, test and package
+        shell: bash
+        run: ./scripts/ci/BuildAndTestMac.sh Release --package "${{ github.ref_name }}"
+
+      - name: Upload diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos-release-${{ github.ref_name }}-diagnostics
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            build/ci/logs/**
+            build/ci/Testing/ctest-results.xml
+
+      - name: Upload package bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos-release-${{ github.ref_name }}-packages
+          if-no-files-found: error
+          retention-days: 7
+          path: build/ci/packages/**
+
   publish-release:
-    needs: [build-release-assets]
+    needs: [build-release-assets, build-macos-assets]
     runs-on: windows-2022
     steps:
       # A version's own notes, if written, in docs/releases/<tag>.md. First: checking out clears the folder, so the
@@ -76,6 +115,12 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: windows-release-${{ github.ref_name }}-packages
+          path: release-bundle
+
+      - name: Download Mac package bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: macos-release-${{ github.ref_name }}-packages
           path: release-bundle
 
       - name: Name the release
@@ -101,6 +146,8 @@ jobs:
 
             The first time the app starts, Windows asks whether it may use the network: allow private networks to play in time with other computers through the beat sync.
 
+            On a Mac with Apple silicon and macOS 13 or newer: open **CoolSynth808-Setup-${{ github.ref_name }}.pkg**. It isn't signed, so macOS blocks it once: go to **System Settings > Privacy & Security** and click **Open Anyway**.
+
             Without the installer: the zips below hold the app, the VST3 and the notices, and the CLAP.
 
             How to play it: see [the guide](https://github.com/tomcoolpxl/CoolSynth808#readme).
@@ -112,3 +159,7 @@ jobs:
             release-bundle/CoolSynth808-windows-x64-${{ github.ref_name }}.zip
             release-bundle/CoolSynth808-windows-x64-clap-${{ github.ref_name }}.zip
             release-bundle/CoolSynth808-windows-x64-sha256-${{ github.ref_name }}.txt
+            release-bundle/CoolSynth808-Setup-${{ github.ref_name }}.pkg
+            release-bundle/CoolSynth808-macos-arm64-${{ github.ref_name }}.zip
+            release-bundle/CoolSynth808-macos-arm64-clap-${{ github.ref_name }}.zip
+            release-bundle/CoolSynth808-macos-arm64-sha256-${{ github.ref_name }}.txt

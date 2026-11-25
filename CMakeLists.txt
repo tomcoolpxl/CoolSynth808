@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.22)
 
+# macOS as CoolSynth's (its D234, D370): Apple silicon only, macOS 13 Ventura or newer. Set before project(), so every
+# target takes them.
+set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "Apple silicon only (CoolSynth's D234)")
+set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "The oldest macOS it runs on (CoolSynth's D234)")
+
 project(CoolSynth808 VERSION 0.1.0 LANGUAGES C CXX) # C as well: JUCE 9 builds zlib, libpng, libjpeg and libflac as C
 
 # The settings every CoolSynth program shares (the C++ runtime, a Debug build compiled optimised), from the engine.
@@ -68,7 +73,10 @@ juce_add_plugin(CoolSynth808
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT TRUE
-    IS_MIDI_EFFECT FALSE)
+    IS_MIDI_EFFECT FALSE
+    # macOS asks before an app talks to the local network (the beat sync finds the others by multicast): the reason it
+    # shows (CoolSynth's D370).
+    PLIST_TO_MERGE "<plist><dict><key>NSLocalNetworkUsageDescription</key><string>CoolSynth 808 plays in time with other music apps on your network through the beat sync.</string></dict></plist>")
 
 # The CLAP version (CoolSynth's D367), as CoolSynth's without its remote control pages. Stepped parameters keep their
 # steps (DISCRETE).

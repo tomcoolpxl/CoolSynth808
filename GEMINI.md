@@ -4,7 +4,7 @@ The shared project memory for every AI tool (`CLAUDE.md` points here).
 
 ## What it is
 
-- A drum machine for Windows (JUCE 9.0.5, C++20, CMake): a JUCE audio plugin built as a Standalone (D267) and a VST3
+- A drum machine for Windows and the Mac (JUCE 9.0.5, C++20, CMake): a JUCE audio plugin built as a Standalone (D267) and a VST3
   (D325), linked into `C:\Program Files\Common Files\VST3`.
 - The sound is CoolSynth's engine, the submodule `external/coolsynth-engine` (its own repository,
   `tomcoolpxl/coolsynth-engine`): the three 808 generators in one layer in the Kit mode, set as CoolSynth's stock
