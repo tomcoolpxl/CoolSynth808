@@ -389,6 +389,32 @@ namespace cs808
             transport->repaint();
             return;
         }
+        optionsWindow = std::make_unique<OptionsWindow>(optionsHooks(), standaloneDeviceManager(), settings.get());
+        optionsWindow->onClose = [this]
+        {
+            // after the click that asked has returned
+            juce::MessageManager::callAsync([safe = juce::Component::SafePointer<Editor>(this)]
+            {
+                if (safe != nullptr && safe->optionsOpen())
+                    safe->toggleOptions();
+            });
+        };
+        optionsWindow->keepAbove(*this);
+        optionsWindow->setVisible(true);
+        optionsWindow->toFront(true);
+        // It stays above the 808's window: brought to the front whenever that window is (not above other apps).
+        if (auto* top = getTopLevelComponent(); top != nullptr && top != this && top != watchedWindow)
+        {
+            if (watchedWindow != nullptr)
+                watchedWindow->removeComponentListener(this);
+            watchedWindow = top;
+            watchedWindow->addComponentListener(this);
+        }
+        transport->repaint();
+    }
+
+    OptionsHooks Editor::optionsHooks()
+    {
         OptionsHooks hooks;
         hooks.theme = [this] { return themeIndex; };
         hooks.chooseTheme = [this](int i) { chooseTheme(i); };
@@ -424,28 +450,19 @@ namespace cs808
         hooks.chooseCircuitAnimated = [this](bool on) { circuitAnimated = on; settings->setValue("circuitAnimated", on); applyCircuitLook(); };
         hooks.circuitShow = [this] { return circuitShow; };
         hooks.chooseCircuitShow = [this](int i) { circuitShow = juce::jlimit(0, 2, i); settings->setValue("circuitShow", circuitShow); applyCircuitLook(); };
-        optionsWindow = std::make_unique<OptionsWindow>(std::move(hooks), standaloneDeviceManager(), settings.get());
-        optionsWindow->onClose = [this]
+        if (processor.hasMcpSwitch())
         {
-            // after the click that asked has returned
-            juce::MessageManager::callAsync([safe = juce::Component::SafePointer<Editor>(this)]
+            // Claude's MCP server (CoolSynth's D363): started or stopped at once, the switch kept for the app
+            hooks.mcpOn = [this] { return processor.mcpServerChosen(); };
+            hooks.chooseMcp = [this](bool on)
             {
-                if (safe != nullptr && safe->optionsOpen())
-                    safe->toggleOptions();
-            });
-        };
-        optionsWindow->keepAbove(*this);
-        optionsWindow->setVisible(true);
-        optionsWindow->toFront(true);
-        // It stays above the 808's window: brought to the front whenever that window is (not above other apps).
-        if (auto* top = getTopLevelComponent(); top != nullptr && top != this && top != watchedWindow)
-        {
-            if (watchedWindow != nullptr)
-                watchedWindow->removeComponentListener(this);
-            watchedWindow = top;
-            watchedWindow->addComponentListener(this);
+                processor.setMcpServerOn(on);
+                settings->setValue("mcpServer", on);
+                settings->saveIfNeeded();
+            };
+            hooks.mcpStatus = [this] { return processor.mcpStatus(); };
         }
-        transport->repaint();
+        return hooks;
     }
 
     void Editor::componentBroughtToFront(juce::Component&)

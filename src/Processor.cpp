@@ -45,6 +45,7 @@ namespace cs808
                 note.store(-1, std::memory_order_relaxed);
         // The drums' notes from outside (D329): the app's, from its settings; General MIDI in the tests.
         SyncChoice sync;
+        bool mcpOn = false;
         {
             DrumNotes notes = drumNoteSet(0);
             if (wrapperType != wrapperType_Undefined && ! offline)
@@ -59,12 +60,20 @@ namespace cs808
                     notes = drumNotesFromString(file.getValue("drumNotes"));
                 setAccuracy(file.getIntValue("accuracy", 0)); // D339
                 sync = syncChoiceFrom(file);                  // D361
+                mcpOn = mcpChoiceFrom(file);                  // CoolSynth's D363
             }
             setDrumNotes(notes);
         }
-        // Claude's way in, in the standalone app only (a plugin in a DAW opens no port): D333, as the 303's.
+        // Claude's way in, in the standalone app only (a plugin in a DAW opens no port): D333, as the 303's; and only
+        // once switched on in Options (CoolSynth's D363).
         if (wrapperType == wrapperType_Standalone && ! offline)
-            startMcpServer();
+        {
+            mcpSwitchable = true;
+            mcpListenPort = mcpPort;
+            mcpChosen = mcpOn;
+            if (mcpChosen)
+                startMcpServer();
+        }
         // The computer's controller setup (D211, D268): read once for the program. Tests (no wrapper) set their own.
         if (wrapperType == wrapperType_Standalone && ! offline)
         {
@@ -505,10 +514,46 @@ namespace cs808
         suspendProcessing(false);
     }
 
+    bool mcpChoiceFrom(const juce::PropertySet& settings) { return settings.getBoolValue("mcpServer", false); }
+
+    bool mcpForcedOff() { return juce::SystemStats::getEnvironmentVariable("COOLSYNTH808_NO_MCP", {}).isNotEmpty(); }
+
+    void Processor::setMcpServerOn(bool on)
+    {
+        if (! mcpSwitchable)
+            return;
+        mcpChosen = on;
+        if (on)
+            startMcpServer();
+        else
+            stopMcpServer();
+    }
+
+    void Processor::useMcpSwitchForTesting(int port, const juce::File& settings)
+    {
+        stopMcpServer();
+        mcpSwitchable = true;
+        mcpListenPort = port;
+        mcpChosen = settings.existsAsFile() && mcpChoiceFrom(juce::PropertiesFile(settings, {}));
+        if (mcpChosen)
+            startMcpServer();
+    }
+
+    void Processor::stopMcpServer()
+    {
+        mcp = nullptr; // its thread stopped, its port let go
+        mcpStatusText = "Off";
+    }
+
     void Processor::startMcpServer()
     {
         if (mcp != nullptr)
             return;
+        if (mcpForcedOff())
+        {
+            mcpStatusText = "Off: COOLSYNTH808_NO_MCP";
+            return;
+        }
         // A tool runs on the message thread, as the panel's own edits do, and the server waits for it (10 s at most).
         coolsynth::mcp::Server::Runner runner = [alive = alive](std::function<void()> job)
         {
@@ -527,12 +572,12 @@ namespace cs808
             done->wait(10000);
         };
         mcp = std::make_unique<coolsynth::mcp::Server>("CoolSynth 808", "0.1", tools808(*this, runner), runner);
-        if (mcp->start(mcpPort))
-            mcpStatusText = "On: Claude reaches this app at http://127.0.0.1:" + juce::String(mcpPort) + "/mcp.";
+        if (mcp->start(mcpListenPort))
+            mcpStatusText = "On: 127.0.0.1:" + juce::String(mcpListenPort);
         else
         {
             mcp = nullptr;
-            mcpStatusText = "Could not start: port " + juce::String(mcpPort) + " is taken (another CoolSynth 808?).";
+            mcpStatusText = "Port " + juce::String(mcpListenPort) + " is taken";
         }
     }
 

@@ -53,6 +53,10 @@ namespace cs808
     void keepSyncChoice(juce::PropertySet& settings, const SyncChoice& choice);
     /** The SYNC key's word: the other peers' count after it, none while alone ("SYNC", "SYNC 2"). */
     [[nodiscard]] juce::String syncKeyText(int peers);
+    /** Claude's MCP server as last switched in Options (CoolSynth's D363): off until switched on. */
+    [[nodiscard]] bool mcpChoiceFrom(const juce::PropertySet& settings);
+    /** COOLSYNTH808_NO_MCP is set: the server stays off. */
+    [[nodiscard]] bool mcpForcedOff();
 
     class Processor final : public juce::AudioProcessor, private juce::AudioProcessorParameter::Listener, private juce::AsyncUpdater
     {
@@ -204,7 +208,17 @@ namespace cs808
         /** The loudest output sample since the last take, and a fresh start; the level of the last block. */
         [[nodiscard]] float takeLoudest() noexcept { return loudest.exchange(0.0f, std::memory_order_acq_rel); }
         [[nodiscard]] float outputLevel() const noexcept { return lastLevel.load(std::memory_order_relaxed); }
+        /** Claude's MCP server, the standalone's only (CoolSynth's D363): off until switched on in Options, MIDI; the
+            editor keeps the switch in the app's settings ("mcpServer"). It starts or stops the server at once, on
+            127.0.0.1 only. COOLSYNTH808_NO_MCP in the environment keeps it off whatever the switch says. */
+        [[nodiscard]] bool hasMcpSwitch() const noexcept { return mcpSwitchable; }
+        void setMcpServerOn(bool on);
+        /** The switch as chosen; the server may still be off (its port taken, or the environment's veto). */
+        [[nodiscard]] bool mcpServerChosen() const noexcept { return mcpChosen; }
+        [[nodiscard]] bool mcpServerRunning() const noexcept { return mcp != nullptr; }
         [[nodiscard]] juce::String mcpStatus() const { return mcpStatusText; }
+        /** For the tests: the switch as the standalone has it, on its own port, as last kept in `settings` if given. */
+        void useMcpSwitchForTesting(int port, const juce::File& settings = {});
 
         // ---- The drums' notes from outside (D329) ----------------------------------------------------------------
         /** The notes a DAW or a MIDI input plays the drums with (Kit.h's slots); any thread. */
@@ -408,6 +422,9 @@ namespace cs808
         std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>>(true);
         std::unique_ptr<coolsynth::mcp::Server> mcp;
         juce::String mcpStatusText = "Off";
+        bool mcpSwitchable = false, mcpChosen = false;
+        int mcpListenPort = 0;
+        void stopMcpServer();
         std::vector<float> captureBuffer;
         std::atomic<bool> captureArmed { false };
         std::atomic<int> captureCount { 0 };

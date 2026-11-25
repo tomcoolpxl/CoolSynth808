@@ -32,6 +32,7 @@ namespace cs808
     class SequencerGlass;
     class TransportStrip;
     class OptionsWindow;
+    struct OptionsHooks;
 
     class Editor final : public juce::AudioProcessorEditor,
                          public juce::DragAndDropContainer,
@@ -99,6 +100,8 @@ namespace cs808
         void toggleOptions();
         [[nodiscard]] bool optionsOpen() const noexcept;
         [[nodiscard]] OptionsWindow* optionsForTesting() noexcept { return optionsWindow.get(); }
+        /** What the options act on, as the window gets them (the tests make a panel of their own from them). */
+        [[nodiscard]] OptionsHooks optionsHooks();
         [[nodiscard]] TransportStrip& transportForTesting() noexcept { return *transport; }
         /** For the tests: the settings kept in this file instead of the app's (set before an editor is made). */
         static void useSettingsFileForTesting(const juce::File& f);

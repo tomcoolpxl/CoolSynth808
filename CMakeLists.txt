@@ -157,6 +157,7 @@ if(BUILD_TESTING)
             tests/ControllerTests.cpp
             tests/HostingTests.cpp
             tests/McpTests.cpp
+            tests/McpSwitchTests.cpp
             tests/ExportTests.cpp
             tests/CpuTests.cpp
             tests/BeatSyncTests.cpp

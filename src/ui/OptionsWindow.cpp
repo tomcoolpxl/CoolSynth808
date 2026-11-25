@@ -313,6 +313,19 @@ namespace cs808
                 repaint();
             };
             addChildComponent(sharing);
+            // Claude's MCP server (CoolSynth's D363), on the MIDI page: lit while switched on; it starts or stops at once.
+            mcpKey.text = "MCP server";
+            mcpKey.setComponentID("mcpServer");
+            mcpKey.setTooltip("Lets Claude Code read and set the panel, play, record and see this window while it helps you; only this computer can reach it.");
+            mcpKey.isOn = [this] { return hooks.mcpOn && hooks.mcpOn(); };
+            mcpKey.filledWhenOn = false;
+            mcpKey.onClick = [this](const juce::MouseEvent&)
+            {
+                if (hooks.chooseMcp && hooks.mcpOn)
+                    hooks.chooseMcp(! hooks.mcpOn());
+                repaint();
+            };
+            addChildComponent(mcpKey);
 
             for (const auto& t : themes())
                 themeChoice.options.push_back(t.name);
@@ -512,6 +525,18 @@ namespace cs808
                 g.setColour(juce::Colour(0xff0c0c0c));
                 g.drawRoundedRectangle(inputView.getBounds().toFloat().expanded(1.0f), 4.0f, 1.0f);
             }
+            if (page == midiPage && mcpKey.isVisible() && hooks.mcpStatus)
+            {
+                // beside the switch: where Claude reaches it, or why it is off
+                const auto text = hooks.mcpStatus();
+                const bool running = text.startsWith("On");
+                g.setColour(running ? th.lit : th.dim);
+                g.setFont(running ? monoFont(12.0f) : uiFont(12.0f));
+                shapedText(g, text, juce::Rectangle<int>(mcpKey.getRight() + 12, mcpKey.getY(), x + w - mcpKey.getRight() - 12, rowHeight),
+                           juce::Justification::centredLeft, false);
+                g.setColour(th.dim);
+                g.setFont(uiFont(12.0f));
+            }
             if (! hint.isEmpty())
                 shapedText(g, hint, juce::Rectangle<int>(x + labelWidth, hintY, w - labelWidth, 36), juce::Justification::topLeft, true);
         }
@@ -598,8 +623,10 @@ namespace cs808
                 {
                     inputsY = y;
                     labels.push_back({ "Inputs", y });
-                    const int shownRows = juce::jlimit(1, maxInputRows, static_cast<int>(inputList.rows.size()));
-                    inputList.setSize(cw - (static_cast<int>(inputList.rows.size()) > maxInputRows ? 10 : 0),
+                    // a row fewer with Claude's under them (CoolSynth's D363), so the page still fits; the rest scroll
+                    const int maxRows = hooks.mcpOn ? maxInputRows - 1 : maxInputRows;
+                    const int shownRows = juce::jlimit(1, maxRows, static_cast<int>(inputList.rows.size()));
+                    inputList.setSize(cw - (static_cast<int>(inputList.rows.size()) > maxRows ? 10 : 0),
                                       static_cast<int>(inputList.rows.size()) * InputList::rowPitch);
                     if (! inputList.rows.empty())
                     {
@@ -623,6 +650,14 @@ namespace cs808
                         labels.push_back({ "Beat sync", y });
                         sharing.setBounds(x + labelWidth, y, half, rowHeight);
                         sharing.setVisible(true);
+                    }
+                    if (hooks.mcpOn)
+                    {
+                        // Claude's MCP server (CoolSynth's D363), the standalone's
+                        y += rowHeight + rowGap;
+                        labels.push_back({ "Claude", y });
+                        mcpKey.setBounds(x + labelWidth, y, half, rowHeight);
+                        mcpKey.setVisible(true);
                     }
                     break;
                 }
@@ -739,6 +774,7 @@ namespace cs808
         int hoverPage = -1;
         Picker driver, output, rate, buffer, midiOut, zoomPicker;
         Chip controlPanel, testTone, follow, send, sharing, controller;
+        Chip mcpKey; // Claude's (CoolSynth's D363), the standalone's
         [[nodiscard]] bool inPlugin() const { return hooks.plugin && hooks.plugin(); }
         static constexpr int maxInputRows = 8;
         InputList inputList;

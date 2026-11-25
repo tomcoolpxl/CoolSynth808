@@ -9,7 +9,8 @@
 /*
     CoolSynth 808's own options (D311), in a window of their own in the theme, opened by the panel's Options key, in
     pages listed down its left (D335): Audio (standalone only: driver, output, sample rate, buffer, latency, a test
-    tone), MIDI (standalone only: the inputs, the output, the clock, the beat sync's Play and Stop), or Host in a plugin; Drum notes; Panel (the theme,
+    tone), MIDI (standalone only: the inputs, the output, the clock, the beat sync's Play and Stop, Claude's MCP server
+    off until switched on, CoolSynth's D363), or Host in a plugin; Drum notes; Panel (the theme,
     the window's size, the circuit); the controller setup. It stays above
     the 808's window, remembers its place, and closes on its close key, Escape or the Options key.
 */
@@ -29,6 +30,10 @@ namespace cs808
         // The standalone's beat sync (D361): Play and Stop shared with the session, or not. Unset: no beat sync.
         std::function<bool()> syncSharing;
         std::function<void(bool)> chooseSyncSharing;
+        // Claude's MCP server (CoolSynth's D363), the standalone's: switched, and its state in a few words. Unset: none.
+        std::function<bool()> mcpOn;
+        std::function<void(bool)> chooseMcp;
+        std::function<juce::String()> mcpStatus;
         // In a DAW (D325): the host's Play leads the pattern, or not; the clock switches make way for it.
         std::function<bool()> plugin, followHostPlay;
         std::function<void(bool)> chooseFollowHostPlay;
@@ -74,6 +79,7 @@ namespace cs808
     private:
         std::unique_ptr<OptionsPanel> panel;
         juce::PropertiesFile* settings;
+        juce::TooltipWindow tooltips { this, 700 }; // the keys' hints in this window (CoolSynth's D363: the MCP key's)
     };
 
     /** The options as the window shows them, alone, for the snapshot tests. */
