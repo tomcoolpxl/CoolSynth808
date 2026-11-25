@@ -327,6 +327,12 @@ public:
         auto& r = *rig;
         r.peer = peer.get();
         r.runFor(1.0); // the 808's session is the older
+        if (p->syncPeers() != 0)
+        {
+            // another program on this computer is in a session: the counts and the joining below would include it
+            logMessage("skipped: another program speaks the beat sync on this computer");
+            return;
+        }
         peer->setEnabled(true);
         const double met = r.until(3.0, [&] { return p->syncPeers() == 1 && peer->peerCount() == 1; });
         if (met < 0.0 && peer->status().gateways == 0)
