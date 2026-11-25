@@ -36,8 +36,8 @@ To come.
   - banks A to D of sixteen patterns, each with A and B halves and a fill
   - a chain of patterns that loops or plays once
   - a lane per drum with its own length; on each step a chance, a roll and the accent
-- The strip at the top right: Play, Rec, the tempo, Tap, Swing, Lid, Library, File and Options. Space starts and
-  stops.
+- The strip at the top right: Play, Rec, the tempo, SYNC, Tap, Swing, Lid, Library, File and Options. Space starts
+  and stops.
 - Lid lifts the lid: the knobs and the glass go, the panel's circuit stays with its electricity, and the 808's CPU
   board is drawn below it. The drums' copper and the whole board light green as a node rises and red as it falls, as
   the engine plays. Each column that opens is framed; a click opens its schematic, MASTER's the whole board. A
@@ -46,13 +46,17 @@ To come.
   click on the sheet's empty space, or Escape, goes back.
 - Options opens a window of its own, its pages listed down the left: Audio (the driver, Windows Audio or ASIO, and the
   circuits' accuracy: Best, Lighter or Lightest for a busy computer, an export always at Best), MIDI
-  (the ports and the clock), Drum notes, Panel (the theme: Roland, Silver, Steel, Olive; the window's size; the
+  (the ports, the clock and the beat sync's Play and Stop), Drum notes, Panel (the theme: Roland, Silver, Steel, Olive; the window's size; the
   circuit full, faint or hidden, its electricity animated or still) and a MIDI controller's setup.
-- It follows an incoming MIDI clock and sends its own when none comes in; both can be switched off.
-- With CoolSynth 303 on the same computer, one leads and the other follows by MIDI clock through a loopback port
-  (Windows 11's MIDI Settings app makes one; loopMIDI too): the leader's MIDI output and the follower's input set to
-  it, both apps on the same audio device. The follower plays within about a millisecond of the leader. The two take
-  some two and a half cores; a busy program beside them can make the 808 stutter, and the 303 then follows it.
+- The beat sync plays it in time with CoolSynth 303 and the other apps and DAWs that have it, on this computer or
+  the network:
+  - on from the start; SYNC beside the tempo lights while on and counts the others ("SYNC 2"), a click switches it
+  - with others, the tempo is shared and a Play starts on their next bar line; Play and Stop go to all of them,
+    unless Options, MIDI, "Share Play and Stop" is off
+  - the first time, Windows asks about its firewall: allow private networks to sync with other computers
+- For hardware it follows an incoming MIDI clock and sends its own, also while the beat sync leads; both can be
+  switched off. While the beat sync has others with it, an incoming clock is ignored.
+- The 808 and the 303 together take some two and a half cores; a busy program beside them can make the 808 stutter.
 - Drag MIDI drags the pattern into your music software as a MIDI file.
 - File, Export audio writes the pattern shown or the chain as a 24-bit WAV, played a number of times: cut at the
   end, ringing on, or as a seamless loop. A file per drum too if you like, each as long as the mix.
