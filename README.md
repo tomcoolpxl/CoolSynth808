@@ -1,107 +1,69 @@
 # CoolSynth 808
 
-CoolSynth 808 is a drum machine for Windows and macOS whose sixteen voices are component-level models of the Roland
-TR-808's eleven drum circuits, solved in real time as wave digital filters with their nonlinear transistors and diodes
-(after Kurt James Werner's 2016 thesis) and checked stage by stage against ngspice.
+![CoolSynth 808 playing a beat: the drums' knobs on their circuit board, which lights as each drum rings, and the step sequencer below](screenshot.png)
 
-- No samples and no sound-alike DSP: each drum is its circuit, modelled part by part (transistors, diodes, op-amps,
-  resistors, capacitors and pots) and run at 96 kHz.
-- Each knob turns the part it turns on the machine, so the drums respond as the circuit does.
-- Each circuit's stages are compared with ngspice renders of the schematic in the 1981 service notes; the drums are
-  then compared with recordings of two real 808s and with the notes' own measurements.
-- Where the service notes are unclear or both real units differ from the drawing, a part's value was fitted to them,
-  within the circuit: no extra controls or curves.
-- The accent is the trigger's voltage into each circuit, as on the machine, its range read from three real units'
-  recordings.
-- The devices use SPICE-style models, the same as the ngspice references: the op-amps with their bandwidth and output
-  swing, the transistors and diodes by their junctions, the metal voices' oscillators by their thresholds, the noise
-  at the service notes' level. Each circuit's file in the engine lists them. Fuller models (a measured transistor
-  card, the op-amps' slew) were rendered in ngspice and compared with both real units; today's matched them as well
-  or better, so they stay.
-- Every part runs at 25 °C, as SPICE assumes: the circuits never warm up, drift or age forty years.
+CoolSynth 808 is a drum machine modelled on the Roland TR-808.
+Its sixteen voices are the 808's eleven drum circuits, each modelled part by part (transistors, diodes, op-amps, resistors, capacitors and pots) and solved in real time, so every knob turns the part it turns on the machine and the drums respond as the circuits do.
 
-TR-808 is a trademark of Roland Corporation. CoolSynth 808 is not made, approved or endorsed by Roland.
+It runs as a standalone app or as a VST3 plugin in your DAW.
 
-## Screenshots
+Its siblings, built on the same sound engine: [CoolSynth 303](https://github.com/tomcoolpxl/CoolSynth303), a bass line synthesizer modelled on the TB-303's circuit, and [CoolSynth](https://github.com/tomcoolpxl/CoolSynth), a multi-engine synthesizer.
 
-<!-- Screenshots and animated GIFs go here: the panel in each theme, a beat playing, Under the Lid. -->
+TR-808 is a trademark of Roland Corporation. CoolSynth 808 is not made, approved or endorsed by Roland; it is based on the machine's published service notes and checked against circuit simulations and recordings of two real units.
 
-To come.
+## Download
 
-## Playing it
+There is no release yet. It runs on 64-bit Windows 10 or 11; until the first release, build it from source as below.
 
-- The panel is the machine's circuit board, etched into the metal: each drum's knobs on its own column of copper,
-  which lights as its circuit rings. Slide switches pick a circuit's second instrument: conga, claves or maracas.
-- The sequencer sits on smoked glass below it:
-  - banks A to D of sixteen patterns, each with A and B halves and a fill
-  - a chain of patterns that loops or plays once
-  - a lane per drum with its own length; on each step a chance, a roll and the accent
-- The strip at the top right: Play, Rec, the tempo, SYNC, Tap, Swing, Lid, Library, File and Options. Space starts
-  and stops.
-- Lid lifts the lid: the knobs and the glass go, the panel's circuit stays with its electricity, and the 808's CPU
-  board is drawn below it. The drums' copper and the whole board light green as a node rises and red as it falls, as
-  the engine plays. Each column that opens is framed; a click opens its schematic, MASTER's the whole board. A
-  drum's shows the engine's own voltages and currents from its last hit, with the ngspice recording until it is
-  struck. The CPU board opens the CPU section's: our sequencer's step as the service notes describe it. A
-  click on the sheet's empty space, or Escape, goes back.
-- Options opens a window of its own, its pages listed down the left: Audio (the driver, Windows Audio or ASIO, and the
-  circuits' accuracy: Best, Lighter or Lightest for a busy computer, an export always at Best), MIDI
-  (the ports, the clock and the beat sync's Play and Stop), Drum notes, Panel (the theme: Roland, Silver, Steel, Olive; the window's size; the
-  circuit full, faint or hidden, its electricity animated or still) and a MIDI controller's setup.
-- The beat sync plays it in time with CoolSynth 303 and the other apps and DAWs that have it, on this computer or
-  the network:
-  - on from the start; SYNC beside the tempo lights while on and counts the others ("SYNC 2"), a click switches it
-  - with others, the tempo is shared and a Play starts on their next bar line; Play and Stop go to all of them,
-    unless Options, MIDI, "Share Play and Stop" is off
-  - the first time, Windows asks about its firewall: allow private networks to sync with other computers
-- For hardware it follows an incoming MIDI clock and sends its own, also while the beat sync leads; both can be
-  switched off. While the beat sync has others with it, an incoming clock is ignored.
-- The 808 and the 303 together take some two and a half cores; a busy program beside them can make the 808 stutter.
-- Drag MIDI drags the pattern into your music software as a MIDI file.
-- File, Export audio writes the pattern shown or the chain as a 24-bit WAV, played a number of times: cut at the
-  end, ringing on, or as a seamless loop. A file per drum too if you like, each as long as the mix.
-- The library holds starter beats for 22 modern genres, classic 808 beats and your own patterns.
-- File saves projects (`.cs808`): the kit, every bank and the tempo. The app reopens where you left off; Ctrl+Z and
-  Ctrl+Y undo and redo any edit.
-- It is also a VST3 for a DAW: the pattern plays with the host's transport and tempo, and the host's notes play the
-  drums. Options has "Follow the host's Play": off, the pattern waits for its own Play key, at the host's tempo.
-  Every knob, the Volume and the five voice switches can be automated in the DAW. Each drum can leave the main mix
-  for its own mono output (outputs 2 to 12, BD to CH): switch it on in Options, Host, and turn the output on in the DAW.
-- Options' Drum notes set which note plays which drum from a DAW or a MIDI input: General MIDI, in a row from 36
-  or from 60, or each learned from a note played. Drag MIDI writes the same notes.
+## Sounds
+
+There are no samples: each drum is its circuit, run at 96 kHz.
+
+- the bass drum, snare, three toms or congas, rim shot or claves, hand clap or maracas, cowbell, cymbal, and open and closed hi-hats
+- each circuit's stages compared with circuit simulations of the 1981 service notes, then with recordings of two real 808s
+- the accent as the trigger's voltage into each circuit, as on the machine, its range read from three real units' recordings
+- where the service notes are unclear or both real units differ from the drawing, a part's value fitted to them, within the circuit
+
+The library has starter beats for 22 modern genres, classic 808 beats, and your own patterns.
+
+The sequencer has banks A to D of sixteen patterns, each with A and B halves and a fill, chained to loop or play once. Each drum has its own lane and length, and each step a chance, a roll and the accent.
+
+![Under the lid: the drums' circuits and the CPU board, lighting up as a beat plays](docs/lid.gif)
+
+Lid lifts the lid: the panel's circuit board with its electricity, and the 808's CPU board below it. A click opens any drum's schematic, with its voltages and currents from its last hit.
+
+Options has the circuits' accuracy (Best, or Lighter and Lightest for a busy computer; an export always renders at Best) and four themes. File, Export audio writes the pattern or the chain as a WAV, cut, ringing on or as a seamless loop, with a file per drum if you like.
+
+How every part of the panel works is in the [manual](docs/manual.md).
+
+## Playing with other gear
+
+A MIDI keyboard or pads play the drums, on notes you choose: General MIDI, in a row, or each learned from a note you play.
+
+The beat sync plays CoolSynth 808 in time with CoolSynth 303 and with DAWs and apps that speak the same protocol, on this computer or your network. It is on from the start: **SYNC** beside the tempo shows how many others are there, the tempo is shared, and Play and Stop on any of them start and stop them all on the bar line.
+
+For hardware, CoolSynth 808 follows an incoming MIDI clock and sends its own.
+
+In a DAW, the plugin follows the DAW's transport and tempo, every knob can be automated, and each drum can have its own output. Drag MIDI drags the pattern into your DAW as a MIDI file.
+
+A MIDI controller's knobs and pads can work the panel; set it up in **Options**.
 
 ## Building from source
 
+On Windows, you need Git, CMake 3.22 or newer, and Visual Studio 2022 or its Build Tools.
+
 ```powershell
 git clone --recurse-submodules https://github.com/tomcoolpxl/CoolSynth808.git
-cmake -S CoolSynth808 -B CoolSynth808/build -G "Visual Studio 17 2022" -A x64
-cmake --build CoolSynth808/build --config Debug --parallel
-ctest --test-dir CoolSynth808/build -C Debug --output-on-failure
+cd CoolSynth808
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Debug --parallel
+ctest --test-dir build -C Debug --output-on-failure
 ```
 
-The VST3 is built to `build/CoolSynth808_artefacts/Debug/VST3/CoolSynth 808.vst3`; DAWs look for it in
-`C:\Program Files\Common Files\VST3`.
+Debug builds are optimized, so they play in real time. The VST3 is built to `build/CoolSynth808_artefacts/Debug/VST3/CoolSynth 808.vst3`; copy it to `C:\Program Files\Common Files\VST3` for your DAW.
 
-ASIO comes in when Steinberg's ASIO SDK is found: set `ASIO_SDK_DIR` to its `ASIOSDK` folder, or unpack it to
-`SDKs/asio/sdk/ASIOSDK` beside the repository's parent folder. Without it the app offers the Windows drivers only.
+How the circuits are modelled, the design and the sources are in [docs/development.md](docs/development.md).
 
-## Design and sources
+## License
 
-- The sound engine is its own repository, [coolsynth-engine](https://github.com/tomcoolpxl/coolsynth-engine), a
-  submodule here; the 808's circuits are in
-  [`src/synth/v3`](https://github.com/tomcoolpxl/coolsynth-engine/tree/main/src/synth/v3) (`CircuitWdf.h` and the
-  `Tr808` files), their ngspice checks in its `tests/V3Tr808*Tests.cpp`.
-- The app's design: [COOLSYNTH_808.md](https://github.com/tomcoolpxl/CoolSynth/blob/main/docs/design/COOLSYNTH_808.md)
-  and the sequencer's CPU section,
-  [COOLSYNTH_808_CPU.md](https://github.com/tomcoolpxl/CoolSynth/blob/main/docs/design/COOLSYNTH_808_CPU.md).
-- Every decision, with what was measured: CoolSynth's
-  [DECISIONS_LOG.md](https://github.com/tomcoolpxl/CoolSynth/blob/main/DECISIONS_LOG.md), the circuits from D235
-  and D250, the app from D263.
-- The research on each voice and the accent:
-  [docs/research](https://github.com/tomcoolpxl/CoolSynth/tree/main/docs/research) in CoolSynth (`tr-808-voices.md`,
-  `808-accent.md` and one file per family).
-- What fuller device models change, against both units:
-  [808-device-models.md](https://github.com/tomcoolpxl/CoolSynth/blob/main/docs/research/808-device-models.md).
-- Kurt James Werner, [Virtual Analog Modeling of Audio Circuitry Using Wave Digital Filters](https://purl.stanford.edu/jy057cz8322),
-  Stanford University, 2016.
-- The code's layout: [GEMINI.md](GEMINI.md).
+CoolSynth 808's own code is MIT licensed (see `LICENSE`). It's built with [JUCE](https://juce.com) 9 under the free [Starter licence](https://juce.com/legal/juce-9-licence/). `THIRD_PARTY_NOTICES.txt` holds the notices of what it includes.
