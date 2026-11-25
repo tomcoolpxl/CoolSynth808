@@ -18,14 +18,14 @@ Play, Rec, the tempo, SYNC, Tap, Swing, Lid, Library, File and Options. Space st
 
 ## Under the lid
 
-Lid lifts the lid: the knobs and the glass go, the panel's circuit stays with its electricity, and the 808's CPU board is drawn below it. The drums' copper and the whole board light green as a node rises and red as it falls, as the engine plays. Each column that opens is framed; a click opens its schematic, MASTER's the whole board. A drum's schematic shows the engine's own voltages and currents from its last hit, with the circuit simulation's recording until it is struck. The CPU board opens the CPU section's: our sequencer's step as the service notes describe it. A click on the sheet's empty space, or Escape, goes back.
+Lid lifts the lid: the knobs and the glass go, the panel's circuit stays with its electricity, and the 808's CPU board is drawn below it. The drums' copper and the whole board light green as a node rises and red as it falls, as the engine plays. Each column that opens is framed; a click opens its schematic, MAIN's the whole board. A drum's schematic shows the engine's own voltages and currents from its last hit, with the circuit simulation's recording until it is struck. The CPU board opens the CPU section's: our sequencer's step as the service notes describe it. A click on the sheet's empty space, or Escape, goes back.
 
 ## Options
 
 Options opens a window of its own, its pages listed down the left:
 
-- Audio: the driver (Windows Audio or ASIO) and the circuits' accuracy: Best, Lighter or Lightest for a busy computer; an export always renders at Best.
-- MIDI: the ports, the clock and the beat sync's Play and Stop.
+- Audio: the driver (Windows Audio; ASIO too when built from source with Steinberg's ASIO SDK, not in the release) and the circuits' accuracy: Best, Lighter or Lightest for a busy computer; an export always renders at Best.
+- MIDI: the ports, the clock, the beat sync's Play and Stop, and Claude's MCP server: it lets Claude Code read and set the panel and play the 808 while it helps you, off until you switch it on, and only this computer can reach it.
 - Drum notes: which note plays which drum from a DAW or a MIDI input: General MIDI, in a row from 36 or from 60, or each learned from a note played. Drag MIDI writes the same notes.
 - Panel: the theme, the window's size, and the circuit full, faint or hidden, its electricity animated or still.
 - A MIDI controller's setup.

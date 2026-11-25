@@ -30,7 +30,7 @@ namespace coolsynth::midi
             { "fader1", "Fader 1 (layer A)" },
             { "fader2", "Fader 2 (layer B)" },
             { "fader3", "Fader 3 (effects)" },
-            { "fader4", "Fader 4 (master)" },
+            { "fader4", "Fader 4 (main)" },
             { "pad1", "Pad 1 (Home)" },
             { "pad2", "Pad 2 (Sound)" },
             { "pad3", "Pad 3 (Shape)" },

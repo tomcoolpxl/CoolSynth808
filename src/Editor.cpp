@@ -38,7 +38,7 @@ namespace cs808
     }
 
     // =============================================================================================================
-    // A column's name on the board: the drum's two letters and its name (MASTER over the first); a click selects it
+    // A column's name on the board: the drum's two letters and its name (MAIN over the first); a click selects it
 
     class ColumnLabel final : public juce::Component
     {
@@ -51,7 +51,7 @@ namespace cs808
             const auto& kit = editor->processor.project().kit;
             const bool sel = editor->selectedLane == column;
             const auto w = static_cast<float>(getWidth());
-            const auto id = column == 0 ? juce::String("MASTER") : laneCode(column, kit);
+            const auto id = column == 0 ? juce::String("MAIN") : laneCode(column, kit);
             // the selected drum's letters lit, glowing a little
             const auto idArea = juce::Rectangle<float>(0.0f, column == 0 ? 9.0f : 2.0f, w, 13.0f);
             g.setFont(headFont(13.0f));
@@ -389,6 +389,32 @@ namespace cs808
             transport->repaint();
             return;
         }
+        optionsWindow = std::make_unique<OptionsWindow>(optionsHooks(), standaloneDeviceManager(), settings.get());
+        optionsWindow->onClose = [this]
+        {
+            // after the click that asked has returned
+            juce::MessageManager::callAsync([safe = juce::Component::SafePointer<Editor>(this)]
+            {
+                if (safe != nullptr && safe->optionsOpen())
+                    safe->toggleOptions();
+            });
+        };
+        optionsWindow->keepAbove(*this);
+        optionsWindow->setVisible(true);
+        optionsWindow->toFront(true);
+        // It stays above the 808's window: brought to the front whenever that window is (not above other apps).
+        if (auto* top = getTopLevelComponent(); top != nullptr && top != this && top != watchedWindow)
+        {
+            if (watchedWindow != nullptr)
+                watchedWindow->removeComponentListener(this);
+            watchedWindow = top;
+            watchedWindow->addComponentListener(this);
+        }
+        transport->repaint();
+    }
+
+    OptionsHooks Editor::optionsHooks()
+    {
         OptionsHooks hooks;
         hooks.theme = [this] { return themeIndex; };
         hooks.chooseTheme = [this](int i) { chooseTheme(i); };
@@ -424,28 +450,19 @@ namespace cs808
         hooks.chooseCircuitAnimated = [this](bool on) { circuitAnimated = on; settings->setValue("circuitAnimated", on); applyCircuitLook(); };
         hooks.circuitShow = [this] { return circuitShow; };
         hooks.chooseCircuitShow = [this](int i) { circuitShow = juce::jlimit(0, 2, i); settings->setValue("circuitShow", circuitShow); applyCircuitLook(); };
-        optionsWindow = std::make_unique<OptionsWindow>(std::move(hooks), standaloneDeviceManager(), settings.get());
-        optionsWindow->onClose = [this]
+        if (processor.hasMcpSwitch())
         {
-            // after the click that asked has returned
-            juce::MessageManager::callAsync([safe = juce::Component::SafePointer<Editor>(this)]
+            // Claude's MCP server (CoolSynth's D363): started or stopped at once, the switch kept for the app
+            hooks.mcpOn = [this] { return processor.mcpServerChosen(); };
+            hooks.chooseMcp = [this](bool on)
             {
-                if (safe != nullptr && safe->optionsOpen())
-                    safe->toggleOptions();
-            });
-        };
-        optionsWindow->keepAbove(*this);
-        optionsWindow->setVisible(true);
-        optionsWindow->toFront(true);
-        // It stays above the 808's window: brought to the front whenever that window is (not above other apps).
-        if (auto* top = getTopLevelComponent(); top != nullptr && top != this && top != watchedWindow)
-        {
-            if (watchedWindow != nullptr)
-                watchedWindow->removeComponentListener(this);
-            watchedWindow = top;
-            watchedWindow->addComponentListener(this);
+                processor.setMcpServerOn(on);
+                settings->setValue("mcpServer", on);
+                settings->saveIfNeeded();
+            };
+            hooks.mcpStatus = [this] { return processor.mcpStatus(); };
         }
-        transport->repaint();
+        return hooks;
     }
 
     void Editor::componentBroughtToFront(juce::Component&)
@@ -585,7 +602,7 @@ namespace cs808
             label.column = c;
             label.setBounds(juce::roundToInt(columnX(c)), 50, juce::roundToInt(columnWidth(c)), 30);
             if (c == 0)
-                columnKeepOuts.push_back(wordKeepOut("MASTER", headFont(13.0f), cx, 56.0f, 20.0f));
+                columnKeepOuts.push_back(wordKeepOut("MAIN", headFont(13.0f), cx, 56.0f, 20.0f));
             else
             {
                 columnKeepOuts.push_back(wordKeepOut(instruments[static_cast<std::size_t>(c - 1)].code, headFont(13.0f), cx, 50.0f, 18.0f));
