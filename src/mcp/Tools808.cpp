@@ -291,18 +291,36 @@ namespace cs808
                           true });
 
         tools.push_back({ "screenshot",
-                          "A picture of CoolSynth 808's window as the player sees it now.",
-                          objectSchema({}),
-                          [&processor](const juce::var&)
+                          "A picture of CoolSynth 808's window as the player sees it now, drawn at a scale: 2 (the default) twice "
+                          "the window's own size, sharp enough for a README; 1 the window's size, up to 4. With file, the "
+                          "PNG is also written there at full resolution.",
+                          objectSchema({ { "scale", typeSchema("number", "Pixels per point, 1 to 4; 2 by default") },
+                                         { "file", typeSchema("string", "Optional: a full path to write the PNG to as well") } }),
+                          [&processor](const juce::var& args)
                           {
                               auto* editor = processor.getActiveEditor();
                               if (editor == nullptr || editor->getWidth() <= 0)
                                   return textResult("No window to picture.", true);
-                              const auto image = editor->createComponentSnapshot(editor->getLocalBounds(), true, 1.0f);
+                              const float scale = args.hasProperty("scale")
+                                                      ? juce::jlimit(1.0f, 4.0f, static_cast<float>(static_cast<double>(args["scale"])))
+                                                      : 2.0f;
+                              const auto image = editor->createComponentSnapshot(editor->getLocalBounds(), true, scale);
                               juce::MemoryOutputStream png;
                               juce::PNGImageFormat().writeImageToStream(image, png);
+                              juce::String saved;
+                              if (const auto path = args["file"].toString(); path.isNotEmpty())
+                              {
+                                  if (! juce::File::isAbsolutePath(path))
+                                      return textResult("file must be a full path.", true);
+                                  const juce::File file(path);
+                                  (void) file.getParentDirectory().createDirectory();
+                                  if (! file.replaceWithData(png.getData(), png.getDataSize()))
+                                      return textResult("Cannot write " + file.getFullPathName() + ".", true);
+                                  saved = " Written to " + file.getFullPathName() + ".";
+                              }
                               return imageResult(png.getMemoryBlock(), "CoolSynth 808's window, " + juce::String(image.getWidth()) + " x "
-                                                                           + juce::String(image.getHeight()) + " pixels.");
+                                                                           + juce::String(image.getHeight()) + " pixels, at "
+                                                                           + juce::String(scale, 1) + " times its size." + saved);
                           } });
 
         tools.push_back({ "view",
