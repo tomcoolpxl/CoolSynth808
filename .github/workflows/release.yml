@@ -2,7 +2,7 @@ name: Release
 
 # A version tag builds, tests and packages CoolSynth 808 for Windows (x64), then publishes it on a GitHub release
 # (CoolSynth's D363, as CoolSynth's own release.yml): the installer, one zip of the app, the VST3 and the notices,
-# and their checksums. Actions are pinned by commit, as CoolSynth's.
+# one of the CLAP (CoolSynth's D367), and their checksums. Actions are pinned by commit, as CoolSynth's.
 
 on:
   push:
@@ -95,13 +95,13 @@ jobs:
           body: |
             ## Install
 
-            Download **CoolSynth808-Setup-${{ github.ref_name }}.exe** below and run it. It installs the standalone app with a Start menu entry and the VST3 plugin for your music software.
+            Download **CoolSynth808-Setup-${{ github.ref_name }}.exe** below and run it. It installs the standalone app with a Start menu entry and the VST3 and CLAP plugins for your music software.
 
             Windows may warn that the installer comes from an unknown publisher, because it is not code-signed: choose **More info**, then **Run anyway**.
 
             The first time the app starts, Windows asks whether it may use the network: allow private networks to play in time with other computers through the beat sync.
 
-            Without the installer: the zip below holds the app, the VST3 and the notices.
+            Without the installer: the zips below hold the app, the VST3 and the notices, and the CLAP.
 
             How to play it: see [the guide](https://github.com/tomcoolpxl/CoolSynth808#readme).
           prerelease: ${{ contains(github.ref_name, '-') }}
@@ -110,4 +110,5 @@ jobs:
           files: |
             release-bundle/CoolSynth808-Setup-${{ github.ref_name }}.exe
             release-bundle/CoolSynth808-windows-x64-${{ github.ref_name }}.zip
+            release-bundle/CoolSynth808-windows-x64-clap-${{ github.ref_name }}.zip
             release-bundle/CoolSynth808-windows-x64-sha256-${{ github.ref_name }}.txt

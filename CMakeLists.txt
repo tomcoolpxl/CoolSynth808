@@ -11,6 +11,9 @@ include(external/coolsynth-engine/cmake/CoolSynthFlags.cmake)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
 
 add_subdirectory(external/JUCE)
+# CLAP beside the VST3 (CoolSynth's D367, as CoolSynth's D216): free-audio/clap-juce-extensions, pinned in external/
+# at CoolSynth's commit.
+add_subdirectory(external/clap-juce-extensions EXCLUDE_FROM_ALL)
 include(CTest)
 # The engine's own tests run in its repository's CI; here only this app's.
 set(COOLSYNTH_ENGINE_TESTS OFF CACHE BOOL "Build the engine's own test program" FORCE)
@@ -66,6 +69,16 @@ juce_add_plugin(CoolSynth808
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT TRUE
     IS_MIDI_EFFECT FALSE)
+
+# The CLAP version (CoolSynth's D367), as CoolSynth's without its remote control pages. Stepped parameters keep their
+# steps (DISCRETE).
+clap_juce_extensions_plugin(TARGET CoolSynth808
+    CLAP_ID "com.tomcoolpxl.coolsynth808"
+    CLAP_FEATURES instrument drum-machine stereo
+    # No "#readme" anchor: a '#' in a define is dropped by the Ninja and Makefile generators.
+    CLAP_MANUAL_URL "https://github.com/tomcoolpxl/CoolSynth808"
+    CLAP_SUPPORT_URL "https://github.com/tomcoolpxl/CoolSynth808/issues"
+    CLAP_USE_JUCE_PARAMETER_RANGES DISCRETE)
 
 set(COOLSYNTH808_SOURCES
     src/Kit.cpp
@@ -129,6 +142,7 @@ target_link_libraries(CoolSynth808
         juce::juce_audio_utils
         juce::juce_gui_extra
         CoolSynth808Library
+        clap_juce_extensions # its clap_properties tell the processor it runs as a CLAP (CoolSynth's D367)
         coolsynth_config_flags
         juce::juce_recommended_warning_flags)
 
@@ -144,6 +158,7 @@ target_link_libraries(CoolSynth808Render
         juce::juce_audio_utils
         juce::juce_gui_extra
         CoolSynth808Library
+        clap_juce_extensions
         coolsynth_config_flags
         juce::juce_recommended_warning_flags)
 
@@ -161,6 +176,7 @@ if(BUILD_TESTING)
             tests/HostingTests.cpp
             tests/McpTests.cpp
             tests/McpSwitchTests.cpp
+            tests/ClapTests.cpp
             tests/ExportTests.cpp
             tests/CpuTests.cpp
             tests/BeatSyncTests.cpp
@@ -182,6 +198,7 @@ if(BUILD_TESTING)
             juce::juce_audio_utils
             juce::juce_gui_extra
             CoolSynth808Library
+            clap_juce_extensions
             coolsynth_config_flags
             juce::juce_recommended_warning_flags)
     add_test(NAME CoolSynth808Tests COMMAND CoolSynth808Tests)

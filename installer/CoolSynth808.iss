@@ -2,7 +2,8 @@
 ; Inno Setup 6.5 or newer:
 ;   ISCC /DAppVersion=0.1.0 "/DBuildDir=..\build\ci-release\CoolSynth808_artefacts\Release" installer\CoolSynth808.iss
 ; scripts\ci\PackageRelease.ps1 -Installer passes the version from CMakeLists.txt. It installs the standalone app with
-; a Start menu entry, and the VST3 where hosts look (Common Files\VST3). Uninstalling removes what it installed and
+; a Start menu entry, the VST3 and the CLAP where hosts look (Common Files\VST3 and Common Files\CLAP; the CLAP,
+; CoolSynth's D367, with its own tick box). Uninstalling removes what it installed and
 ; nothing else: the player's projects, patterns (%APPDATA%\CoolSynth808\Patterns), controller setup and the app's
 ; settings in %APPDATA%\CoolSynth808 stay.
 ; No firewall rule: Windows asks once, on the app's first start, for the beat sync (the user's pick, D363).
@@ -45,17 +46,22 @@ VersionInfoVersion={#AppVersion}
 VersionInfoProductName=CoolSynth 808
 
 [Types]
-Name: "full"; Description: "Everything: the app and the VST3 plugin"
+Name: "full"; Description: "Everything: the app and the VST3 and CLAP plugins"
 Name: "app"; Description: "The app only"
 Name: "vst3"; Description: "The VST3 plugin only"
+; Each part its own tick box (CoolSynth's D367, as CoolSynth.iss)
+Name: "custom"; Description: "Choose"; Flags: iscustom
 
 [Components]
-Name: "app"; Description: "Standalone app"; Types: full app
-Name: "vst3"; Description: "VST3 plugin, to play CoolSynth 808 in your music software (DAW)"; Types: full vst3
+Name: "app"; Description: "Standalone app"; Types: full app custom
+Name: "vst3"; Description: "VST3 plugin, to play CoolSynth 808 in your music software (DAW)"; Types: full vst3 custom
+Name: "clap"; Description: "CLAP plugin, for DAWs that support it: Bitwig, Reaper, FL Studio, Studio One"; Types: full custom
 
 [Files]
 Source: "{#BuildDir}\Standalone\CoolSynth 808.exe"; DestDir: "{app}"; Components: app; Flags: ignoreversion
 Source: "{#BuildDir}\VST3\CoolSynth 808.vst3\*"; DestDir: "{commoncf64}\VST3\CoolSynth 808.vst3"; Components: vst3; Flags: ignoreversion recursesubdirs createallsubdirs
+; The CLAP (CoolSynth's D367): one file, in Common Files\CLAP, where CLAP hosts look.
+Source: "{#BuildDir}\CLAP\CoolSynth 808.clap"; DestDir: "{commoncf64}\CLAP"; Components: clap; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\THIRD_PARTY_NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\resources\icon\CoolSynth808.ico"; DestDir: "{app}"; Flags: ignoreversion

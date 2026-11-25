@@ -23,7 +23,9 @@ ASIO comes in when Steinberg's ASIO SDK is found: set `ASIO_SDK_DIR` to its `ASI
 
 A Release build carries the C++ runtime inside it. `scripts/ci/BuildAndTest.ps1 -Configuration Release -RunTests`, then `scripts/ci/PackageRelease.ps1 -Configuration Release -Installer`, build, test and package as the release does, in `build/ci-release` (the installer needs Inno Setup 6.5 or newer, `installer/CoolSynth808.iss`). A version tag (`v0.1.0`) makes GitHub build and publish a release.
 
-`THIRD_PARTY_NOTICES.txt` is written by `tools/release/make_notices.py`: the notices of JUCE's image, font and audio libraries, the VST3 SDK, Open303 and the fonts.
+`THIRD_PARTY_NOTICES.txt` is written by `tools/release/make_notices.py`: the notices of JUCE's image, font and audio libraries, the VST3 SDK, the CLAP's libraries, Open303 and the fonts.
+
+The CLAP (CoolSynth's D367) comes from `external/clap-juce-extensions`, pinned at CoolSynth's commit; it is `build/CoolSynth808_artefacts/<config>/CLAP/CoolSynth 808.clap`, for `C:\Program Files\Common Files\CLAP`. JUCE hosts no CLAP, so the test program checks it with free-audio's [clap-validator](https://github.com/free-audio/clap-validator) when `COOLSYNTH_CLAP_VALIDATOR` names its exe (not committed), and skips it otherwise.
 
 ## Design and sources
 

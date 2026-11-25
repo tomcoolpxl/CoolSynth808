@@ -127,6 +127,18 @@ function New-Cs808Zip {
     New-Cs808Asset -LogicalName 'zip' -Path $zip
 }
 
+function New-Cs808ClapZip {
+    # The CLAP (CoolSynth's D367) in a zip of its own, as CoolSynth's: one file, for Common Files\CLAP.
+    param([Parameter(Mandatory)][pscustomobject]$BuildContext)
+
+    $clap = Join-Path $BuildContext.ArtifactRoot 'CLAP/CoolSynth 808.clap'
+    Assert-PathExists -Path $clap -Description 'CLAP plugin'
+    $zip = Join-Path $BuildContext.PackageDirectory "CoolSynth808-windows-x64-clap-$($BuildContext.TagName).zip"
+    Compress-Archive -LiteralPath $clap -DestinationPath $zip -CompressionLevel Optimal -Force
+    Assert-PathExists -Path $zip -Description 'CLAP zip'
+    New-Cs808Asset -LogicalName 'clap' -Path $zip
+}
+
 function New-Cs808Installer {
     # installer/CoolSynth808.iss compiled with Inno Setup 6.5 or newer (ISCC on the PATH, or in its usual folders).
     param([Parameter(Mandatory)][pscustomobject]$BuildContext)

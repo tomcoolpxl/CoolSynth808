@@ -2,7 +2,8 @@
 
 What ships, found in the Release binaries (their marker strings and symbols), as CoolSynth 303's: JUCE 9 and, compiled
 into it, zlib, libpng, libjpeg, libwebp, HarfBuzz, SheenBidi, LunaSVG with PlutoVG, FLAC, Ogg Vorbis and Opus; the VST3
-SDK; Open303's generator, rewritten in the engine and linked with it; the fonts Archivo and IBM Plex Mono. Not ASIO: a
+SDK; in the CLAP, clap-juce-extensions with the CLAP headers and clap-helpers (CoolSynth's D367); Open303's generator,
+rewritten in the engine and linked with it; the fonts Archivo and IBM Plex Mono. Not ASIO: a
 release is built without it (COOLSYNTH808_ASIO=OFF). Each licence's text is read from its own file in the JUCE
 submodule or resources/fonts, so running this again after a JUCE update brings them up to date.
 
@@ -13,6 +14,7 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 JUCE = os.path.join(ROOT, "external", "JUCE", "modules")
+CLAP = os.path.join(ROOT, "external", "clap-juce-extensions")
 RULE = "-" * 120
 
 
@@ -55,7 +57,7 @@ sections = [
     ("JUCE (https://juce.com)",
      "CoolSynth 808 is built with JUCE 9, copyright Raw Material Software Limited, under the Starter licence of the\n"
      "JUCE 9 End User Licence Agreement (https://juce.com/legal/juce-9-licence/).\n"
-     "JUCE carries the libraries below, compiled into the app and the VST3, each under its own licence.",
+     "JUCE carries the libraries below, compiled into the app and the plugins, each under its own licence.",
      None),
     ("Open303 (https://github.com/RobinSchmidt/Open303)",
      "The TB-303 generator in the sound engine the 808 is built on (the engine's src/synth/v3/Tb303Generator.h) is\n"
@@ -67,6 +69,12 @@ sections = [
      read(ROOT, "resources", "fonts", "IBMPlexMono-OFL.txt")),
     ("VST 3 SDK (https://github.com/steinbergmedia/vst3sdk)", "In the VST3 plugin.",
      read(JUCE, "juce_audio_processors_headless", "format_types", "VST3_SDK", "LICENSE.txt").strip("/-\n")),
+    # The CLAP plugin (CoolSynth's D367): JUCE wrapped by clap-juce-extensions, on the CLAP headers and helpers.
+    ("clap-juce-extensions (https://github.com/free-audio/clap-juce-extensions)", "In the CLAP plugin.",
+     read(CLAP, "LICENSE.md")),
+    ("CLAP (https://github.com/free-audio/clap)", "In the CLAP plugin.", read(CLAP, "clap-libs", "clap", "LICENSE")),
+    ("clap-helpers (https://github.com/free-audio/clap-helpers)", "In the CLAP plugin.",
+     read(CLAP, "clap-libs", "clap-helpers", "LICENSE")),
     ("zlib (https://zlib.net)", None, read(JUCE, "juce_core", "zip", "zlib", "LICENSE")),
     ("libpng (http://www.libpng.org)", None, read(JUCE, "juce_graphics", "image_formats", "pnglib", "LICENSE")),
     ("libjpeg (https://ijg.org)", "This software is based in part on the work of the Independent JPEG Group.", ijg_legal()),

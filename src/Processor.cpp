@@ -48,7 +48,7 @@ namespace cs808
         bool mcpOn = false;
         {
             DrumNotes notes = drumNoteSet(0);
-            if (wrapperType != wrapperType_Undefined && ! offline)
+            if (madeByHostOrApp() && ! offline)
             {
                 juce::PropertiesFile::Options options;
                 options.applicationName = "CoolSynth808";
@@ -82,7 +82,7 @@ namespace cs808
             // The beat sync, the standalone's only (D361): in a DAW its transport rules, an export renders alone.
             startBeatSync(sync, true, {});
         }
-        if (wrapperType != wrapperType_Undefined && ! offline)
+        if (madeByHostOrApp() && ! offline)
         {
             startedSetup = true;
             if (liveProcessors.fetch_add(1, std::memory_order_relaxed) == 0)
@@ -455,8 +455,12 @@ namespace cs808
 
     void Processor::getStateInformation(juce::MemoryBlock& destData)
     {
+        // The kit as the host's parameters have it: a move the host just made reaches the model only on the message
+        // thread's next turn, and a host may save before that (clap-validator's state tests, CoolSynth's D367).
+        Project saved = model;
+        saved.kit = kitFromParams(model.kit);
         auto* o = new juce::DynamicObject();
-        o->setProperty("project", projectToJson(model));
+        o->setProperty("project", projectToJson(saved));
         o->setProperty("file", file.getFullPathName());
         o->setProperty("followHostPlay", followsHostPlay()); // the DAW's project keeps it (D325)
         o->setProperty("ownOutputs", static_cast<int>(ownOutputs.load())); // and the drums on their own outputs (D343)

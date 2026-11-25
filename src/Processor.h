@@ -7,6 +7,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_devices/juce_audio_devices.h>
+#include <clap-juce-extensions/clap-juce-extensions.h>
 
 #include "mcp/McpServer.h"
 #include "ClockFollower.h"
@@ -58,7 +59,10 @@ namespace cs808
     /** COOLSYNTH808_NO_MCP is set: the server stays off. */
     [[nodiscard]] bool mcpForcedOff();
 
-    class Processor final : public juce::AudioProcessor, private juce::AudioProcessorParameter::Listener, private juce::AsyncUpdater
+    class Processor final : public juce::AudioProcessor,
+                            public clap_juce_extensions::clap_properties, // is_clap: a CLAP reports no wrapper type (CoolSynth's D367)
+                            private juce::AudioProcessorParameter::Listener,
+                            private juce::AsyncUpdater
     {
     public:
         Processor();
@@ -231,8 +235,11 @@ namespace cs808
         [[nodiscard]] unsigned int drumNotesVersion() const noexcept { return drumNotesChanged.load(std::memory_order_acquire); }
         /** Whether the host's transport leads the pattern now. */
         [[nodiscard]] bool followingHost() const noexcept { return hostFollowed.load(std::memory_order_acquire); }
-        /** A plugin in a DAW, not the standalone app nor the tests. */
-        [[nodiscard]] bool isPlugin() const noexcept { return wrapperType != wrapperType_Standalone && wrapperType != wrapperType_Undefined; }
+        /** Made by a host or the app, not by the tests or a tool: a CLAP reports no wrapper type, only is_clap (CoolSynth's
+            D367, as CoolSynth's). */
+        [[nodiscard]] bool madeByHostOrApp() const noexcept { return wrapperType != wrapperType_Undefined || is_clap; }
+        /** A plugin in a DAW (the VST3 or the CLAP), not the standalone app nor the tests. */
+        [[nodiscard]] bool isPlugin() const noexcept { return wrapperType != wrapperType_Standalone && madeByHostOrApp(); }
         [[nodiscard]] bool sendsClock() const noexcept { return sendClockOn.load(std::memory_order_relaxed); }
         [[nodiscard]] bool inputsRoutedForTesting() const noexcept { return inputsRouted.load(std::memory_order_relaxed); }
         /** MIDI threads: a linked control's message from the controller's input, for the next block. A note or a

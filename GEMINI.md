@@ -40,6 +40,9 @@ The shared project memory for every AI tool (`CLAUDE.md` points here).
 - The release (CoolSynth's D363): `installer/CoolSynth808.iss` (Inno Setup), `scripts/ci` (build, test, package,
   without ASIO), `.github/workflows/release.yml` on a version tag; `tools/release/make_notices.py` writes
   `THIRD_PARTY_NOTICES.txt`.
+- The CLAP (CoolSynth's D367): `external/clap-juce-extensions` at CoolSynth's commit. A CLAP's processor has no
+  wrapper type, only `is_clap`: ask `Processor::madeByHostOrApp()` or `isPlugin()`, never `wrapperType` alone.
+  `tests/ClapTests` runs clap-validator on it when `COOLSYNTH_CLAP_VALIDATOR` names the exe.
 - `tools/RenderLibrary`: `CoolSynth808Render <folder> [id ...]` writes the built-in beats as WAV files, for listening
   passes (D276); `listening/` holds them and is not committed.
 

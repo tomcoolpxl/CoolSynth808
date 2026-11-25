@@ -5,7 +5,7 @@
 CoolSynth 808 is a drum machine modelled on the Roland TR-808.
 Its sixteen voices are the 808's eleven drum circuits, each modelled part by part (transistors, diodes, op-amps, resistors, capacitors and pots) and solved in real time, so every knob turns the part it turns on the machine and the drums respond as the circuits do.
 
-It runs as a standalone app or as a VST3 plugin in your DAW.
+It runs as a standalone app or as a VST3 or CLAP plugin in your DAW.
 
 Its siblings, built on the same sound engine: [CoolSynth 303](https://github.com/tomcoolpxl/CoolSynth303), a bass line synthesizer modelled on the TB-303's circuit, and [CoolSynth](https://github.com/tomcoolpxl/CoolSynth), a multi-engine synthesizer.
 
@@ -17,7 +17,7 @@ Get the latest `CoolSynth808-Setup` installer from the [Releases page](https://g
 
 Windows may warn that the publisher is unknown, because the installer isn't code-signed. Click **More info**, then **Run anyway**.
 
-The installer puts the app in the Start menu and the VST3 in `C:\Program Files\Common Files\VST3`. Uninstalling it keeps your own patterns, projects and settings.
+The installer puts the app in the Start menu, the VST3 in `C:\Program Files\Common Files\VST3` and the CLAP in `C:\Program Files\Common Files\CLAP`. Uninstalling it keeps your own patterns, projects and settings.
 
 The first time the app starts, Windows asks whether it may use the network. Allow it on private networks, so the beat sync can play in time with other computers.
 
