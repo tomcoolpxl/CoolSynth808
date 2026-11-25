@@ -49,6 +49,10 @@ To come.
   (the ports and the clock), Drum notes, Panel (the theme: Roland, Silver, Steel, Olive; the window's size; the
   circuit full, faint or hidden, its electricity animated or still) and a MIDI controller's setup.
 - It follows an incoming MIDI clock and sends its own when none comes in; both can be switched off.
+- With CoolSynth 303 on the same computer, one leads and the other follows by MIDI clock through a loopback port
+  (Windows 11's MIDI Settings app makes one; loopMIDI too): the leader's MIDI output and the follower's input set to
+  it, both apps on the same audio device. The follower plays within about a millisecond of the leader. The two take
+  some two and a half cores; a busy program beside them can make the 808 stutter, and the 303 then follows it.
 - Drag MIDI drags the pattern into your music software as a MIDI file.
 - File, Export audio writes the pattern shown or the chain as a 24-bit WAV, played a number of times: cut at the
   end, ringing on, or as a seamless loop. A file per drum too if you like, each as long as the mix.
