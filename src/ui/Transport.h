@@ -6,7 +6,7 @@
 
 /*
     The transport and the files on one strip of smoked glass at the top right of the board (D292, the mockup's
-    .tstrip): Play, Rec, the tempo, Tap and the Swing knob; then Lid (Under the Lid, D308), Library, File and Options (D311).
+    .tstrip): Play, Rec, the tempo, SYNC in the standalone (the beat sync, D361), Tap and the Swing knob; then Lid (Under the Lid, D308), Library, File and Options (D311).
 */
 namespace cs808
 {
@@ -21,6 +21,8 @@ namespace cs808
         static constexpr int height = 36;
         /** As wide as its keys and words need. */
         [[nodiscard]] int preferredWidth() const;
+        /** The SYNC key (D361), the standalone's; null elsewhere. */
+        [[nodiscard]] Chip* syncKeyForTesting() const noexcept { return syncKey; }
 
         void paint(juce::Graphics& g) override;
         void resized() override;
@@ -33,6 +35,7 @@ namespace cs808
         int separatorAfter = -1;                 // the item the separator follows
         int separatorX = 0;
         int swingLabelAfter = -1;                // the Swing knob, its word right of it
+        Chip* syncKey = nullptr;                 // owned by items
         static constexpr int padX = 8, gap = 7, swingWordWidth = 34;
     };
 }

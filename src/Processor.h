@@ -16,11 +16,15 @@
 #include "synth/StepSequencer.h"
 #include "synth/v3/CircuitWatch.h"
 #include "synth/v3/EngineV3.h"
+#include "sync/BeatSync.h"
+#include "sync/BlockClock.h"
+#include "sync/SyncClock.h"
 
 /*
     CoolSynth 808's processor: the engine playing the 808 kit, the step sequencer playing the engine, the transport
-    (its own clock, or an incoming MIDI clock) and MIDI clock out. A JUCE audio plugin built as a standalone app for
-    now (D267): JUCE's standalone wrapper brings the audio and MIDI settings and keeps the last state.
+    (its own clock, an incoming MIDI clock, a DAW's, or the standalone app's beat sync, D361) and MIDI clock out. A
+    JUCE audio plugin built as a standalone app for now (D267): JUCE's standalone wrapper brings the audio and MIDI
+    settings and keeps the last state.
 
     The project lives on the message thread. Each edit hands the audio thread a copy under a lock the audio thread
     only tries (it never waits): the kit, the playing settings, the bank with its lanes' notes. The audio thread
@@ -37,6 +41,18 @@ namespace cs808
         int step = 0;
         bool alt = false;
     };
+
+    /** The beat sync as last chosen (CoolSynth's D361): on, and Play and Stop shared; both on until switched off. Kept
+        in the app's settings. */
+    struct SyncChoice
+    {
+        bool on = coolsynth::sync::BeatSync::kDefaultEnabled;
+        bool sharing = coolsynth::sync::BeatSync::kDefaultStartStopSharing;
+    };
+    [[nodiscard]] SyncChoice syncChoiceFrom(const juce::PropertySet& settings);
+    void keepSyncChoice(juce::PropertySet& settings, const SyncChoice& choice);
+    /** The SYNC key's word: the other peers' count after it, none while alone ("SYNC", "SYNC 2"). */
+    [[nodiscard]] juce::String syncKeyText(int peers);
 
     class Processor final : public juce::AudioProcessor, private juce::AudioProcessorParameter::Listener, private juce::AsyncUpdater
     {
@@ -130,6 +146,10 @@ namespace cs808
         [[nodiscard]] bool playingVariationB() const noexcept { return variationBNow.load(std::memory_order_acquire); }
         [[nodiscard]] std::int64_t playingSixteenth() const noexcept { return sixteenthNow.load(std::memory_order_acquire); }
         [[nodiscard]] bool followingClock() const noexcept { return clockFollowed.load(std::memory_order_acquire); }
+        /** The beat sync leads the beat, with other peers in its session (D361). */
+        [[nodiscard]] bool followingSync() const noexcept { return syncFollowed.load(std::memory_order_acquire); }
+        /** Play pressed with other peers: waiting for the session's next bar line (D361). */
+        [[nodiscard]] bool countingIn() const noexcept { return countingInNow.load(std::memory_order_acquire); }
         [[nodiscard]] double tempoNow() const noexcept { return bpmNow.load(std::memory_order_acquire); }
         /** The lanes struck since the last call, a bit each (bit 11 the accent). */
         [[nodiscard]] std::uint32_t takeStruckLanes() noexcept { return struck.exchange(0, std::memory_order_acq_rel); }
@@ -215,6 +235,32 @@ namespace cs808
         /** The transport to this beat position at the next block while it plays, as a DAW's loop jumps: what rings
             rings on, every random number from its seed again. The WAV export's seamless loop (D331). Any thread. */
         void jumpTo(double beatPosition) noexcept { jumpRequest.store(beatPosition, std::memory_order_release); }
+
+        // ---- The beat sync (CoolSynth's D361), the standalone app's -----------------------------------------------
+        /** One tempo, beat grid and play state with the other programs on the network that speak the beat sync: the
+            standalone app has one (a plugin follows its DAW, an export renders alone). It feeds the transport through
+            a play head of its own, as a DAW's does: Play and Stop and the tempo go through it, a start waits for the
+            session's next bar line of 4 beats, and while other peers are in the session an incoming MIDI clock is
+            not followed. */
+        [[nodiscard]] bool hasBeatSync() const noexcept { return beatSync != nullptr; }
+        /** Message thread: the SYNC key and Options. Kept in the app's settings by the editor (syncChoiceVersion). */
+        void setBeatSyncOn(bool on);
+        [[nodiscard]] bool beatSyncOn() const noexcept { return syncOn.load(std::memory_order_acquire); }
+        void setStartStopSharing(bool on);
+        [[nodiscard]] bool startStopSharing() const noexcept { return beatSync != nullptr && beatSync->startStopSharing(); }
+        /** The other peers in the session; 0 while off. Message thread. */
+        [[nodiscard]] int syncPeers() const noexcept { return beatSync != nullptr ? beatSync->peerCount() : 0; }
+        /** Grows with every change of the two switches. */
+        [[nodiscard]] unsigned int syncChoiceVersion() const noexcept { return syncChoiceChanged.load(std::memory_order_acquire); }
+        /** Message thread, ten times a second: the output's latency from the audio device, and a tempo another peer
+            set becomes the panel's. */
+        void syncTick();
+        /** For the tests: a beat sync of its own, its network on the loopback only, or none (then alone, never on a
+            socket); the host clock in microseconds the audio thread reads; each sequencer hit's sample since the
+            start, written into `log` (audio thread, allocating: the tests only). */
+        void useBeatSyncForTesting(bool network);
+        void setHostClockForTesting(std::function<std::int64_t()> micros) { hostClockForTesting = std::move(micros); }
+        void logSequencerHitsForTesting(std::vector<std::int64_t>* log) noexcept { hitLog = log; }
 
         // ---- The host's parameters (D343) -----------------------------------------------------------------------
         /** The panel's five voice switches as parameters: the lanes whose switch each is (tom or conga on the three
@@ -373,6 +419,34 @@ namespace cs808
         juce::AbstractFifo routedFifo { 256 };
         std::array<RoutedMessage, 256> routedMessages {};
         double lastBlockMilliseconds = 0.0; // audio thread
+
+        // The beat sync (D361). Its play head gives the block's beats as a DAW's gives its transport: the tempo the
+        // block plays at, the beat at its first sample, and playing once the count-in reaches beat 0 in the block.
+        struct SyncPlayHead final : juce::AudioPlayHead
+        {
+            coolsynth::sync::BlockBeats beats {};
+            double sampleRate = 48000.0;
+            int samples = 0;
+            juce::Optional<PositionInfo> getPosition() const override;
+        };
+        std::unique_ptr<coolsynth::sync::BeatSync> beatSync; // the standalone's, or a test's
+        bool syncNetwork = false;                            // message thread: its network switched with it
+        std::atomic<bool> syncOn { false };
+        std::atomic<unsigned int> syncChoiceChanged { 0 };
+        std::atomic<std::int64_t> outputLatencyMicros { 0 };
+        coolsynth::sync::BlockClock blockClock;  // audio thread
+        SyncPlayHead syncHead;                   // audio thread
+        bool syncInUse = false;                  // audio thread: the last block was the sync's
+        bool syncRunning = false;                // audio thread: the last block had the sync on
+        double syncPanelTempo = -1.0;            // audio thread: the panel's tempo as last given to the sync
+        std::atomic<double> syncPanelTempoNow { -1.0 }, syncBpmNow { 0.0 };
+        std::atomic<int> syncPeersNow { 0 };
+        std::atomic<bool> syncFollowed { false }, countingInNow { false };
+        std::function<std::int64_t()> hostClockForTesting;
+        std::vector<std::int64_t>* hitLog = nullptr;
+        std::unique_ptr<juce::Timer> syncTicker;
+        void startBeatSync(const SyncChoice& choice, bool network, coolsynth::sync::BeatSync::Options options);
+
         std::unique_ptr<juce::Timer> midiInRouter; // last: it is gone before anything it writes to
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Processor)

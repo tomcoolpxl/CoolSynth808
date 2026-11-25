@@ -65,7 +65,7 @@ namespace cs808
         double startValue = 0.0;
     };
 
-    class Chip final : public juce::Component
+    class Chip final : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         Chip() { setRepaintsOnMouseActivity(true); }

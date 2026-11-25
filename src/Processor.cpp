@@ -2,6 +2,7 @@
 #include "mcp/Tools808.h"
 
 #include "Editor.h"
+#include "StandaloneDevices.h"
 #include "StandaloneMidiIn.h"
 #include "StandaloneMidiOut.h"
 
@@ -43,6 +44,7 @@ namespace cs808
             for (auto& note : *table)
                 note.store(-1, std::memory_order_relaxed);
         // The drums' notes from outside (D329): the app's, from its settings; General MIDI in the tests.
+        SyncChoice sync;
         {
             DrumNotes notes = drumNoteSet(0);
             if (wrapperType != wrapperType_Undefined && ! offline)
@@ -56,6 +58,7 @@ namespace cs808
                 if (file.containsKey("drumNotes"))
                     notes = drumNotesFromString(file.getValue("drumNotes"));
                 setAccuracy(file.getIntValue("accuracy", 0)); // D339
+                sync = syncChoiceFrom(file);                  // D361
             }
             setDrumNotes(notes);
         }
@@ -67,6 +70,8 @@ namespace cs808
         {
             midiOutKeeper = makeStandaloneMidiOutKeeper(); // MIDI clock out at its own samples (the review of D267)
             midiInRouter = makeStandaloneMidiInRouter(*this); // the controller's input apart from the sound's (D271)
+            // The beat sync, the standalone's only (D361): in a DAW its transport rules, an export renders alone.
+            startBeatSync(sync, true, {});
         }
         if (wrapperType != wrapperType_Undefined && ! offline)
         {
@@ -80,6 +85,8 @@ namespace cs808
     {
         alive->store(false); // a tool's job still queued finds the processor gone and does nothing (D333)
         mcp = nullptr;
+        syncTicker.reset();
+        beatSync.reset(); // says goodbye to the other peers; the audio has stopped
         midiInRouter.reset(); // gives the inputs back to the standalone's player before anything here goes
         // The last one: the setup's timers go while JUCE still runs (the review of D211).
         if (startedSetup && liveProcessors.fetch_sub(1, std::memory_order_relaxed) == 1)
@@ -155,6 +162,7 @@ namespace cs808
         engine.prepare(rate, std::max(1, samplesPerBlock), std::max(1, getTotalNumOutputChannels()));
         clock.prepare(rate);
         clock.setBlockLate(wrapperType == wrapperType_Standalone); // the standalone's MIDI comes a block late (D359)
+        blockClock.reset(rate); // the device started, or its rate changed (D361)
         keptBlock.ensureSize(8192);
         sequencer.reset();
         playing = false;
@@ -528,6 +536,116 @@ namespace cs808
         }
     }
 
+    // ---- The beat sync (CoolSynth's D361) ---------------------------------------------------------------------
+
+    SyncChoice syncChoiceFrom(const juce::PropertySet& settings)
+    {
+        SyncChoice c;
+        c.on = settings.getBoolValue("beatSync", c.on);
+        c.sharing = settings.getBoolValue("beatSyncSharing", c.sharing);
+        return c;
+    }
+
+    void keepSyncChoice(juce::PropertySet& settings, const SyncChoice& choice)
+    {
+        settings.setValue("beatSync", choice.on);
+        settings.setValue("beatSyncSharing", choice.sharing);
+    }
+
+    juce::String syncKeyText(int peers) { return peers > 0 ? "Sync " + juce::String(peers) : juce::String("Sync"); }
+
+    namespace
+    {
+        class Ticker final : public juce::Timer
+        {
+        public:
+            explicit Ticker(std::function<void()> f) : tick(std::move(f)) {}
+            void timerCallback() override { tick(); }
+
+        private:
+            std::function<void()> tick;
+        };
+    }
+
+    void Processor::startBeatSync(const SyncChoice& choice, bool network, coolsynth::sync::BeatSync::Options options)
+    {
+        if (beatSync != nullptr || offline)
+            return;
+        beatSync = std::make_unique<coolsynth::sync::BeatSync>(model.play.tempo, std::move(options));
+        beatSync->setStartStopSharing(choice.sharing);
+        syncNetwork = network;
+        setBeatSyncOn(choice.on);
+        if (network)
+        {
+            syncTicker = std::make_unique<Ticker>([this] { syncTick(); });
+            syncTicker->startTimerHz(10);
+        }
+    }
+
+    void Processor::useBeatSyncForTesting(bool network)
+    {
+        coolsynth::sync::BeatSync::Options options;
+        options.loopbackOnly = true; // this computer only
+        startBeatSync({}, network, std::move(options));
+        if (syncTicker != nullptr)
+            syncTicker->stopTimer(); // the test calls syncTick itself
+    }
+
+    void Processor::setBeatSyncOn(bool on)
+    {
+        if (beatSync == nullptr)
+            return;
+        if (syncNetwork)
+            beatSync->setEnabled(on); // switched on, it founds a session of its own and meets the others
+        syncOn.store(on, std::memory_order_release);
+        syncChoiceChanged.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    void Processor::setStartStopSharing(bool on)
+    {
+        if (beatSync == nullptr)
+            return;
+        beatSync->setStartStopSharing(on);
+        syncChoiceChanged.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    void Processor::syncTick()
+    {
+        if (beatSync == nullptr)
+            return;
+        // The output's latency (the document's "Following the transport sample-accurately"): the device's own and
+        // its buffer, read as it runs, so the beat is placed where it is heard.
+        if (auto* devices = standaloneDeviceManager())
+            if (auto* device = devices->getCurrentAudioDevice(); device != nullptr && device->isPlaying())
+                if (const double r = device->getCurrentSampleRate(); r > 0.0)
+                    outputLatencyMicros.store(std::llround(1.0e6 * (device->getOutputLatencyInSamples() + device->getCurrentBufferSizeSamples()) / r),
+                                              std::memory_order_relaxed);
+        // A tempo another peer set becomes the panel's, so it stays when they leave; only once the audio thread has
+        // the panel's own last tempo, or an edit on its way would be undone.
+        if (! beatSyncOn() || syncPeersNow.load(std::memory_order_acquire) <= 0)
+            return;
+        const double heard = syncBpmNow.load(std::memory_order_acquire);
+        const double tempo = model.play.tempo;
+        if (heard > 0.0 && syncPanelTempoNow.load(std::memory_order_acquire) == tempo
+            && coolsynth::sync::tempoFromBpm(heard) != coolsynth::sync::tempoFromBpm(tempo))
+            editPlay([heard](PlaySettings& s) { s.tempo = heard; }, false);
+    }
+
+    juce::Optional<juce::AudioPlayHead::PositionInfo> Processor::SyncPlayHead::getPosition() const
+    {
+        PositionInfo info;
+        // The tempo the block plays at: the sync's beats a sample, so one block ends where the next begins.
+        const double played = beats.beatsPerSample * 60.0 * sampleRate;
+        info.setBpm(played > 0.0 ? played : beats.bpm);
+        info.setPpqPosition(beats.beat);
+        info.setIsPlaying(beats.playing && beats.beat + beats.beatsPerSample * samples > 0.0);
+        info.setTimeSignature(juce::AudioPlayHead::TimeSignature { 4, 4 });
+        const double bar = std::floor(beats.beat / 4.0);
+        info.setPpqPositionOfLastBarStart(bar * 4.0);
+        info.setBarCount(static_cast<std::int64_t>(bar));
+        return info;
+    }
+
     void Processor::startCapture(double seconds)
     {
         captureArmed.store(false, std::memory_order_release);
@@ -874,32 +992,77 @@ namespace cs808
             else if (m.isSongPositionPointer())
                 clock.songPosition(m.getSongPositionPointerMidiBeat());
         }
+        int request = playRequest.exchange(-1, std::memory_order_acq_rel);
+
+        // The beat sync (D361), the standalone's: the block's beats at the moment its first sample is heard. It leads
+        // through a play head of its own, as a DAW's transport does; Play, Stop and the panel's tempo go to it. Alone
+        // in its session, an incoming MIDI clock leads as before; with other peers the sync wins.
+        bool bySync = false;
+        if (beatSync != nullptr && syncOn.load(std::memory_order_acquire))
+        {
+            auto& audio = beatSync->audio();
+            const std::int64_t now = hostClockForTesting ? hostClockForTesting() : coolsynth::sync::hostMicrosNow();
+            const auto t = blockClock.next(now, n);
+            const auto* beats = &audio.beginBlock(t.hostMicros + outputLatencyMicros.load(std::memory_order_relaxed), n, t.microsPerSample);
+            if (playOnAudio.tempo != syncPanelTempo)
+            {
+                // The panel's tempo changed (or a peer's came back to it, which changes nothing). On the first block
+                // of a sync already with others, the session's tempo stands and becomes the panel's (syncTick): the
+                // panel's would otherwise win over it, as a change.
+                syncPanelTempo = playOnAudio.tempo;
+                if (syncRunning || beats->peers == 0)
+                    beats = &audio.setTempo(syncPanelTempo);
+                syncPanelTempoNow.store(syncPanelTempo, std::memory_order_release);
+            }
+            syncRunning = true;
+            bySync = beats->peers > 0 || ! (followClockOn.load(std::memory_order_relaxed) && clock.present(samplesSoFar));
+            if (bySync)
+            {
+                // Taking over (switched on, or a clock gone): the sync plays if the pattern plays on its own.
+                if (! syncInUse)
+                    if (const bool own = playing && ! playingByClock && ! playingByHost; own != audio.isPlaying())
+                        beats = own ? &audio.play(0) : &audio.stop(0);
+                if (request >= 0 && (request == 1) != audio.isPlaying())
+                    beats = request == 1 ? &audio.play(0) : &audio.stop(0);
+                request = -1;
+            }
+            syncHead.beats = *beats;
+            syncHead.sampleRate = rate;
+            syncHead.samples = n;
+            syncPeersNow.store(beats->peers, std::memory_order_release);
+            syncBpmNow.store(beats->bpm, std::memory_order_release);
+        }
+        else
+            syncRunning = false;
+        if (syncInUse && ! bySync)
+            playingByHost = false; // the sync switched off while it played: the pattern plays on, on its own
+        syncInUse = bySync;
+
         // In a DAW (D311, D325): its transport leads while it plays, from where it is, at its tempo, unless the switch
         // keeps the pattern to its own Play key; its tempo leads always. A clock leads only the standalone app.
         bool hostPlays = false;
         double hostBeat = 0.0, hostBpm = 0.0;
-        if (wrapperType != wrapperType_Standalone && ! offline)
-            if (auto* head = getPlayHead())
-                if (const auto position = head->getPosition())
+        if (auto* head = bySync ? &syncHead : wrapperType != wrapperType_Standalone && ! offline ? getPlayHead() : nullptr)
+            if (const auto position = head->getPosition())
+            {
+                if (const auto b = position->getBpm())
+                    hostBpm = *b;
+                if (const auto ppq = position->getPpqPosition(); ppq && position->getIsPlaying())
                 {
-                    if (const auto b = position->getBpm())
-                        hostBpm = *b;
-                    if (const auto ppq = position->getPpqPosition(); ppq && position->getIsPlaying())
-                    {
-                        hostPlays = true;
-                        hostBeat = std::max(0.0, *ppq);
-                    }
+                    hostPlays = true;
+                    hostBeat = bySync ? *ppq : std::max(0.0, *ppq); // the sync's count-in ends inside this block
                 }
-        const bool byHost = hostPlays && followHostPlayOn.load(std::memory_order_relaxed);
-        hostFollowed.store(byHost, std::memory_order_release);
-        const bool byClock = ! byHost && followClockOn.load(std::memory_order_relaxed) && clock.present(samplesSoFar);
+            }
+        const bool byHost = hostPlays && (bySync || followHostPlayOn.load(std::memory_order_relaxed));
+        hostFollowed.store(byHost && ! bySync, std::memory_order_release);
+        syncFollowed.store(bySync && syncHead.beats.peers > 0, std::memory_order_release);
+        const bool byClock = ! bySync && ! byHost && followClockOn.load(std::memory_order_relaxed) && clock.present(samplesSoFar);
         clockFollowed.store(byClock, std::memory_order_release);
 
         bool started = false, stopped = false;
-        const int request = playRequest.exchange(-1, std::memory_order_acq_rel);
         // Following a clock, it plays while the clock plays; a clock gone while it played stops it, rather than going
-        // on from a stale place on its own (the review of D267).
-        bool wantPlay = byHost ? true : byClock ? clock.isPlaying() : (request < 0 ? playing : request == 1);
+        // on from a stale place on its own (the review of D267). Led by the sync, it plays while the sync plays.
+        bool wantPlay = bySync ? hostPlays : byHost ? true : byClock ? clock.isPlaying() : (request < 0 ? playing : request == 1);
         if (! byClock && playing && playingByClock)
             wantPlay = false;
         if (! byHost && playing && playingByHost)
@@ -933,7 +1096,7 @@ namespace cs808
         if (byClock)
             clock.block(samplesSoFar, n, beat0, bpm);
         if (hostBpm > 0.0)
-            bpm = juce::jlimit(20.0, 400.0, hostBpm); // the host's tempo, whoever leads
+            bpm = bySync ? hostBpm : juce::jlimit(20.0, 400.0, hostBpm); // the host's tempo, whoever leads; the sync's as it is
         if (byHost)
             beat0 = hostBeat;
 
@@ -963,9 +1126,17 @@ namespace cs808
         if (fillRequest.exchange(false, std::memory_order_acq_rel))
             sequencer.requestFill();
 
+        // The sync's count-in ends inside this block (a start on the session's bar line, D361): the pattern begins at
+        // the sample where the beat reaches 0, as a start at that sample (a beat a hair under 0 is a start at sample 0).
+        const bool fromZero = bySync && playing && beat0 < 0.0 && split == n;
+        const int countIn = fromZero ? std::clamp(static_cast<int>(std::ceil(-beat0 / beatsPerSample - 1.0e-3)), 0, n - 1) : 0;
+
         events.clear();
         const int room = static_cast<int>(sequencerEvents.size());
-        int count = sequencer.process(beat0, bpm, playing, split, rate, sequencerEvents.data(), room);
+        int count = fromZero ? sequencer.process(0.0, bpm, playing, n - countIn, rate, sequencerEvents.data(), room)
+                             : sequencer.process(beat0, bpm, playing, split, rate, sequencerEvents.data(), room);
+        for (int i = 0; i < count && countIn > 0; ++i)
+            sequencerEvents[static_cast<std::size_t>(i)].sampleOffset += countIn;
         double bpmAfter = bpm, beatsPerSampleAfter = beatsPerSample;
         const double beatAtSplit = beat0 + split * beatsPerSample;
         if (split < n)
@@ -993,6 +1164,8 @@ namespace cs808
             events.push_back(e);
             if (e.type == coolsynth::synth::EngineMidiEventType::noteOn)
             {
+                if (hitLog != nullptr)
+                    hitLog->push_back(samplesSoFar + e.sampleOffset); // the tests' only
                 bool alt = false;
                 if (const int lane = laneOfNote(e.noteNumber, alt); lane >= 0)
                     hitLanes |= 1u << lane;
@@ -1066,7 +1239,7 @@ namespace cs808
         transport.hostHasTempo = true;
         transport.hostBpm = bpm;
         transport.hostHasPpq = true;
-        transport.hostPpqAtBlockStart = beat0;
+        transport.hostPpqAtBlockStart = std::max(0.0, beat0); // never the sync's count-in
         transport.hostIsPlaying = playing;
         if (split == n)
             engine.render(mainBus, std::span<const coolsynth::synth::EngineMidiEvent>(events.data(), events.size()), engineSettings, transport, tapOut);
@@ -1103,9 +1276,13 @@ namespace cs808
         const double beatEnd = beatAt(n);
 
         midi.clear();
-        if (! byClock && ! byHost && ! isPlugin() && ! offline && sendClockOn.load(std::memory_order_relaxed))
+        // Its own clock out, also while the beat sync leads (D361): what follows it by MIDI plays with the session.
+        if (! byClock && (! byHost || bySync) && ! isPlugin() && ! offline && sendClockOn.load(std::memory_order_relaxed))
         {
-            sendClock(midi, beat0, beatAtSplit, split, started, stopped);
+            if (fromZero)
+                sendClock(midi, 0.0, beatEnd, n - countIn, started, stopped, countIn); // its pulses from beat 0
+            else
+                sendClock(midi, beat0, beatAtSplit, split, started, stopped);
             if (split < n)
                 sendClock(midi, beatAtSplit, beatEnd, n - split, false, false, split);
         }
@@ -1115,8 +1292,9 @@ namespace cs808
         if (playing && ! byClock)
             beat = beatEnd; // led by the host, the next block's start comes from it again
         samplesSoFar += n;
-        // A chain that does not loop has played through: its own transport stops (D297). A clock leads on its own.
-        if (playing && ! byClock && ! byHost && ! playOnAudio.loop && sequencer.endedAt(beat))
+        // A chain that does not loop has played through: its own transport stops (D297), or the sync's. A clock leads
+        // on its own.
+        if (playing && ! byClock && (! byHost || bySync) && ! playOnAudio.loop && sequencer.endedAt(beat))
             playRequest.store(0, std::memory_order_release);
 
         if (playing)
@@ -1128,7 +1306,8 @@ namespace cs808
             sixteenthNow.store(place.sixteenth, std::memory_order_release);
         }
         playingNow.store(playing, std::memory_order_release);
-        bpmNow.store(bpm, std::memory_order_release);
+        countingInNow.store(bySync && syncHead.beats.playing && ! playing, std::memory_order_release);
+        bpmNow.store(bySync ? syncHead.beats.bpm : bpm, std::memory_order_release); // the session's tempo, not the block's
         if (hitLanes != 0)
             struck.fetch_or(hitLanes, std::memory_order_acq_rel);
 

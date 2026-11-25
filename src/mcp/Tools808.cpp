@@ -71,6 +71,18 @@ namespace cs808
             o->setProperty("step", static_cast<int>(p.playingSixteenth() % 16) + 1);
             o->setProperty("drumNotes", notes);
             o->setProperty("followHostPlay", p.followsHostPlay());
+            if (p.hasBeatSync())
+            {
+                // the beat sync (D361): on, the other peers in its session, Play and Stop shared, leading the beat
+                auto* sync = new juce::DynamicObject();
+                sync->setProperty("on", p.beatSyncOn());
+                sync->setProperty("peers", p.syncPeers());
+                sync->setProperty("startStopSharing", p.startStopSharing());
+                sync->setProperty("leads", p.followingSync());
+                sync->setProperty("countingIn", p.countingIn());
+                sync->setProperty("tempoNow", p.tempoNow());
+                o->setProperty("sync", juce::var(sync));
+            }
             o->setProperty("outputLevel", db(p.outputLevel()));
             if (auto* editor = dynamic_cast<Editor*>(p.getActiveEditor()))
             {
@@ -98,14 +110,16 @@ namespace cs808
                           "The kit and the transport as the panel shows them: every knob 0..1 by its id (accent, volume, bdLevel, "
                           "bdTone, bdDecay, ...), each switched drum's choice (LT: LT or LC, RS: RS or CL, CP: CP or MA, ...), "
                           "the volume in dB, tempo, swing, whether it plays, the pattern and step, the drums' notes from outside "
-                          "(BD..CH, LC, MC, HC, CL, MA), the host switch, the output's level now, and the views (lid lifted, a "
-                          "sheet open, Options open).",
+                          "(BD..CH, LC, MC, HC, CL, MA), the host switch, the beat sync (on, other peers, Play and Stop shared, "
+                          "whether it leads, counting in to the next bar line, the tempo heard), the output's level now, and the "
+                          "views (lid lifted, a sheet open, Options open).",
                           objectSchema({}),
                           [&processor](const juce::var&) { return textResult(juce::JSON::toString(describe(processor), false)); } });
 
         tools.push_back({ "set_values",
                           "Sets knobs by the ids get_state gives (0..1), switches by drum code ({\"RS\": \"CL\"} for claves), "
-                          "volumeDb, tempo and swing, as the panel would; out of range is held to the range. Answers with the "
+                          "volumeDb, tempo and swing, as the panel would; out of range is held to the range; sync and "
+                          "syncSharing (true or false) switch the beat sync and its shared Play and Stop. Answers with the "
                           "state afterwards.",
                           objectSchema({ { "values", typeSchema("object", "e.g. {\"bdDecay\": 0.8, \"RS\": \"CL\", \"tempo\": 125}") } }, { "values" }),
                           [&processor](const juce::var& args)
@@ -131,6 +145,10 @@ namespace cs808
                                       processor.editPlay([v = static_cast<double>(nv.value)](PlaySettings& s) { s.tempo = juce::jlimit(30.0, 300.0, v); });
                                   else if (name == "swing")
                                       processor.editPlay([v = static_cast<float>(nv.value)](PlaySettings& s) { s.swing = juce::jlimit(0.5f, 0.75f, v); });
+                                  else if (name == "sync" && processor.hasBeatSync())
+                                      processor.setBeatSyncOn(static_cast<bool>(nv.value)); // as the SYNC key (D361)
+                                  else if (name == "syncSharing" && processor.hasBeatSync())
+                                      processor.setStartStopSharing(static_cast<bool>(nv.value)); // as Options' switch
                                   else if (lane >= 0 && ! alt && instruments[static_cast<std::size_t>(lane)].altCode != nullptr)
                                   {
                                       bool toAlt = false;

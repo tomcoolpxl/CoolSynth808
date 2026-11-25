@@ -23,12 +23,14 @@ namespace cs808
     public:
         explicit TempoReadout(Processor& p) : processor(p) {}
 
-        static int width() { return juce::roundToInt(shapedWidth(monoFont(13.0f), "120.0") + 5.0f + std::max(wordWidth("BPM"), wordWidth("HOST")) + 12.0f); } // HOST in a DAW (D325)
+        // HOST in a DAW (D325), SYNC while the beat sync leads with other peers (D361)
+        static int width() { return juce::roundToInt(shapedWidth(monoFont(13.0f), "120.0") + 5.0f + std::max({ wordWidth("BPM"), wordWidth("HOST"), wordWidth("SYNC") }) + 12.0f); }
 
         void paint(juce::Graphics& g) override
         {
-            // following a clock or in a DAW, theirs; HOST under it while the host's Play leads (D325)
-            const bool led = processor.followingClock() || processor.isPlugin();
+            // following a clock, the sync or in a DAW, theirs; HOST under it while the host's Play leads (D325), SYNC
+            // while the sync leads with others (D361)
+            const bool led = processor.followingClock() || processor.isPlugin() || processor.followingSync();
             const double tempo = led ? processor.tempoNow() : processor.project().play.tempo;
             const auto number = juce::String(tempo, 1);
             const auto font = monoFont(13.0f);
@@ -45,18 +47,21 @@ namespace cs808
             // BPM on the same baseline: the label's cap height sits lower than the digits' centre
             g.setColour(juce::Colour(0xffddd5c3));
             g.setFont(labelFont(10.0f));
-            shapedText(g, processor.followingHost() ? "HOST" : "BPM", area.withTrimmedLeft(numberWidth + 5.0f).translated(0.0f, 1.0f), juce::Justification::centredLeft, false);
+            shapedText(g, processor.followingHost() ? "HOST" : processor.followingSync() ? "SYNC" : "BPM",
+                       area.withTrimmedLeft(numberWidth + 5.0f).translated(0.0f, 1.0f), juce::Justification::centredLeft, false);
         }
 
         void mouseDown(const juce::MouseEvent&) override
         {
-            startValue = processor.project().play.tempo;
+            // from the tempo shown: with the sync's peers, the session's (D361)
+            startValue = processor.followingSync() ? processor.tempoNow() : processor.project().play.tempo;
             processor.beginGesture();
         }
 
         void mouseDrag(const juce::MouseEvent& e) override
         {
             // Following a MIDI clock, or in a DAW, the clock or the host sets the tempo: the readout takes no edits.
+            // With the beat sync it does: the tempo goes to the whole session (D361).
             if (processor.followingClock() || processor.isPlugin())
                 return;
             const double steps = std::round(-e.getDistanceFromDragStartY() / 2.0);
@@ -96,9 +101,10 @@ namespace cs808
             return c;
         };
 
-        auto* play = key("Play", [&p] { p.setPlaying(! p.isPlaying()); }, juce::roundToInt(std::max(wordWidth("Play"), wordWidth("Stop")) + 22.0f));
-        play->isOn = [&p] { return p.isPlaying(); };
-        play->textOf = [&p] { return juce::String(p.isPlaying() ? "Stop" : "Play"); };
+        // Lit too while a start waits for the beat sync's next bar line (D361); Stop then calls it off.
+        auto* play = key("Play", [&p] { p.setPlaying(! (p.isPlaying() || p.countingIn())); }, juce::roundToInt(std::max(wordWidth("Play"), wordWidth("Stop")) + 22.0f));
+        play->isOn = [&p] { return p.isPlaying() || p.countingIn(); };
+        play->textOf = [&p] { return juce::String(p.isPlaying() || p.countingIn() ? "Stop" : "Play"); };
 
         auto* rec = key("Rec", [&p] { p.setRecording(! p.isRecording()); }, juce::roundToInt(wordWidth("Rec") + 32.0f));
         rec->filledWhenOn = false;
@@ -109,6 +115,17 @@ namespace cs808
         items.add(tempo);
         addAndMakeVisible(tempo);
         widths.push_back(TempoReadout::width());
+
+        // The beat sync, the standalone's (D361): its lens lit while on, the other peers counted on it; a click
+        // switches it.
+        if (p.hasBeatSync())
+        {
+            syncKey = key("Sync", [&p] { p.setBeatSyncOn(! p.beatSyncOn()); }, juce::roundToInt(wordWidth("Sync 88") + 32.0f));
+            syncKey->filledWhenOn = false;
+            syncKey->isOn = [&p] { return p.beatSyncOn(); };
+            syncKey->textOf = [&p] { return syncKeyText(p.syncPeers()); };
+            syncKey->setTooltip("The beat sync: the tempo, the beat, Play and Stop shared with the other apps on this network that have it. Click to switch it on or off.");
+        }
 
         key("Tap", [this] { editor.tapTempo(); });
 

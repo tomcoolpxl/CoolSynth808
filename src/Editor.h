@@ -99,6 +99,9 @@ namespace cs808
         void toggleOptions();
         [[nodiscard]] bool optionsOpen() const noexcept;
         [[nodiscard]] OptionsWindow* optionsForTesting() noexcept { return optionsWindow.get(); }
+        [[nodiscard]] TransportStrip& transportForTesting() noexcept { return *transport; }
+        /** For the tests: the settings kept in this file instead of the app's (set before an editor is made). */
+        static void useSettingsFileForTesting(const juce::File& f);
         /** A theme chosen in the options (D307, D311): the board, the glass and the windows' bars drawn again in it. */
         void chooseTheme(int index);
         /** The window's size in percent of the panel's 1280 by 800 (D311), kept between runs. */
@@ -162,6 +165,8 @@ namespace cs808
         std::unique_ptr<LidView> lid;
         LiveBoard liveBoard; // the drums' board nodes as the engine plays them (D320)
         unsigned int drumNotesSaved = 0; // the processor's drum notes as last kept in the settings (D329)
+        unsigned int syncChoiceSaved = 0; // and its beat sync's switches (D361)
+        juce::TooltipWindow tooltips { this, 700 }; // the keys' hints, the SYNC key's among them (D361)
         std::unique_ptr<LibraryShelf> library;
         // An audition (D273): the project and the chain as they were, and whether the audition started playing.
         std::unique_ptr<Project> auditionSaved;

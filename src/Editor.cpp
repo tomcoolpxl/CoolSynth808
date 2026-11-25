@@ -178,6 +178,17 @@ namespace cs808
     // =============================================================================================================
     // The editor
 
+    namespace
+    {
+        juce::File& settingsFileForTesting()
+        {
+            static juce::File f;
+            return f;
+        }
+    }
+
+    void Editor::useSettingsFileForTesting(const juce::File& f) { settingsFileForTesting() = f; }
+
     Editor::Editor(Processor& p) : juce::AudioProcessorEditor(p), processor(p)
     {
         juce::PropertiesFile::Options options;
@@ -185,7 +196,9 @@ namespace cs808
         options.filenameSuffix = ".settings";
         options.folderName = "CoolSynth808";
         options.osxLibrarySubFolder = "Application Support";
-        settings = std::make_unique<juce::PropertiesFile>(options);
+        settings = settingsFileForTesting() == juce::File() ? std::make_unique<juce::PropertiesFile>(options)
+                                                             : std::make_unique<juce::PropertiesFile>(settingsFileForTesting(), options);
+        syncChoiceSaved = p.syncChoiceVersion(); // as the processor read them (D361): nothing to keep yet
         // The theme kept by its name (D307): the older setting counted the themes of the old layouts.
         const auto keptTheme = settings->getValue("panelTheme", themes()[0].id);
         for (int i = 0; i < static_cast<int>(themes().size()); ++i)
@@ -383,6 +396,12 @@ namespace cs808
         hooks.sendClock = [this] { return processor.sendsClock(); };
         hooks.chooseFollowClock = [this](bool on) { processor.setFollowClock(on); settings->setValue("followClock", on); };
         hooks.chooseSendClock = [this](bool on) { processor.setSendClock(on); settings->setValue("sendClock", on); };
+        if (processor.hasBeatSync())
+        {
+            // the beat sync's Play and Stop shared, or not (D361); kept by the timer
+            hooks.syncSharing = [this] { return processor.startStopSharing(); };
+            hooks.chooseSyncSharing = [this](bool on) { processor.setStartStopSharing(on); };
+        }
         hooks.plugin = [this] { return processor.isPlugin(); };
         hooks.followHostPlay = [this] { return processor.followsHostPlay(); };
         hooks.chooseFollowHostPlay = [this](bool on) { processor.setFollowHostPlay(on); }; // kept with the DAW's project
@@ -1172,6 +1191,13 @@ namespace cs808
             settings->setValue("drumNotes", drumNotesToString(processor.drumNotes()));
             settings->saveIfNeeded();
         }
+        // The beat sync's two switches, from the SYNC key, Options or Claude's tools, kept for the app (D361).
+        if (const auto v = processor.syncChoiceVersion(); processor.hasBeatSync() && v != syncChoiceSaved)
+        {
+            syncChoiceSaved = v;
+            keepSyncChoice(*settings, { processor.beatSyncOn(), processor.startStopSharing() });
+            settings->saveIfNeeded();
+        }
         // The board's nodes as the drums play them, while the lid is lifted (D320).
         processor.circuitWatch().watchBoard(lidLifted);
         {
@@ -1207,7 +1233,11 @@ namespace cs808
         fold(beat, processor.playingPattern());
         fold(beat, processor.playingVariationB());
         fold(beat, processor.isRecording());
-        fold(beat, processor.followingClock() || processor.isPlugin() ? juce::roundToInt(processor.tempoNow() * 10.0) + (processor.followingHost() ? 100000 : 0) : -1);
+        fold(beat, processor.followingClock() || processor.isPlugin() || processor.followingSync()
+                       ? juce::roundToInt(processor.tempoNow() * 10.0) + (processor.followingHost() ? 100000 : 0) + (processor.followingSync() ? 200000 : 0)
+                       : -1);
+        fold(beat, processor.countingIn());
+        fold(beat, processor.beatSyncOn() ? processor.syncPeers() : -1); // the SYNC key (D361)
         fold(beat, fillAsked);
         fold(beat, chainPlace);
         // A pick that has come in, or a stopped transport, ends the wait (D303).

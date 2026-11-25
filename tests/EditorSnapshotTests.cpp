@@ -159,6 +159,8 @@ public:
                     hooks.followClock = [] { return true; };
                     hooks.sendClock = [] { return false; };
                     hooks.chooseFollowClock = hooks.chooseSendClock = [](bool) {};
+                    hooks.syncSharing = [] { return true; }; // the standalone's beat sync (D361)
+                    hooks.chooseSyncSharing = [](bool) {};
                     hooks.controllerSetup = [] {};
                     hooks.circuitAnimated = [] { return true; };
                     hooks.chooseCircuitAnimated = [](bool) {};

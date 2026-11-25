@@ -303,6 +303,16 @@ namespace cs808
             }
             addChildComponent(follow);
             addChildComponent(send);
+            sharing.text = "Share Play and Stop";
+            sharing.isOn = [this] { return hooks.syncSharing && hooks.syncSharing(); };
+            sharing.filledWhenOn = false;
+            sharing.onClick = [this](const juce::MouseEvent&)
+            {
+                if (hooks.chooseSyncSharing)
+                    hooks.chooseSyncSharing(! hooks.syncSharing());
+                repaint();
+            };
+            addChildComponent(sharing);
 
             for (const auto& t : themes())
                 themeChoice.options.push_back(t.name);
@@ -606,6 +616,14 @@ namespace cs808
                     send.setBounds(x + labelWidth + half + 4, y, cw - half - 4, rowHeight);
                     follow.setVisible(true);
                     send.setVisible(true);
+                    if (hooks.syncSharing)
+                    {
+                        // the beat sync's (D361): with it on, a Play or Stop here plays or stops the whole session
+                        y += rowHeight + rowGap;
+                        labels.push_back({ "Beat sync", y });
+                        sharing.setBounds(x + labelWidth, y, half, rowHeight);
+                        sharing.setVisible(true);
+                    }
                     break;
                 }
                 case hostPage:
@@ -720,7 +738,7 @@ namespace cs808
         Page page = audioPage;
         int hoverPage = -1;
         Picker driver, output, rate, buffer, midiOut, zoomPicker;
-        Chip controlPanel, testTone, follow, send, controller;
+        Chip controlPanel, testTone, follow, send, sharing, controller;
         [[nodiscard]] bool inPlugin() const { return hooks.plugin && hooks.plugin(); }
         static constexpr int maxInputRows = 8;
         InputList inputList;
