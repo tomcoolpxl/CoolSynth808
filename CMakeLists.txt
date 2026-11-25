@@ -54,6 +54,8 @@ juce_add_binary_data(CoolSynth808Library
 # A JUCE audio plugin: the standalone app (D267) and a VST3 for a DAW (D311, D325), as CoolSynth 303's.
 juce_add_plugin(CoolSynth808
     COMPANY_NAME "tomcoolpxl"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/coolsynth808-icon-512.png" # the user's pick (D363)
+    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/coolsynth808-icon-32.png" # the knob alone, for 32 px and under
     PRODUCT_NAME "CoolSynth 808"
     PLUGIN_NAME "CoolSynth 808"
     PLUGIN_MANUFACTURER_CODE Tcpx
