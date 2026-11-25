@@ -54,6 +54,8 @@ In a DAW, the plugin follows the DAW's transport and tempo, every knob can be au
 
 A MIDI controller's knobs and pads can work the panel; set it up in **Options**.
 
+In the app, **Options > MIDI > Claude (MCP)** lets Claude Code read and set the panel and play the 808 while it helps you. It is off until you switch it on, and only this computer can reach it.
+
 ## Building from source
 
 On Windows, you need Git, CMake 3.22 or newer, and Visual Studio 2022 or its Build Tools.
