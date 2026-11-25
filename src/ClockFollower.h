@@ -65,6 +65,12 @@ namespace cs808
         }
         void stop() noexcept { running = false; }
 
+        /** The MIDI comes a block late: JUCE's standalone player hands a message arriving during one audio block to
+            the next, at the same place in it, so a follower aiming at the pulses plays a block (some 10 ms) behind
+            its leader. On, it aims a block further on and plays with it (CoolSynth's D359). Off in a plugin and the
+            tests, where the MIDI comes in the block it belongs to. */
+        void setBlockLate(bool on) noexcept { blockLate = on; }
+
         /** Song position pointer: sixteenths from the start. */
         void songPosition(int sixteenths) noexcept
         {
@@ -105,8 +111,10 @@ namespace cs808
             // Where the pulses put the block's start: the last pulse's beat plus the time since, no further than
             // the next pulse. A pulse later in this block puts the start before it.
             double target = beat;
+            // Handed a block late (the standalone's MIDI), the pulses say where the last block began: aimed a block on.
+            const std::int64_t aimed = now + (blockLate ? samples : 0);
             if (lastPulse >= 0 && pulseBeat >= 0.0)
-                target = pulseBeat + std::min(static_cast<double>(now - lastPulse) * beatsPerSample, 1.0 / pulsesPerBeat);
+                target = pulseBeat + std::min(static_cast<double>(aimed - lastPulse) * beatsPerSample, 1.0 / pulsesPerBeat);
             if (snap || std::abs(target - beat) > 0.5)
                 beat = target; // a start, a continue, a song position, or far off: there at once
             snap = false;
@@ -129,5 +137,6 @@ namespace cs808
         bool running = false;
         bool pulsed = false; // a pulse since the start
         bool snap = false;   // go where the pulses say at the next block
+        bool blockLate = false;
     };
 }

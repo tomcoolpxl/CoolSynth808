@@ -147,6 +147,7 @@ if(BUILD_TESTING)
     target_sources(CoolSynth808Tests
         PRIVATE
             tests/TestMain.cpp
+    tests/ClockFollowerTests.cpp
             tests/ProjectTests.cpp
             tests/ProcessorTests.cpp
             tests/LibraryTests.cpp

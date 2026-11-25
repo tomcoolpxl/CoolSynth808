@@ -154,6 +154,7 @@ namespace cs808
         engine.setOversampling(accuracyLevel < 2); // the Lightest accuracy runs the voices at the host's rate (D339)
         engine.prepare(rate, std::max(1, samplesPerBlock), std::max(1, getTotalNumOutputChannels()));
         clock.prepare(rate);
+        clock.setBlockLate(wrapperType == wrapperType_Standalone); // the standalone's MIDI comes a block late (D359)
         keptBlock.ensureSize(8192);
         sequencer.reset();
         playing = false;
