@@ -11,10 +11,10 @@
 /*
     The WAV export (D331): the pattern shown or the chain, played from its start a number of times and rendered
     offline by a processor of its own, as the app plays it (the kit, swing, accents, chance, the hats' choke). The mix,
-    and as an option one file per drum heard, all of the same length: each drum's file is the same render with only
-    that drum heard (the engine's mask on its generators' outputs): every drum plays, rings and rests as in the mix, so
-    what one does to another (the closed hat choking the open one, the voice the metal oscillators run in) stays, and
-    the files add up to the mix.
+    and as an option one file per drum heard, all of the same length, from one render (D357): each drum heard on its
+    own output as in a DAW (D343), the mix the main and those outputs added back. Every drum plays, rings and rests as
+    in the mix, so what one does to another (the closed hat choking the open one, the voice the metal oscillators run
+    in) stays, and the files add up to the mix.
 
     The end: cut where the last time through ends; the ring-out after it; or a seamless loop, the ring-out in its
     start: played as a loop until what rang before has rung out, the last time through kept, so its start holds the

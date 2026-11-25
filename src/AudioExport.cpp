@@ -18,12 +18,6 @@ namespace cs808
         constexpr double longestRing = 20.0;   // seconds after the end at most
         constexpr double ringBefore = 10.0;    // a seamless loop plays this long before the time kept
 
-        /** The engine's light for each lane: what its mask hears (a tom's is its conga's too, the rim shot's the claves'). */
-        using Watch = coolsynth::synth::v3::CircuitWatch;
-        constexpr std::array<int, laneCount> lightOfLane { Watch::bassDrum, Watch::snare, Watch::lowTom, Watch::midTom, Watch::highTom,
-                                                           Watch::rimShot, Watch::clap, Watch::cowbell, Watch::cymbal, Watch::openHat,
-                                                           Watch::closedHat };
-
         double beatsPerPass(const ExportJob& job) noexcept
         {
             const int bars = job.project.play.variation == SequencerVariation::ab ? 2 : 1;
@@ -38,28 +32,50 @@ namespace cs808
             return static_cast<std::int64_t>(std::ceil(beats * samplesPerBeat(job) - 1.0e-6));
         }
 
-        /** One render: the mix (lane -1) or one drum, by a processor of its own. */
+        /** The render, by a processor of its own: the mix, and each drum in `lanes` on its own output as a plugin's
+            are (D343), so one render gives the mix and every drum's file (D357). */
         class OneRender
         {
         public:
-            OneRender(const ExportJob& j, int lane, std::atomic<std::int64_t>& counter, const std::atomic<bool>& stop)
-                : job(j), rendered(counter), cancel(stop)
+            OneRender(const ExportJob& j, std::vector<int> separated, std::atomic<std::int64_t>& counter, const std::atomic<bool>& stop)
+                : job(j), lanes(std::move(separated)), rendered(counter), cancel(stop)
             {
                 Project project = job.project;
                 project.play.loop = true;
                 project.play.tempo = job.bpm;
                 processor->replaceProject(project, false);
-                if (lane >= 0)
-                    processor->circuitWatch().hearOnly(1u << lightOfLane[static_cast<std::size_t>(lane)]);
                 processor->setChain(job.patterns);
                 processor->setAccuracy(job.accuracy);
-                processor->setPlayConfigDetails(0, 2, job.sampleRate, block);
+                // The main mix in stereo, and the drums' own outputs on for the lanes kept apart.
+                auto layout = processor->getBusesLayout();
+                for (int b = 1; b < layout.outputBuses.size(); ++b)
+                    layout.outputBuses.getReference(b) = lanes.empty() ? juce::AudioChannelSet::disabled() : juce::AudioChannelSet::mono();
+                (void) processor->setBusesLayout(layout);
+                for (const int lane : lanes)
+                    processor->setOwnOutput(lane, true);
+                processor->setRateAndBufferSizeDetails(job.sampleRate, block);
                 processor->prepareToPlay(job.sampleRate, block);
+                buffer.setSize(processor->getTotalNumOutputChannels(), block);
+                for (const int lane : lanes)
+                    tapChannel.push_back(processor->getChannelIndexInProcessBlockBuffer(false, lane + 1, 0));
             }
 
-            /** The whole render into `out`; the last sample above the quiet in `lastLoud`. False if cancelled. */
-            bool run(juce::AudioBuffer<float>& out, std::int64_t& lastLoud)
+            /** The whole render into `out`, each lane's own output into `stems` (as many as lanes, in stereo, the mix's
+                length); the last sample above the quiet in `lastLoud`. False if cancelled. */
+            bool run(juce::AudioBuffer<float>& out, std::vector<juce::AudioBuffer<float>>& stems, std::int64_t& lastLoud)
             {
+                stemsOut = &stems;
+                stems.resize(lanes.size());
+                const auto sized = [&](int samples)
+                {
+                    out.setSize(2, samples);
+                    out.clear();
+                    for (auto& s : stems)
+                    {
+                        s.setSize(2, samples);
+                        s.clear();
+                    }
+                };
                 const auto loop = loopSamples(job);
                 const double totalBeats = beatsPerPass(job) * job.times;
                 lastLoud = -1;
@@ -84,13 +100,12 @@ namespace cs808
                                 return false;
                         }
                     processor->jumpTo(0.0);
-                    out.setSize(2, static_cast<int>(loop));
+                    sized(static_cast<int>(loop));
                     return play(loop, &out, 0, &lastLoud);
                 }
 
                 const auto room = job.end == ExportEnd::ring ? loop + static_cast<std::int64_t>(longestRing * job.sampleRate) : loop;
-                out.setSize(2, static_cast<int>(room));
-                out.clear();
+                sized(static_cast<int>(room));
                 processor->setPlaying(true);
                 if (! play(loop, &out, 0, &lastLoud))
                     return false;
@@ -118,19 +133,33 @@ namespace cs808
                     if (cancel.load(std::memory_order_relaxed))
                         return false;
                     const int n = static_cast<int>(std::min<std::int64_t>(block, samples - done));
-                    buffer.setSize(2, n, false, false, true);
+                    buffer.setSize(buffer.getNumChannels(), n, false, false, true);
                     midi.clear();
                     processor->processBlock(buffer, midi);
                     if (out != nullptr)
+                    {
+                        const int to = static_cast<int>(at + done);
+                        // the mix: the main, and each drum on its own output added back (the files add up to it)
                         for (int c = 0; c < 2; ++c)
+                            out->copyFrom(c, to, buffer.getReadPointer(c), n);
+                        for (std::size_t s = 0; s < lanes.size(); ++s)
                         {
-                            const float* from = buffer.getReadPointer(c);
-                            out->copyFrom(c, static_cast<int>(at + done), from, n);
-                            if (lastLoud != nullptr)
+                            const float* tap = buffer.getReadPointer(tapChannel[s]);
+                            for (int c = 0; c < 2; ++c)
+                            {
+                                (*stemsOut)[s].copyFrom(c, to, tap, n);
+                                out->addFrom(c, to, tap, n);
+                            }
+                        }
+                        if (lastLoud != nullptr)
+                            for (int c = 0; c < 2; ++c)
+                            {
+                                const float* from = out->getReadPointer(c, to);
                                 for (int i = 0; i < n; ++i)
                                     if (std::abs(from[i]) > quietLevel)
                                         *lastLoud = std::max(*lastLoud, at + done + i);
-                        }
+                            }
+                    }
                     done += n;
                     rendered.fetch_add(n, std::memory_order_relaxed);
                 }
@@ -138,6 +167,9 @@ namespace cs808
             }
 
             const ExportJob& job;
+            const std::vector<int> lanes;
+            std::vector<int> tapChannel; // each lane's own output in the processor's buffer
+            std::vector<juce::AudioBuffer<float>>* stemsOut = nullptr;
             std::atomic<std::int64_t>& rendered;
             const std::atomic<bool>& cancel;
             std::unique_ptr<Processor> processor = std::make_unique<Processor>(Processor::Offline {});
@@ -188,58 +220,53 @@ namespace cs808
 
     bool renderExport(const ExportJob& job, ExportResult& result, std::atomic<float>& done, const std::atomic<bool>& cancel)
     {
-        std::vector<int> renders { -1 };
-        if (job.stems)
-            for (const int lane : lanesHeard(job))
-                renders.push_back(lane);
-        const auto count = renders.size();
-        std::vector<juce::AudioBuffer<float>> audio(count);
-        std::vector<std::int64_t> lastLoud(count, -1);
-        std::vector<char> finished(count, 0);
+        // One render (D357): the drums heard each on its own output when their files are asked for.
+        const std::vector<int> lanes = job.stems ? lanesHeard(job) : std::vector<int> {};
+        juce::AudioBuffer<float> mix;
+        std::vector<juce::AudioBuffer<float>> stems;
+        std::int64_t lastLoud = -1;
+        bool finished = false;
 
         // The work to do, for the progress: the time kept, plus what plays before it or rings after.
         const auto loop = loopSamples(job);
         const auto extra = job.end == ExportEnd::loop ? static_cast<std::int64_t>(ringBefore * job.sampleRate)
                          : job.end == ExportEnd::ring ? static_cast<std::int64_t>(2.0 * job.sampleRate) : 0;
-        const double total = static_cast<double>((loop + extra) * static_cast<std::int64_t>(count));
+        const double total = static_cast<double>(loop + extra);
         std::atomic<std::int64_t> rendered { 0 };
 
         {
-            // Each render on a core of its own, below the audio thread's priority: the app keeps playing.
-            const int cores = std::max(1, juce::SystemStats::getNumCpus() - 1);
+            // On a thread of its own, below the audio thread's priority: the app keeps playing.
             juce::ThreadPool pool(juce::ThreadPoolOptions {}
                                       .withThreadName("CoolSynth 808 export")
-                                      .withNumberOfThreads(std::min(cores, static_cast<int>(count)))
+                                      .withNumberOfThreads(1)
                                       .withThreadStackSizeBytes(4 * 1024 * 1024)
                                       .withDesiredThreadPriority(juce::Thread::Priority::low));
-            for (std::size_t i = 0; i < count; ++i)
-                pool.addJob([&, i]
-                {
-                    OneRender render(job, renders[i], rendered, cancel);
-                    finished[i] = render.run(audio[i], lastLoud[i]) ? 1 : 0;
-                });
+            pool.addJob([&]
+            {
+                OneRender render(job, lanes, rendered, cancel);
+                finished = render.run(mix, stems, lastLoud);
+            });
             while (pool.getNumJobs() > 0)
             {
                 done.store(static_cast<float>(std::min(0.99, static_cast<double>(rendered.load()) / std::max(1.0, total))));
                 juce::Thread::sleep(20);
             }
         }
-        if (cancel.load() || std::find(finished.begin(), finished.end(), 0) != finished.end())
+        if (cancel.load() || ! finished)
             return false;
 
-        // Rung out: every file as long as the longest ring-out, so they line up.
+        // Rung out: the mix and every file as long as the ring-out, so they line up.
         if (job.end == ExportEnd::ring)
         {
-            std::int64_t length = loop;
-            for (const auto last : lastLoud)
-                length = std::max(length, last + 1);
-            for (auto& a : audio)
-                a.setSize(2, static_cast<int>(length), true, true, false);
+            const auto length = static_cast<int>(std::max(loop, lastLoud + 1));
+            mix.setSize(2, length, true, true, false);
+            for (auto& s : stems)
+                s.setSize(2, length, true, true, false);
         }
-        result.mix = std::move(audio[0]);
+        result.mix = std::move(mix);
         result.stems.clear();
-        for (std::size_t i = 1; i < count; ++i)
-            result.stems.emplace_back(renders[i], std::move(audio[i]));
+        for (std::size_t i = 0; i < lanes.size(); ++i)
+            result.stems.emplace_back(lanes[i], std::move(stems[i]));
         done.store(1.0f);
         return true;
     }

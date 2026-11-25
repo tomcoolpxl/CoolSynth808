@@ -149,6 +149,26 @@ namespace
                     expectLessThan(rest, mixEnergy * 1.0e-10, "the drums' files add up to the mix");
                     // Each file holds its own drum only: the snare's is quiet where the bass drum strikes.
                     expectLessThan(peak(r.stems[1].second, 0, 2000), 1.0e-4f, "the snare's file silent at the bass drum");
+
+                    // One render (D357): the mix put back together from the drums' own outputs is the mix rendered
+                    // whole, as the app plays it.
+                    auto whole = job;
+                    whole.stems = false;
+                    ExportResult w;
+                    if (render(whole, w))
+                    {
+                        expectEquals(w.mix.getNumSamples(), r.mix.getNumSamples(), "as long");
+                        double e = 0.0;
+                        for (int c = 0; c < 2; ++c)
+                            for (int i = 0; i < std::min(w.mix.getNumSamples(), r.mix.getNumSamples()); ++i)
+                            {
+                                const double d = static_cast<double>(w.mix.getSample(c, i)) - r.mix.getSample(c, i);
+                                e += d * d;
+                            }
+                        const double db = 10.0 * std::log10(std::max(e, 1.0e-30) / energy(w.mix, 0, w.mix.getNumSamples()));
+                        logMessage("the mix from the drums' outputs against the whole mix: " + juce::String(db, 1) + " dB");
+                        expectLessThan(db, -120.0, "the same mix");
+                    }
                 }
             }
 

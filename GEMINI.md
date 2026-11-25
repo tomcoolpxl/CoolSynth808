@@ -25,8 +25,9 @@ The shared project memory for every AI tool (`CLAUDE.md` points here).
   `src/Controls` says what each place does in the 808. Pads strike on the audio thread (`Processor::setPadNotes`).
   `src/StandaloneMidiIn` sorts the standalone's MIDI inputs: the controller's linked controls apart from the sound's
   notes (D271); `src/StandaloneMidiOut` keeps the clock's output thread running.
-- `src/AudioExport` and `ui/ExportPanel`: the WAV export (D331, D334), rendered by an offline `Processor`; a drum's
-  file is the same render with only that drum heard (`CircuitWatch::hearOnly`), so the files add up to the mix.
+- `src/AudioExport` and `ui/ExportPanel`: the WAV export (D331, D334), rendered by an offline `Processor`; with drum
+  files, one render puts each drum heard on its own output (D343, D357), the mix the main plus those outputs, so the
+  files add up to it.
 - The VST3's host parameters (D343) are the 28 panel controls; the audio thread plays what they say, the panel's
   edits set them (`Processor::paramsFromModel`), the host's moves reach the model without undo. A drum on its own
   output leaves the main through the engine's tap (`CircuitWatch::setSeparate`), outputs 2 to 12 mono.
