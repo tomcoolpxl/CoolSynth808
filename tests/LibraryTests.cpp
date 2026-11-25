@@ -135,6 +135,7 @@ public:
             editor.openLibrary();
             auto* shelf = editor.libraryForTesting();
             expect(shelf != nullptr);
+            expectEquals(shelf->loadTarget, juce::String("01"), "Load names the pattern as the panel does (D357)");
             shelf->showForTesting("all");
             shelf->selectForTesting(3);
             const auto beat = *shelf->selectedEntry();

@@ -867,7 +867,8 @@ namespace cs808
     void Editor::openLibrary()
     {
         library = std::make_unique<LibraryShelf>();
-        library->loadTarget = editPattern < 0 ? juce::String("the fill") : "pattern " + juce::String(editPattern + 1);
+        // named as the panel's pattern keys name it (D357): "Load into 01"
+        library->loadTarget = editPattern < 0 ? juce::String("the fill") : juce::String(editPattern + 1).paddedLeft('0', 2);
         // An overlay is let go after its own callback has returned, never inside it (the review of D267).
         library->onClose = [this] { closeOverlaysLater(); };
         library->onLoad = [this](const LibraryEntry& e)

@@ -31,7 +31,7 @@ namespace cs808
         // out of step with it); empty when none is.
         std::function<juce::String()> auditionedKey;
         std::unique_ptr<juce::Button> closeKey; // the cross at the top right
-        juce::String loadTarget = "pattern 1"; // what Load fills, as its button says it
+        juce::String loadTarget = "01"; // what Load fills, as its button says it: a pattern as the panel names it, or "the fill"
 
         /** Reads the library again, keeping the chosen beat when it is still there. */
         void reload();
