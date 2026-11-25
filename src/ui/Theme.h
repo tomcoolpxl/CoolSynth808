@@ -112,11 +112,11 @@ namespace cs808
 
             // The 808's own colours (D307, the mockups' 5.1): a charcoal panel printed in white and orange, dark
             // knobs with an orange line, the steps in red, orange, yellow and white, dim when off, full when on.
-            Theme roland { "roland", "Roland",
+            Theme charcoal { "charcoal", "Charcoal",
                 c(0x161617), c(0x242425), c(0xece7d6), c(0x8d8c88), c(0x3c3c3e), c(0xf28a2c), c(0xee7d28), c(0x1c120a),
                 c(0xf6a25a), c(0xf07828), c(0x8fd694), c(0xe8685a),
                 { c(0x6d2c27), c(0x79492a), c(0x7a6a35), c(0x77746c) }, false, {}, {} };
-            roland.board = { c(0x333334), c(0x242425), 0.06f, 0.012f, 0.02f,
+            charcoal.board = { c(0x333334), c(0x242425), 0.06f, 0.012f, 0.02f,
                 c(0xf4f4f2), c(0xecebe6), c(0x8d8c88), c(0xf28a2c), c(0xffffff),
                 c(0xb29268, 0.30f), c(0xb29268, 0.5f), c(0xecece8, 0.26f), c(0xe8e8e4, 0.62f),
                 c(0xf07828), c(0xffaf64), c(0xe86e28),
@@ -125,9 +125,9 @@ namespace cs808
                 { c(0x505052), c(0x39393b), c(0x2c2c2e) }, { c(0x575759), c(0x3e3e40), c(0x303032) },
                 { c(0x5c5c5e), c(0x424244), c(0x333335) }, { c(0x505052), c(0x454547), c(0x39393b) },
                 { c(0x39393b), c(0x323234), c(0x2c2c2e) } };
-            roland.stepOn = { detail::stepOnFrom(c(0xd8362c)), detail::stepOnFrom(c(0xee7d28)),
+            charcoal.stepOn = { detail::stepOnFrom(c(0xd8362c)), detail::stepOnFrom(c(0xee7d28)),
                               detail::stepOnFrom(c(0xf1c63c)), detail::stepOnFrom(c(0xece7d6)) };
-            detail::signal(roland.board, c(0xf6a25a), c(0xee7d28), c(0xc45a16), c(0xf6a25a), c(0xc45a16));
+            detail::signal(charcoal.board, c(0xf6a25a), c(0xee7d28), c(0xc45a16), c(0xf6a25a), c(0xc45a16));
 
             // The mockups' 5.2 Steel (D307): blue-grey anodised aluminium, gold traces, the same orange.
             Theme steel { "steel", "Steel",
@@ -166,7 +166,7 @@ namespace cs808
             olive.board.nameStrip = c(0x2a2b20);
             olive.board.nameEdge = c(0x141510);
 
-            return std::array<Theme, 4> { roland, silver, steel, olive }; // Roland first: the default (D307, the user)
+            return std::array<Theme, 4> { charcoal, silver, steel, olive }; // Charcoal first: the default (D307, the user)
         }();
         return list;
     }

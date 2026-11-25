@@ -508,7 +508,7 @@ namespace cs808
     {
         // Brushed aluminium (D303, the mockups' 5.4): light, a little cooler at the foot.
         const auto w = static_cast<float>(width), h = static_cast<float>(height);
-        // The theme's metal (D307): Silver's aluminium, Roland's charcoal.
+        // The theme's metal (D307): Silver's aluminium, Charcoal's charcoal.
         const auto& look = boardLook();
         g.setGradientFill(juce::ColourGradient(look.metalTop, 0.0f, 0.0f, look.metalBottom, 0.0f, h, false));
         g.fillRect(0.0f, 0.0f, w, h);

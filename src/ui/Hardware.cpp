@@ -253,7 +253,7 @@ namespace cs808
         g.setColour(juce::Colours::black.withAlpha(0.55f));
         g.fillRoundedRectangle(box(6.5f, ty + 2.0f, 15.0f, 16.0f), 2.5f * k);
         const auto thumb = box(6.0f, ty, 16.0f, 16.0f);
-        g.setGradientFill(vertical(thumb, look.thumbTop, look.thumbMid, 0.55f, look.thumbBottom) /* dark on Silver, light on Roland */);
+        g.setGradientFill(vertical(thumb, look.thumbTop, look.thumbMid, 0.55f, look.thumbBottom) /* dark on Silver, light on Charcoal */);
         g.fillRoundedRectangle(thumb, 2.5f * k);
         g.setColour(rgb(0x0b0c0d));
         g.drawRoundedRectangle(thumb, 2.5f * k, 0.8f);
@@ -334,7 +334,7 @@ namespace cs808
 
     void drawStepKeyOn(juce::Graphics& g, juce::Rectangle<float> area, bool sounding, float opacity, int group)
     {
-        // The beat group's colours as the theme has them (D307): all orange on Silver, the 808's four on Roland.
+        // The beat group's colours as the theme has them (D307): all orange on Silver, the 808's four on Charcoal.
         const auto& on = theme().stepOn[static_cast<std::size_t>(juce::jlimit(0, 3, group))];
         juce::Path shape;
         shape.addRoundedRectangle(area, 3.0f);

@@ -200,7 +200,9 @@ namespace cs808
                                                              : std::make_unique<juce::PropertiesFile>(settingsFileForTesting(), options);
         syncChoiceSaved = p.syncChoiceVersion(); // as the processor read them (D361): nothing to keep yet
         // The theme kept by its name (D307): the older setting counted the themes of the old layouts.
-        const auto keptTheme = settings->getValue("panelTheme", themes()[0].id);
+        auto keptTheme = settings->getValue("panelTheme", themes()[0].id);
+        if (keptTheme == "roland")
+            keptTheme = "charcoal"; // the charcoal theme's earlier name
         for (int i = 0; i < static_cast<int>(themes().size()); ++i)
             if (keptTheme == themes()[static_cast<std::size_t>(i)].id)
                 themeIndex = i;
