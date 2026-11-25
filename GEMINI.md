@@ -35,7 +35,11 @@ The shared project memory for every AI tool (`CLAUDE.md` points here).
 - `src/mcp`: the standalone app's MCP server (D333, CoolSynth's and the 303's), on `http://127.0.0.1:47608/mcp`,
   registered with `claude mcp add --transport http coolsynth808 http://127.0.0.1:47608/mcp`. Its tools read and set
   the kit, run the transport, strike drums, record the output to WAV, picture the window and open the lid, a sheet or
-  Options: check the running app through it, and ask the user only for ears and hands.
+  Options: check the running app through it, and ask the user only for ears and hands. It is off until switched on in
+  Options, MIDI (CoolSynth's D363), kept as `mcpServer` in the app's settings; `COOLSYNTH808_NO_MCP` keeps it off.
+- The release (CoolSynth's D363): `installer/CoolSynth808.iss` (Inno Setup), `scripts/ci` (build, test, package,
+  without ASIO), `.github/workflows/release.yml` on a version tag; `tools/release/make_notices.py` writes
+  `THIRD_PARTY_NOTICES.txt`.
 - `tools/RenderLibrary`: `CoolSynth808Render <folder> [id ...]` writes the built-in beats as WAV files, for listening
   passes (D276); `listening/` holds them and is not committed.
 

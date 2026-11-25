@@ -109,12 +109,15 @@ target_compile_definitions(CoolSynth808
         # Our own app around the standalone (D311): JUCE's window without its Options button, in the theme.
         JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
 # ASIO for audio interfaces (D311), when Steinberg's ASIO SDK is on this computer: ASIO_SDK_DIR, or E:/SDKs beside
-# the repositories. Without it the app offers the Windows drivers only.
+# the repositories. Without it the app offers the Windows drivers only. A release is built without it
+# (COOLSYNTH808_ASIO=OFF, scripts/ci, CoolSynth's D363): the SDK's GPLv3 cannot go into a binary with JUCE's Starter
+# licence, and its other licence needs Steinberg's signed agreement before a binary is published.
+option(COOLSYNTH808_ASIO "ASIO, when Steinberg's ASIO SDK is found (a published release is built without it)" ON)
 set(COOLSYNTH808_ASIO_SDK "$ENV{ASIO_SDK_DIR}" CACHE PATH "Steinberg's ASIO SDK (the folder holding common/iasiodrv.h)")
 if(NOT COOLSYNTH808_ASIO_SDK)
     get_filename_component(COOLSYNTH808_ASIO_SDK "${CMAKE_CURRENT_SOURCE_DIR}/../../SDKs/asio/sdk/ASIOSDK" ABSOLUTE)
 endif()
-if(WIN32 AND EXISTS "${COOLSYNTH808_ASIO_SDK}/common/iasiodrv.h")
+if(WIN32 AND COOLSYNTH808_ASIO AND EXISTS "${COOLSYNTH808_ASIO_SDK}/common/iasiodrv.h")
     message(STATUS "CoolSynth 808: ASIO from ${COOLSYNTH808_ASIO_SDK}")
     target_compile_definitions(CoolSynth808 PUBLIC JUCE_ASIO=1)
     target_include_directories(CoolSynth808 PUBLIC "${COOLSYNTH808_ASIO_SDK}/common")
@@ -171,6 +174,7 @@ if(BUILD_TESTING)
             JUCE_STANDALONE_APPLICATION=1
             COOLSYNTH808_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
             COOLSYNTH808_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+            COOLSYNTH808_CONFIG="$<CONFIG>" # the hosting test loads the VST3 of its own configuration
             JUCE_PLUGINHOST_VST3=1)
     target_link_libraries(CoolSynth808Tests
         PRIVATE

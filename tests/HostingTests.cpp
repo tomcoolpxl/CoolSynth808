@@ -51,7 +51,7 @@ namespace
         void runTest() override
         {
             beginTest("the_vst3_loads_plays_with_the_host_and_keeps_its_state");
-            const juce::File bundle = juce::File(COOLSYNTH808_BINARY_DIR).getChildFile("CoolSynth808_artefacts/Debug/VST3/CoolSynth 808.vst3");
+            const juce::File bundle = juce::File(COOLSYNTH808_BINARY_DIR).getChildFile("CoolSynth808_artefacts/" COOLSYNTH808_CONFIG "/VST3/CoolSynth 808.vst3"); // the test's own build
             // the binary, not the bundle: with an icon, JUCE makes the bundle's folder for it even when only the tests
             // are built (the CI)
             if (! bundle.getChildFile("Contents/x86_64-win/CoolSynth 808.vst3").existsAsFile())

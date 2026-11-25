@@ -13,7 +13,13 @@ TR-808 is a trademark of Roland Corporation. CoolSynth 808 is not made, approved
 
 ## Download
 
-There is no release yet. It runs on 64-bit Windows 10 or 11; until the first release, build it from source as below.
+Get the latest `CoolSynth808-Setup` installer from the [Releases page](https://github.com/tomcoolpxl/CoolSynth808/releases). CoolSynth 808 runs on 64-bit Windows 10 or 11.
+
+Windows may warn that the publisher is unknown, because the installer isn't code-signed. Click **More info**, then **Run anyway**.
+
+The installer puts the app in the Start menu and the VST3 in `C:\Program Files\Common Files\VST3`. Uninstalling it keeps your own patterns, projects and settings.
+
+The first time the app starts, Windows asks whether it may use the network. Allow it on private networks, so the beat sync can play in time with other computers.
 
 ## Sounds
 

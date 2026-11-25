@@ -1,0 +1,113 @@
+name: Release
+
+# A version tag builds, tests and packages CoolSynth 808 for Windows (x64), then publishes it on a GitHub release
+# (CoolSynth's D363, as CoolSynth's own release.yml): the installer, one zip of the app, the VST3 and the notices,
+# and their checksums. Actions are pinned by commit, as CoolSynth's.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-release-assets:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      # Release: the app, the VST3 and the tests, then the whole test program (the hosting test loads this VST3).
+      - name: Build and test
+        shell: pwsh
+        run: ./scripts/ci/BuildAndTest.ps1 -Configuration Release -RunTests
+
+      # The runner images do not promise Inno Setup: a pinned version from Chocolatey, as CoolSynth's.
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --version=6.7.1 -y --no-progress
+
+      - name: Package release artefacts
+        shell: pwsh
+        run: ./scripts/ci/PackageRelease.ps1 -Configuration Release -TagName "${{ github.ref_name }}" -Installer
+
+      - name: Upload diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-release-${{ github.ref_name }}-diagnostics
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            build/ci-release/logs/**
+            build/ci-release/Testing/ctest-results.xml
+            build/ci-release/CoolSynth808_artefacts/Release/Standalone/*.pdb
+
+      - name: Upload package bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-release-${{ github.ref_name }}-packages
+          if-no-files-found: error
+          retention-days: 7
+          path: build/ci-release/packages/**
+
+  publish-release:
+    needs: [build-release-assets]
+    runs-on: windows-2022
+    steps:
+      # A version's own notes, if written, in docs/releases/<tag>.md. First: checking out clears the folder, so the
+      # package bundle comes after it.
+      - name: Check out the release notes
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          sparse-checkout: docs/releases
+
+      - name: Download package bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: windows-release-${{ github.ref_name }}-packages
+          path: release-bundle
+
+      - name: Name the release
+        id: title
+        shell: pwsh
+        run: '"name=CoolSynth 808 $($env:GITHUB_REF_NAME.TrimStart(''v''))" >> $env:GITHUB_OUTPUT'
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
+        with:
+          name: ${{ steps.title.outputs.name }}
+          tag_name: ${{ github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          # The version's own notes; the action reads body_path first and falls back on body when the file is missing.
+          body_path: docs/releases/${{ github.ref_name }}.md
+          body: |
+            ## Install
+
+            Download **CoolSynth808-Setup-${{ github.ref_name }}.exe** below and run it. It installs the standalone app with a Start menu entry and the VST3 plugin for your music software.
+
+            Windows may warn that the installer comes from an unknown publisher, because it is not code-signed: choose **More info**, then **Run anyway**.
+
+            The first time the app starts, Windows asks whether it may use the network: allow private networks to play in time with other computers through the beat sync.
+
+            Without the installer: the zip below holds the app, the VST3 and the notices.
+
+            How to play it: see [the guide](https://github.com/tomcoolpxl/CoolSynth808#readme).
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            release-bundle/CoolSynth808-Setup-${{ github.ref_name }}.exe
+            release-bundle/CoolSynth808-windows-x64-${{ github.ref_name }}.zip
+            release-bundle/CoolSynth808-windows-x64-sha256-${{ github.ref_name }}.txt

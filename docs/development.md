@@ -11,9 +11,19 @@ The sixteen voices are component-level models of the TR-808's eleven drum circui
 - The devices use SPICE-style models, the same as the ngspice references: the op-amps with their bandwidth and output swing, the transistors and diodes by their junctions, the metal voices' oscillators by their thresholds, the noise at the service notes' level. Each circuit's file in the engine lists them. Fuller models (a measured transistor card, the op-amps' slew) were rendered in ngspice and compared with both real units; today's matched them as well or better, so they stay.
 - Every part runs at 25 °C, as SPICE assumes: the circuits never warm up, drift or age forty years.
 
+## The MCP server
+
+The standalone app can serve Claude over MCP on 127.0.0.1:47608 (`src/mcp`, as CoolSynth's and the 303's): read and set the kit, run the transport, strike drums, record the output into a WAV file, picture the window. It is off until switched on in **Options > MIDI > Claude (MCP server)**, and the switch starts or stops it at once; only this computer can reach it. The switch is kept in `%APPDATA%\CoolSynth808\CoolSynth808.settings` as `<VALUE name="mcpServer" val="1"/>`, so a test setup can switch it on there before the app starts. `COOLSYNTH808_NO_MCP` in the environment keeps it off whatever the switch says. The plugin opens no port.
+
 ## Building
 
-ASIO comes in when Steinberg's ASIO SDK is found: set `ASIO_SDK_DIR` to its `ASIOSDK` folder, or unpack it to `SDKs/asio/sdk/ASIOSDK` beside the repository's parent folder. Without it the app offers the Windows drivers only.
+ASIO comes in when Steinberg's ASIO SDK is found: set `ASIO_SDK_DIR` to its `ASIOSDK` folder, or unpack it to `SDKs/asio/sdk/ASIOSDK` beside the repository's parent folder. Without it the app offers the Windows drivers only. A release is built without it (`-DCOOLSYNTH808_ASIO=OFF`, as `scripts/ci` configures): the SDK is GPLv3 or Steinberg's own licence, GPLv3 code cannot go into a binary with JUCE under its Starter licence, and Steinberg's licence needs their signed agreement before a binary is published.
+
+## Building a release
+
+A Release build carries the C++ runtime inside it. `scripts/ci/BuildAndTest.ps1 -Configuration Release -RunTests`, then `scripts/ci/PackageRelease.ps1 -Configuration Release -Installer`, build, test and package as the release does, in `build/ci-release` (the installer needs Inno Setup 6.5 or newer, `installer/CoolSynth808.iss`). A version tag (`v0.1.0`) makes GitHub build and publish a release.
+
+`THIRD_PARTY_NOTICES.txt` is written by `tools/release/make_notices.py`: the notices of JUCE's image, font and audio libraries, the VST3 SDK, Open303 and the fonts.
 
 ## Design and sources
 
